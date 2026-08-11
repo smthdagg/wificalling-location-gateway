@@ -4,6 +4,8 @@
 //! module accepts only a bounded, non-secret node reference and a fresh public
 //! address that differs from the router WAN address.
 
+pub mod runtime;
+
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
@@ -66,6 +68,7 @@ pub enum ExitProbeError {
     RouterWanAddress,
     ObservationFromFuture,
     StaleObservation,
+    RuntimeFailure,
 }
 
 pub fn validate_observation(
