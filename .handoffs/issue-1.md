@@ -48,6 +48,11 @@ or live-device traffic.
 - The protocol reviewer recorded a non-blocking P3 wording note about labeling
   a broad reference URL as license-identification-only in a future ADR revision.
 
+## Failed attempts
+
+- The first capsule validation found this required heading missing; the capsule
+  was corrected before publication. No source or policy validation failed.
+
 ## Next executable steps
 
 1. Review and merge Issue #1 without changing the approved ADR digest.
