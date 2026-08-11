@@ -48,3 +48,7 @@
 - 已将权威租约/交接状态升级为 Git 原子 CAS refs，并把 Issue 评论降级为只读投影；接管将验证远端可达性并在失败时回滚。
 - 已修复 Reviewer 的关键项：handoff 仅允许当前未过期租约持有人、远端 commit ancestry 校验、PR 三处 Issue 编号强一致、固定 commit 的 Gitleaks、失败清理和仓库根目录归一化。
 - 已新增 Python 状态机测试，实际创建并读取 `agent-leases/issue-9` 原子租约 ref 成功。
+- 已用 `codex-resume-test` 从权威 handoff commit 创建全新 continuation worktree，证明不同 Agent ID 可接管。
+- 接管演练后新增 capsule 的 Issue/Agent/branch/capabilities 与权威 handoff state 强一致校验。
+- 二次 Reviewer 发现 lease/handoff 双 ref 非原子和 takeover 读取顺序竞态；已改为双 ref `git push --atomic`，并在租约线性化后读取 handoff。
+- 已增加本地高置信秘密扫描；明确 CAS 是可信写入 Agent 的协作锁，不是访问控制边界。

@@ -84,6 +84,30 @@ def parse_state(message: str, marker: str) -> dict[str, Any]:
     return data
 
 
+def capsule_field(text: str, prefix: str) -> str:
+    values = [line[len(prefix):] for line in text.splitlines() if line.startswith(prefix)]
+    if len(values) != 1 or not values[0]:
+        raise StateError(f"handoff capsule must contain exactly one {prefix.strip()} field")
+    return values[0]
+
+
+def parse_capsule(text: str) -> dict[str, Any]:
+    first_line = text.splitlines()[0] if text.splitlines() else ""
+    match = re.fullmatch(r"# Agent handoff: Issue ([1-9][0-9]*)", first_line)
+    if not match:
+        raise StateError("handoff capsule has an invalid Issue heading")
+    credentials = capsule_field(text, "- Credentials included: ")
+    if credentials != "no":
+        raise StateError("handoff capsule must not include credentials")
+    return {
+        "agent_id": capsule_field(text, "- Source agent ID: "),
+        "branch": capsule_field(text, "- Branch: "),
+        "capabilities": parse_caps(capsule_field(text, "- Capabilities used: ")),
+        "credentials_included": credentials,
+        "issue": int(match.group(1)),
+    }
+
+
 def validate_issue(value: str) -> int:
     if not value.isdigit() or int(value) <= 0:
         raise StateError("issue-number must be a positive integer")
@@ -148,18 +172,33 @@ def read_remote_state(ref: str, marker: str) -> tuple[str | None, dict[str, Any]
     return sha, parse_state(message, marker)
 
 
-def create_state_commit(ref: str, marker: str, data: dict[str, Any], expected: str | None) -> str:
+def build_state_commit(marker: str, data: dict[str, Any], parent: str | None) -> str:
     tree = output("git", "mktree", input_text="")
     args = ["git", "commit-tree", tree]
-    if expected:
-        args.extend(["-p", expected])
-    commit = output(*args, input_text=encode_state(marker, data))
-    lease_arg = f"--force-with-lease={ref}:{expected or ''}"
-    pushed = run("git", "push", "--porcelain", lease_arg, "origin", f"{commit}:{ref}", check=False)
+    if parent:
+        args.extend(["-p", parent])
+    return output(*args, input_text=encode_state(marker, data))
+
+
+def push_state_updates(updates: list[tuple[str, str, str | None]]) -> None:
+    args = ["git", "push", "--porcelain"]
+    if len(updates) > 1:
+        args.append("--atomic")
+    args.extend(f"--force-with-lease={ref}:{expected or ''}" for ref, _, expected in updates)
+    args.append("origin")
+    args.extend(f"{commit}:{ref}" for ref, commit, _ in updates)
+    pushed = run(*args, check=False)
     if pushed.returncode != 0:
-        raise StateError(f"atomic state update lost a race for {ref}: {pushed.stderr.strip()}")
-    if remote_ref_sha(ref) != commit:
-        raise StateError(f"remote state verification failed for {ref}")
+        refs = ",".join(ref for ref, _, _ in updates)
+        raise StateError(f"atomic state update lost a race for {refs}: {pushed.stderr.strip()}")
+    for ref, commit, _ in updates:
+        if remote_ref_sha(ref) != commit:
+            raise StateError(f"remote state verification failed for {ref}")
+
+
+def create_state_commit(ref: str, marker: str, data: dict[str, Any], expected: str | None) -> str:
+    commit = build_state_commit(marker, data, expected)
+    push_state_updates([(ref, commit, expected)])
     return commit
 
 
@@ -244,6 +283,16 @@ def verify_handoff_source(root: pathlib.Path, issue: int, handoff: dict[str, Any
     capsule = run("git", "show", f"{commit}:{capsule_path}", cwd=root, check=False)
     if capsule.returncode != 0 or not capsule.stdout.strip():
         raise StateError("handoff commit does not contain its capsule")
+    capsule_state = parse_capsule(capsule.stdout)
+    expected = {
+        "agent_id": handoff.get("agent_id"),
+        "branch": branch,
+        "capabilities": handoff.get("capabilities"),
+        "credentials_included": "no",
+        "issue": issue,
+    }
+    if capsule_state != expected:
+        raise StateError("handoff capsule identity does not match authoritative state")
     return commit
 
 
@@ -262,19 +311,20 @@ def command_takeover(args: argparse.Namespace) -> None:
         raise StateError("slug must contain lowercase letters, digits, or hyphens")
     caps = parse_caps(args.capabilities)
     root = repo_root()
-    _, handoff = resolve_handoff(issue)
-    if handoff:
-        start = verify_handoff_source(root, issue, handoff)
-    else:
-        run("git", "fetch", "--no-tags", "origin", "main", cwd=root)
-        start = output("git", "rev-parse", "origin/main", cwd=root)
     lease_sha, lease = acquire_lease(issue, agent, caps, args.ttl)
     stamp = utc_now().strftime("%Y%m%d%H%M%S")
     suffix = lease["nonce"][:8]
     branch = f"codex/issue-{issue}-{args.slug}-{agent}-{stamp}-{suffix}"
     worktree = root.parent / f"wlg-agent-{issue}-{agent}-{stamp}-{suffix}"
     created = False
+    handoff: dict[str, Any] | None = None
     try:
+        _, handoff = resolve_handoff(issue)
+        if handoff:
+            start = verify_handoff_source(root, issue, handoff)
+        else:
+            run("git", "fetch", "--no-tags", "origin", "main", cwd=root)
+            start = output("git", "rev-parse", "origin/main", cwd=root)
         run("git", "worktree", "add", "-b", branch, str(worktree), start, cwd=root)
         created = True
         if handoff:
@@ -284,8 +334,9 @@ def command_takeover(args: argparse.Namespace) -> None:
             run("git", "worktree", "remove", "--force", str(worktree), cwd=root, check=False)
             run("git", "branch", "-D", branch, cwd=root, check=False)
         try:
-            release_lease(issue, lease_sha, lease, "takeover_failed")
-            update_status(issue, "status:handoff" if handoff else "status:ready")
+            released_sha = release_lease(issue, lease_sha, lease, "takeover_failed")
+            if remote_ref_sha(state_ref("leases", issue)) == released_sha:
+                update_status(issue, "status:handoff" if handoff else "status:ready")
         except Exception as cleanup_error:
             print(f"warning: lease rollback failed: {cleanup_error}", file=sys.stderr)
         raise
@@ -299,7 +350,7 @@ def command_handoff(args: argparse.Namespace) -> None:
     root = repo_root()
     os.chdir(root)
     validate_issue_for_lease(issue, caps)
-    lease_sha, lease = current_lease(issue, agent)
+    _, lease = current_lease(issue, agent)
     if set(caps) != set(lease.get("capabilities", [])):
         raise StateError("handoff capabilities do not match the active lease")
     branch = output("git", "branch", "--show-current", cwd=root)
@@ -308,6 +359,11 @@ def command_handoff(args: argparse.Namespace) -> None:
     capsule = root / ".handoffs" / f"issue-{issue}.md"
     if not capsule.is_file() or not capsule.stat().st_size:
         raise StateError(f"missing handoff capsule: {capsule}")
+    capsule_state = parse_capsule(capsule.read_text(encoding="utf-8"))
+    if capsule_state["issue"] != issue or capsule_state["agent_id"] != agent:
+        raise StateError("handoff capsule Issue or Agent does not match the active lease")
+    if capsule_state["branch"] != branch or set(capsule_state["capabilities"]) != set(caps):
+        raise StateError("handoff capsule branch or capabilities do not match the active lease")
     run(str(root / "scripts/ci/verify.sh"), cwd=root)
     if output("git", "status", "--short", cwd=root):
         raise StateError("handoff requires a clean worktree; commit all resumable state first")
@@ -315,6 +371,9 @@ def command_handoff(args: argparse.Namespace) -> None:
     run("git", "push", "-u", "origin", branch, cwd=root)
     if remote_ref_sha(f"refs/heads/{branch}") != commit:
         raise StateError("remote working branch tip does not match the local checkpoint")
+    lease_sha, lease = current_lease(issue, agent)
+    if set(caps) != set(lease.get("capabilities", [])):
+        raise StateError("renewed handoff capabilities do not match the active lease")
     old_handoff_sha, _ = resolve_handoff(issue)
     handoff = {
         "agent_id": agent,
@@ -326,8 +385,15 @@ def command_handoff(args: argparse.Namespace) -> None:
         "lease_nonce": lease["nonce"],
         "released_at": iso(utc_now()),
     }
-    handoff_sha = create_state_commit(state_ref("handoffs", issue), HANDOFF_MARKER, handoff, old_handoff_sha)
-    release_lease(issue, lease_sha, lease, "handoff_published")
+    handoff_ref = state_ref("handoffs", issue)
+    lease_ref = state_ref("leases", issue)
+    handoff_sha = build_state_commit(HANDOFF_MARKER, handoff, old_handoff_sha)
+    released = {**lease, "released_at": iso(utc_now()), "release_reason": "handoff_published", "state": "released"}
+    released_sha = build_state_commit(LEASE_MARKER, released, lease_sha)
+    push_state_updates([
+        (handoff_ref, handoff_sha, old_handoff_sha),
+        (lease_ref, released_sha, lease_sha),
+    ])
     update_status(issue, "status:handoff")
     add_comment(issue, HANDOFF_MARKER, {**handoff, "state_commit": handoff_sha, "credentials_shared": False})
     print(f"published handoff for issue #{issue} at {commit} ({handoff_sha})")

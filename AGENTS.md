@@ -32,6 +32,7 @@ Issue-specific ownership overrides this table. Ownership is a time-limited lease
 - An Agent may take over a task only when it satisfies every `cap:*` label or records a limited research/review scope that does not execute the restricted work.
 - Lease authority is the atomically updated `agent-leases/issue-<n>` Git ref; handoff authority is `agent-handoffs/issue-<n>`. Issue labels and comments are display-only projections.
 - The immutable continuity anchor is the pushed source commit recorded by the authoritative handoff Git ref.
+- State refs are a cooperative lock for Agents that already have repository write access, not an authorization boundary. Hard protection requires GitHub Pro branch/ruleset protection or a single-writer coordination service.
 
 ## Required workflow
 
@@ -49,7 +50,7 @@ Use `scripts/agent-takeover.sh <issue> <agent> <slug> <capabilities> [ttl-minute
 ## Hard gates
 
 - Do not implement WLOC response patching before the Phase 0 authorized-fixture and license ADR Issues are closed.
-- Never commit CA private keys, node credentials, captured device identifiers, raw production traffic, tokens, or precise user location.
+- Never commit CA private keys, node credentials, captured device identifiers, raw production traffic, tokens, or precise user location. Local pre-push scanning and CI reduce accidental leaks but cannot stop an authorized writer who bypasses the workflow.
 - All parser and network inputs require size, time, concurrency, and schema limits.
 - Unknown protocol, invalid Geo data, or engine failure must not produce a default fake coordinate.
 - WLOC interception must remain limited to the assigned test device, two exact Apple hostnames, and TCP 443.

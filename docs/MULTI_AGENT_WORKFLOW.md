@@ -15,7 +15,7 @@ status:triage -> status:ready -> status:active -> status:handoff -> status:activ
 
 Only tasks with explicit owned paths, dependencies, acceptance criteria, non-goals, and rollback behavior may become `status:ready`.
 
-`status:active` mirrors a lease stored under `agent-leases/issue-<n>`. Lease acquisition uses Git's atomic `--force-with-lease` compare-and-swap, so two Agents cannot both publish the same lease generation. `status:handoff` mirrors `agent-handoffs/issue-<n>`. Issue labels and comments are readable projections only; the Git state refs and referenced source commit are authoritative.
+`status:active` mirrors a lease stored under `agent-leases/issue-<n>`. Lease acquisition uses Git's atomic `--force-with-lease` compare-and-swap, so two cooperative Agents cannot both publish the same lease generation. Handoff publication atomically updates both lease and handoff refs. `status:handoff` mirrors `agent-handoffs/issue-<n>`. Issue labels and comments are readable projections only; the Git state refs and referenced source commit are authoritative.
 
 ## Parallel work lanes
 
@@ -64,6 +64,8 @@ Every handoff capsule records:
 - environment assumptions, blockers, and security notes.
 
 The capsule must explicitly state that no credentials are included. Uncommitted changes are not transferable state.
+
+The scripts run a local high-confidence secret scan before handoff pushes; pinned Gitleaks runs again in GitHub Actions. This prevents common accidental leaks when Agents follow the workflow. Because the current private repository cannot protect branches or state refs on this account tier, all write-capable Agents remain inside the trusted collaboration boundary.
 
 ## Merge policy
 

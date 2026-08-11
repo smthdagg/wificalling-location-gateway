@@ -2,11 +2,11 @@
 
 ## Identity and scope
 
-- Source agent ID: codex-bootstrap
+- Source agent ID: codex-resume-test
 - Capabilities used: ci,security,docs
-- Branch: codex/issue-9-handoff-leases
-- Checkpoint parent: 225c731d1c127a2452240e781d9ff5d0c1a0d27f
-- Updated at (UTC): 2026-08-11T05:50:00Z
+- Branch: codex/issue-9-resume-check-codex-resume-test-20260811055034-ea1011f3
+- Checkpoint parent: 6a291f7747aac8a3327ed835fb5f8a324d18ec03
+- Updated at (UTC): 2026-08-11T05:52:00Z
 - Credentials included: no
 
 ## Objective
@@ -22,6 +22,10 @@ Replace permanent single-Agent ownership with resumable leases and exact commit 
 - Replaced comment parsing with strict two-line marker/JSON state commits and atomic Git refs.
 - Added pinned Gitleaks scanning and exact PR branch/Issue/capsule correlation.
 - Migrated Issues 1–9 to explicit capability contracts.
+- Verified a second Agent ID could resume from the exact published handoff commit in a new worktree.
+- Added capsule-to-authoritative-state identity validation after the takeover exercise.
+- Made handoff publication a single atomic update of lease and handoff refs; stale publishers cannot overwrite a new lease.
+- Added pre-push high-confidence secret scanning in addition to pinned Gitleaks CI.
 
 ## Files changed
 
@@ -39,7 +43,8 @@ Replace permanent single-Agent ownership with resumable leases and exact commit 
 | `ruby -e 'require "yaml"; ...'` | Passed | All GitHub YAML parsed |
 | `git diff --check` | Passed | No whitespace errors |
 | `./scripts/agent-lease.sh 9 codex-bootstrap 'ci,security,docs' 120` | Passed | Atomic ref `agent-leases/issue-9` points to strict state commit `7e513a3892ea8bee03562a7adfd426398ebf3c30` |
-| `python3 -m unittest discover -s tests -p 'test_*.py'` | Passed | Includes stale-generation CAS rejection and strict state-envelope tests |
+| `python3 -m unittest discover -s tests -p 'test_*.py'` | Passed | Includes stale-generation rejection, atomic two-ref handoff rejection, capsule identity, and strict envelope tests |
+| `./scripts/agent-takeover.sh 9 codex-resume-test resume-check 'ci,security,docs' 30` | Passed | New worktree started exactly at `6a291f7747aac8a3327ed835fb5f8a324d18ec03` |
 
 ## Failed attempts
 
@@ -52,10 +57,9 @@ Replace permanent single-Agent ownership with resumable leases and exact commit 
 
 ## Next executable steps
 
-1. Run repository verification from a clean checkout of this commit.
-2. Review lease-expiry parsing on both macOS and Linux runners.
-3. Open and review the Issue #9 pull request.
-4. After merge, start a fresh Agent on one `status:ready` Issue using `agent-takeover.sh`.
+1. Run repository verification from a clean checkout of this continuation commit.
+2. Open and review the Issue #9 pull request.
+3. After merge, start a fresh Agent on one `status:ready` Issue using `agent-takeover.sh`.
 
 ## Capabilities required for the next Agent
 
