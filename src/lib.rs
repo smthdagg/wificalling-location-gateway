@@ -5,6 +5,7 @@ use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
+pub mod service;
 pub mod tls_h2;
 
 pub const APPROVED_WLOC_HOSTS: [&str; 2] = ["gs-loc.apple.com", "gs-loc-cn.apple.com"];
