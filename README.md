@@ -50,4 +50,15 @@ See [the multi-Agent workflow](docs/MULTI_AGENT_WORKFLOW.md) and [the developmen
 
 Do not commit private keys, credentials, raw captures, device identifiers, or precise user location. See [SECURITY.md](SECURITY.md).
 
-No open-source license is granted yet. Issue #1 must freeze either an AGPL-compatible reuse path or a clean-room implementation boundary before protocol implementation begins.
+No open-source license is granted yet; absent a repository `LICENSE`, this work
+remains all rights reserved by default. Issue #1's proposed
+[ADR-0001](docs/adr/0001-license-boundary.md) selects an independent clean-room
+implementation route and prohibits the AGPL reference implementation's source,
+tests, fixtures, documentation text, repository structure, and source-derived
+material from implementation branches, Issues, reviews, and AI prompts.
+
+ADR-0001 does not authorize WLOC parsing, response patching, CA generation,
+TLS interception, MITM, or live-device traffic. It becomes accepted only after
+the independent protocol and security attestations recorded in the
+[Issue #1 review record](docs/reviews/ISSUE_1_LICENSE_BOUNDARY_REVIEW.md) are
+complete; separate fixture and threat-model gates remain mandatory.
