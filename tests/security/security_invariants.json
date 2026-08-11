@@ -1,0 +1,68 @@
+{
+  "schema": "wloc.security-invariants/v1",
+  "scope": {
+    "assigned_devices": 1,
+    "hostnames": [
+      "gs-loc.apple.com",
+      "gs-loc-cn.apple.com"
+    ],
+    "transport": "TCP 443",
+    "dedicated_table": "wificalling_location",
+    "protected_table": "wificalling_gateway",
+    "forbidden_udp_ports": [500, 4500]
+  },
+  "failure_dispositions": {
+    "engine_unhealthy": "remove redirect before stopping or restarting the engine",
+    "watchdog_unhealthy": "stop renewing the kernel-expiring lease; active stop also removes redirect",
+    "geo_invalid_or_unavailable": "forward the verified original response without modification",
+    "protocol_unknown_or_invalid": "forward the verified original response without modification",
+    "upstream_tls_invalid": "controlled failure; never disable certificate verification",
+    "ipv6_mode_not_ready": "do not install redirect"
+  },
+  "resource_limits": [
+    "connections",
+    "per-device connections",
+    "HTTP/2 concurrent streams",
+    "wire body bytes",
+    "decoded body bytes",
+    "decompression ratio",
+    "allocation and parse work",
+    "handshake, upstream, read, and idle timeouts",
+    "respawn rate",
+    "1 MiB log cap"
+  ],
+  "invariants": [
+    {"id": "SCOPE-01", "document": "threat-model.md"},
+    {"id": "GATEWAY-01", "document": "threat-model.md"},
+    {"id": "TLS-01", "document": "threat-model.md"},
+    {"id": "H2-01", "document": "threat-model.md"},
+    {"id": "IPV6-01", "document": "threat-model.md"},
+    {"id": "RESOURCE-01", "document": "threat-model.md"},
+    {"id": "PRIVACY-01", "document": "threat-model.md"},
+    {"id": "COMPLIANCE-01", "document": "threat-model.md"},
+    {"id": "FAILOPEN-ENGINE", "document": "fail-open.md"},
+    {"id": "FAILOPEN-WATCHDOG", "document": "fail-open.md"},
+    {"id": "FAILOPEN-LEASE", "document": "fail-open.md"},
+    {"id": "FAILOPEN-GEO", "document": "fail-open.md"},
+    {"id": "FAILOPEN-PROTOCOL", "document": "fail-open.md"},
+    {"id": "FAILOPEN-TLS", "document": "fail-open.md"},
+    {"id": "FAILOPEN-IPV6", "document": "fail-open.md"}
+  ],
+  "critical_high_threats": [
+    {"id": "S-01", "control": "verify the Apple upstream chain, validity, SNI and hostname", "evidence": "negative TLS-chain and hostname tests"},
+    {"id": "S-02", "control": "bind interception to one assigned device and reject binding drift", "evidence": "non-assigned-device and DHCP-drift tests"},
+    {"id": "S-03", "control": "use exact DNS sets and a second exact hostname check", "evidence": "wrong-SNI, shared-IP and DNS-rotation tests"},
+    {"id": "T-01", "control": "use only the dedicated WLOC table and keep Gateway state read-only", "evidence": "before-and-after Gateway ruleset semantic comparison"},
+    {"id": "T-02", "control": "patch only an authorized known protocol and otherwise preserve original bytes", "evidence": "fixture round-trip, unknown-version and malformed-input tests"},
+    {"id": "T-03", "control": "validate Geo schema, ranges, exit binding and expiry", "evidence": "invalid, conflicting, stale and wrong-exit Geo tests"},
+    {"id": "I-01", "control": "keep CA and leaf private keys router-local with mode 0600", "evidence": "permission, backup, support-bundle and repository scans"},
+    {"id": "I-02", "control": "exclude node credentials and provider tokens from logs and artifacts", "evidence": "canary scans over error and crash outputs"},
+    {"id": "I-03", "control": "log only allowlisted coarse metadata", "evidence": "normal, debug, error, crash and rotation privacy tests"},
+    {"id": "D-01", "control": "bound wire, decoded, decompressed and parser work before allocation", "evidence": "oversize, compression-bomb and fuzz tests"},
+    {"id": "D-02", "control": "bound TLS and H2 connections, streams, queues and timeouts", "evidence": "slow-client, stream-flood, RST and GOAWAY tests"},
+    {"id": "D-03", "control": "gate redirect matches on a kernel-expiring lease renewed only while engine, scope and IPv6 are healthy", "evidence": "AX6S kill, OOM and supervisor-loss tests measure kernel lease expiry and maximum blackhole time"},
+    {"id": "D-04", "control": "require an approved IPv6 mode before redirect", "evidence": "dual-stack, IPv6-only, AAAA-rotation and ordinary-IPv6 isolation tests"},
+    {"id": "E-01", "control": "issue leaf SANs for only the two exact hostnames", "evidence": "wildcard, extra-SAN, IP-SAN and wrong-host tests"},
+    {"id": "E-02", "control": "strictly validate control inputs without shell concatenation", "evidence": "injection, traversal, newline and overlength tests"}
+  ]
+}

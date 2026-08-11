@@ -64,3 +64,48 @@
 - GitHub Issue 标签更新不是强一致锁；租约属于协作锁。代码连续性的真正锚点是已推送的不可变 commit SHA。
 - 最小可靠交接单元应包含：Issue、分支、commit、完成项、未完成项、测试命令/结果、失败记录、下一步、所需能力、环境假设和安全事项。
 - 接管 Agent 可以能力不同，但不得绕过任务的 required capabilities；能力不足时可做研究或复核，不能执行受限实现。
+
+## 开发准备基线
+
+- 当前仓库仍是规划与多 Agent 协作脚手架，未出现 `go.mod`、Makefile 或产品源码；因此不能把现有 Python/Shell 测试当作 WLOC 产品测试。
+- 本机已有 Git、GitHub CLI、Python 3.9、Clang、Make、OpenSSL、Docker、Node/npm；缺少 Go、ShellCheck、Gitleaks、ARM64 QEMU 和可发现的 OpenWrt/ImmortalWrt SDK。
+- 本地未安装 Python `coverage`；当前仓库测试可以执行，但暂时不能给出 Python 行/分支覆盖率数字。
+- 远程 main 最近一次 `repository-gates` 在 `a68bc55` 上成功，可证明当前协作脚手架的 CI 基线健康。
+- 产品开发准备必须至少补齐 Go 工具链并建立 `go.mod`/构建入口；OpenWrt SDK 和 ARM64 仿真可以在进入打包/系统验证前补齐，不应阻塞 Phase 0 文档、fixtures 合规取证和纯 Go 协议测试设计。
+- 新增准备度检查器将缺失项作为显式非零退出门禁，避免后续 Agent 仅凭自身能力声明跳过仓库级 Phase 0 证据。
+- Python 标准库 `trace` 不适合作为本项目的正式覆盖率门禁；本机也没有 `coverage`。当前只能报告测试通过，不能声称达到 80% 行/分支覆盖率。
+- 当前最有效的启动顺序是先并行完成许可证 ADR、fixture 治理和威胁模型；三者可评审后再创建 Go module 和协议测试骨架。
+
+## Phase 0 批次补充
+
+- 2026-08-11 官方 Go 下载页显示稳定版本为 Go 1.26.5，Go 1.27 仍处在当月预期发布窗口；项目不应仅为追新把 `go` 指令设成尚未稳定的 1.27。
+- `actions/setup-go` 官方仓库支持从 `go.mod` 的 `go`/`toolchain` 指令选择工具链；CI 可用固定 commit 的 setup action，从模块文件读取版本，避免本机版本漂移。
+- OpenWrt 官方 packages feed 通过 `lang/golang/golang-package.mk` 构建 Go 包；`openwrt-24.10` 当前明确为 Go 1.23.12，因此 `go.mod` 应声明 Go 1.23 兼容基线，并用 1.23.12 容器/SDK验证，而不是直接跟随桌面端最新 Go。
+- 当前 Docker daemon 可用，但没有 Go 镜像；系统没有 Homebrew。若本轮需要本地 Go RED/GREEN，将优先使用固定版本官方 Go 容器并记录镜像版本，而不是运行不受控网络安装脚本。
+- GitHub Issues #1、#2、#3 分别与许可证 ADR、fixture 契约、威胁模型完全对应且仍为 `status:ready`；本轮只做本地并行交付，不改变远程 Issue 状态。
+- 只读源码的 Go 容器仍需要可执行的临时构建缓存；本机 Docker 的 `--tmpfs /tmp` 路径即使去掉显式 `noexec` 仍不能执行测试二进制。权威 fallback 使用独立临时 cache bind，源码保持 `:ro`、网络保持关闭。
+- 通用 `protocolgate` 只做 metadata/resource prefilter；它不执行 WLOC hostname scope。未来 WLOC wrapper 必须把两个批准 hostname 固化为可信编译期常量，不能从 SNI、Host、配置或请求数据动态生成 allowlist。
+- `InspectCandidate` 只表示资源元数据进入后续审查候选，绝不表示协议已识别或允许 parse/patch；空 body、未知 host、无 allowlist、非法/超限大小和倍率均强制 `PassThrough`。
+- Go CI 当前实行零外部依赖 `GOPROXY=off` 策略。未来引入 protobuf/H2 等模块前必须选择 vendor 或单独的固定、可审计依赖获取阶段，不能在测试时隐式联网。
+
+## Rust 技术路线审计
+
+- OpenWrt `openwrt-24.10` 官方 packages feed 的 `lang/rust/Makefile` 声明 `PKG_VERSION:=1.90.0`，目标配置通过 `TARGET_CC_NOCACHE`/`TARGET_CXX_NOCACHE`/`TARGET_AR`/`TARGET_RANLIB` 注入交叉工具链，并在 musl 配置下设置 `musl-root=$(TOOLCHAIN_ROOT_DIR)`。来源：https://raw.githubusercontent.com/openwrt/packages/openwrt-24.10/lang/rust/Makefile
+- Rust 官方 `aarch64-unknown-linux-musl` 目标是 Tier 2，适用于 64-bit little endian ARMv8-A Linux + musl；该目标通过 rustup 分发并可从任意 host 交叉编译，但构建目标本身或含 C/ASM 依赖时需要 `aarch64-linux-musl-gcc`/`g++`/`ar`/linker 在 PATH 或构建配置中可用。来源：https://doc.rust-lang.org/rustc/platform-support/aarch64-unknown-linux-musl.html
+- `rustls 0.23.43` 文档声明默认使用 `aws-lc-rs`，可通过 `default-features = false` 移除隐式 `aws-lc-rs`；内置 provider 包括默认 `aws-lc-rs` 和可选 `ring`。`rustls` MSRV 为 Rust 1.71，启用可选 `zlib-rs` 时需要 1.75。来源：https://docs.rs/rustls/latest/rustls/ 与 https://docs.rs/crate/rustls/latest/features
+- `tokio 1.53.1` 默认不启用任何 feature；`full` 会启用 fs、io-std、process、rt-multi-thread、signal 等不适合 AX6S 最小 PoC 的能力。最小网络 runtime 应显式只启用 `rt`、`net`、`io-util`、`time`，测试需要宏时才启用 `macros`。来源：https://docs.rs/crate/tokio/latest/features
+- `h2 0.4.15` 是 Tokio aware 的 HTTP/2 client/server 实现，依赖 `tokio` 与 `tokio-util`，但文档明确不负责 TCP、TLS、HTTP/1 upgrade 或非 HTTP/2 特性；TLS ALPN 和连接准备必须由本项目显式处理。来源：https://docs.rs/crate/h2/latest 与 https://docs.rs/h2/latest/h2/
+- `prost 0.14.4` 当前 MSRV 为 Rust 1.85，兼容 OpenWrt 24.10 的 Rust 1.90.0；`prost-build` 自 v0.11 起需要外部 `protoc`，因此 OpenWrt 构建路径应优先提交生成后的 Rust 类型或在离线工具阶段固定 `protoc`，避免目标包构建时动态生成。来源：https://docs.rs/prost/latest/prost/
+- 本机初始缺少 Linux musl target/linker；当前 PATH 仍未发现 `aarch64-unknown-linux-musl` target、`aarch64-linux-musl-gcc` 或 `aarch64-openwrt-linux-musl-gcc`。
+- 修正后 Rust spike 的 locked native release 为 951,504 bytes。曾有离线 OpenWrt AArch64 stripped 产物 1,118,872 bytes 的记录，但当前工作树未保留复现脚本、日志或产物；该数值只能作为待复验线索，不能作为主审计正式放行证据。
+- `cargo-audit 0.22.2` 未发现 RustSec 漏洞；`cargo-deny 0.20.2` 的 advisories/bans/licenses/sources 全部通过，且项目本身保持尚未授权状态。
+- `cargo tree -e features --locked` 显示 `ring 0.17.14` 通过 build-dependency `cc 1.4.2` 编译 native 代码；这比纯 Rust 依赖更依赖 OpenWrt SDK 的 C toolchain，可接受但必须作为 ARM64 spike 的显式风险项。
+- 本仓库当前权威 host 范围来自 `DEVELOPMENT_TEST_PLAN.md` 与 `docs/security/WLOC_THREAT_MODEL.md`：`gs-loc.apple.com` 和 `gs-loc-cn.apple.com`。早前历史摘要中的其他 hostname 不作为本轮实现依据。
+
+## Rust 路线审计
+
+- OpenWrt 官方 `packages` 的 `openwrt-24.10/lang/rust/Makefile` 当前固定 Rust 1.90.0；因此项目 MSRV 必须不高于 1.90.0，不能以本机 Rust 1.97.1 能编译作为 OpenWrt 兼容证据。
+- Rust 官方将 `aarch64-unknown-linux-musl` 列为 Tier 2，支持从任意 host 交叉编译；涉及 C/ASM 的 crate 仍需 `aarch64-linux-musl-gcc` 等目标工具。
+- 桌面 host 仍无直接 aarch64-musl linker，但已用受控 Linux 容器中的 OpenWrt 官方工具链取得真实 AArch64 构建证据。
+- rustls 0.23.43 默认启用 aws-lc-rs、logging、post-quantum 偏好、std 和 TLS 1.2；资源 Spike 必须关闭 default features 并明确选择 crypto provider，否则体积与交叉构建成本会被默认依赖放大。
+- 已安装固定版本 `cargo-audit 0.22.2` 与 `cargo-deny 0.20.2`，并将漏洞、license、source 与重复依赖检查接入 Rust verifier/CI。

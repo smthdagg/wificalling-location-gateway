@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wificalling-location-gateway.invalid/schema/fixture-manifest-v1.json",
+  "title": "Repository-safe WLOC fixture manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fixture",
+    "provenance",
+    "authorization",
+    "ios_version",
+    "hostname",
+    "alpn",
+    "classification",
+    "redactions"
+  ],
+  "properties": {
+    "schema_version": { "const": "wloc-fixture/v1" },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "media_type", "byte_length", "sha256"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+        "path": { "const": "fixture.bin" },
+        "media_type": { "const": "application/octet-stream" },
+        "byte_length": { "type": "integer", "minimum": 61, "maximum": 1048576 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "generator", "generator_version", "source_basis"],
+      "properties": {
+        "kind": { "enum": ["project-generated", "authorized-lab-capture"] },
+        "generator": { "$ref": "#/$defs/nonBlankAscii128" },
+        "generator_version": { "$ref": "#/$defs/nonBlankAscii32" },
+        "source_basis": { "$ref": "#/$defs/nonBlankAscii256" }
+      }
+    },
+    "authorization": {
+      "oneOf": [
+        { "$ref": "#/$defs/syntheticAuthorization" },
+        { "$ref": "#/$defs/captureAuthorization" }
+      ]
+    },
+    "ios_version": {
+      "type": "string",
+      "pattern": "^(not-applicable-synthetic|[0-9]{1,2}\\.[0-9]{1,2}(\\.[0-9]{1,2})?)$"
+    },
+    "hostname": { "enum": ["gs-loc.apple.com", "gs-loc-cn.apple.com"] },
+    "alpn": { "const": "h2" },
+    "classification": { "enum": ["synthetic", "authorized-sanitized-capture"] },
+    "redactions": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "credentials",
+          "device-identifiers",
+          "network-identifiers",
+          "precise-coordinates",
+          "request-metadata",
+          "unrelated-payload"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "nonBlankAscii32": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^(?=.*[!-~])[ -~]+$"
+    },
+    "nonBlankAscii64": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(?=.*[!-~])[ -~]+$"
+    },
+    "nonBlankAscii128": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?=.*[!-~])[ -~]+$"
+    },
+    "nonBlankAscii256": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?=.*[!-~])[ -~]+$"
+    },
+    "reviewAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_id", "capabilities", "verdict"],
+      "properties": {
+        "agent_id": { "$ref": "#/$defs/nonBlankAscii64" },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/nonBlankAscii32" }
+        },
+        "verdict": { "const": "APPROVE" }
+      }
+    },
+    "rawRetention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["storage_ref", "delete_by", "deletion_owner", "deletion_status"],
+      "properties": {
+        "storage_ref": { "$ref": "#/$defs/nonBlankAscii128" },
+        "delete_by": { "type": "string", "format": "date-time" },
+        "deletion_owner": { "$ref": "#/$defs/nonBlankAscii64" },
+        "deletion_status": { "enum": ["scheduled", "verified-deleted"] }
+      }
+    },
+    "sanitizerEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "result"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonBlankAscii64" },
+        "version": { "$ref": "#/$defs/nonBlankAscii32" },
+        "result": { "const": "PASS" }
+      }
+    },
+    "redactionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["secrets", "device_ids", "network_ids", "precise_location", "raw_body"],
+      "properties": {
+        "secrets": { "$ref": "#/$defs/redactionResult" },
+        "device_ids": { "$ref": "#/$defs/redactionResult" },
+        "network_ids": { "$ref": "#/$defs/redactionResult" },
+        "precise_location": { "$ref": "#/$defs/redactionResult" },
+        "raw_body": { "$ref": "#/$defs/redactionResult" }
+      }
+    },
+    "redactionResult": {
+      "enum": ["removed", "verified-absent", "not-applicable"]
+    },
+    "syntheticAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "record_id"],
+      "properties": {
+        "status": { "const": "not-required-synthetic" },
+        "record_id": { "const": "not-applicable" }
+      }
+    },
+    "captureAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "record_id",
+        "creator",
+        "created_at",
+        "protocol_review",
+        "security_review",
+        "clean_room_attestation",
+        "raw_retention",
+        "sanitizer",
+        "redaction_evidence"
+      ],
+      "properties": {
+        "status": { "const": "approved" },
+        "record_id": { "$ref": "#/$defs/nonBlankAscii64" },
+        "creator": { "$ref": "#/$defs/nonBlankAscii64" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "protocol_review": { "$ref": "#/$defs/reviewAttestation" },
+        "security_review": { "$ref": "#/$defs/reviewAttestation" },
+        "clean_room_attestation": { "const": true },
+        "raw_retention": { "$ref": "#/$defs/rawRetention" },
+        "sanitizer": { "$ref": "#/$defs/sanitizerEvidence" },
+        "redaction_evidence": { "$ref": "#/$defs/redactionEvidence" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "classification": { "const": "synthetic" } } },
+      "then": {
+        "properties": {
+          "authorization": { "$ref": "#/$defs/syntheticAuthorization" },
+          "ios_version": { "const": "not-applicable-synthetic" },
+          "redactions": { "maxItems": 0 },
+          "provenance": { "properties": { "kind": { "const": "project-generated" } } }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "classification": { "const": "authorized-sanitized-capture" } }
+      },
+      "then": {
+        "properties": {
+          "authorization": { "$ref": "#/$defs/captureAuthorization" },
+          "provenance": {
+            "properties": { "kind": { "const": "authorized-lab-capture" } }
+          },
+          "redactions": { "minItems": 1 }
+        }
+      }
+    }
+  ]
+}

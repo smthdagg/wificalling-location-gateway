@@ -2,6 +2,10 @@
 
 ## 2026-08-11
 
+- 用户确认执行顺序：先完成独立网关 WLOC 服务，再完成自动化/系统测试，再进入授权真实环境测试；通过后才合并并与 Gateway 1.7 集成，UI 仅预留契约。
+- Rust migration Issue #15 / PR #16 已建立基础：真实 OpenWrt AArch64 CI、TLS-over-H2、16 项测试、89.92% coverage；PR 保持未合并。
+- 开始阶段 1：创建独立服务 Issue/堆叠分支，先冻结安全门禁、服务 API 与非 UI 边界。
+
 - 启动 Wi-Fi Calling + wloc 开发前期集成规划。
 - 读取并采用 `planning-with-files` 工作流。
 - 创建持久化计划、发现和进度文件。
