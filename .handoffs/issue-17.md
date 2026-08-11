@@ -5,8 +5,8 @@
 - Source agent ID: zcode-wloc-service
 - Capabilities used: rust,security
 - Branch: codex/issue-17-wloc-service
-- Checkpoint parent: 06ea4d80ea29c4d5eaec2bad9af80b4cb05e7ff5
-- Updated at (UTC): 2026-08-11T12:45:59Z
+- Checkpoint parent: 036d186f545e3c3e2218d0582ccc41d374e6951b
+- Updated at (UTC): 2026-08-11T13:32:35Z
 - Credentials included: no
 
 ## Objective
@@ -31,13 +31,22 @@ from the earlier free-function codec into a connection-stateful `FramedIo`.
   `io::ErrorKind`, never the underlying peer-supplied message.
 - Empty and oversized payloads are rejected before any I/O and also poison.
 - `MAX_CONTROL_FRAME_BYTES` and `CONTROL_FRAME_TIMEOUT` remain the
-  transport-layer bounds; `service::api::MAX_CONTROL_FRAME_BYTES` is the
-  public contract surface used by callers.
+  transport-layer bounds; `service::api` now re-exports the transport constant
+  as the single source of truth (closes the P3-2 drift finding).
+- The line-4469 issue17 service re-review is now fully closed: the P2
+  (connection poisoning), P3-1 (continuous-trickle deadline regression test),
+  and P3-3 (consecutive-frame, partial-write, flush-error, and Io-ErrorKind
+  sanitization tests) are all covered by the rewritten `tests/runtime_uds.rs`.
+  The original 3 P1 + 2 P2 audit findings and the two follow-up P2s (ISO
+  allowlist gaps, timezone empty segments) were already fixed in earlier
+  commits `8c4553b`/`436b262`/`3c1fa71`/`7c16edf`/`883d082`.
 
 ## Files changed
 
 - `src/runtime/uds.rs` - `FramedIo` struct, `ConnectionPoisoned` variant,
   poisoned-connection semantics, single total deadline.
+- `src/service/api.rs` - re-export `MAX_CONTROL_FRAME_BYTES` from the transport
+  codec as the single source of truth (P3-2 drift fix).
 - `tests/runtime_uds.rs` - rewritten frame codec contract tests.
 
 ## Verification
@@ -58,10 +67,10 @@ from the earlier free-function codec into a connection-stateful `FramedIo`.
 
 ## Unresolved decisions and blockers
 
-- Issue #17 still has the previously identified 3 P1 + 2 P2 security findings
-  (compensation-delete blackhole, WAN-unknown exit acceptance, IPv6
-  special-use filtering; state-machine ordering, Geo TTL) to reproduce and
-  fix in a later TDD cycle.
+- The latest issue17 service re-review (line-4469, commit `e6ea608`) is now
+  fully closed: P2 (poisoning) + P3-1 (trickle) + P3-2 (constant drift) +
+  P3-3 (specialized tests) are all resolved. No open P0/P1/P2/P3 remain from
+  that review.
 - The branch has not yet been opened as a PR; Phase 0 fixture/threat-model/
   license gates and the OpenWrt runtime/system test evidence remain
   prerequisites for merge.
@@ -70,13 +79,14 @@ from the earlier free-function codec into a connection-stateful `FramedIo`.
 
 ## Next executable steps
 
-1. Reproduce the 3 P1 findings with fault-injection tests (RED), then fix the
-   exitprobe/georesolver implementations (GREEN), keeping fail-open safety.
-2. Run `./scripts/ci/verify.sh` and push this branch so the remote CI mirrors
-   the local gates.
-3. Once Phase 0 gates close, open the Issue #17 PR with `Closes #17`, the
-   handoff capsule path, evidence, risks, and rollback notes; a different
-   role reviews it.
+1. Open the Issue #17 PR with `Closes #17`, the handoff capsule path, evidence,
+   risks, and rollback notes; a different role reviews it.
+2. Once Phase 0 gates (Issue #1 license ADR, Issue #2 fixture governance,
+   Issue #3 threat model) close, proceed to Phase 1/2 runtime adapters
+   (exitprobe network execution, georesolver provider adapter) behind the
+   already-frozen pure-logic contracts.
+3. Add a real OpenWrt UDS listener adapter that drives `FramedIo`, with
+   root-owned socket permissions and connection lifecycle tests.
 
 ## Capabilities required for the next Agent
 
