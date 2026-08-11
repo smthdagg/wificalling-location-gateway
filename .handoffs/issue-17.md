@@ -5,106 +5,131 @@
 - Source agent ID: zcode-wloc-service
 - Capabilities used: rust,security
 - Branch: codex/issue-17-wloc-service
-- Checkpoint parent: 036d186f545e3c3e2218d0582ccc41d374e6951b
-- Updated at (UTC): 2026-08-11T13:32:35Z
+- Checkpoint parent: 93547c0d5eb1faa430c16e38f2447fa955cf1e0e
+- Updated at (UTC): 2026-08-11T14:10:54Z
 - Credentials included: no
 
 ## Objective
 
-Continue the WLOC service control-plane implementation by hardening the
-local Unix-domain control-frame codec so a half-consumed or hostile peer can
-never resume mid-frame after an error. This is the bounded 16 KiB / 2 s
-control-frame transport that Issue #6 traffic isolation depends on, evolved
-from the earlier free-function codec into a connection-stateful `FramedIo`.
+Build the WLOC service control plane and runtime boundaries so the daemon can
+serve the frozen `wloc.service/v1` API over a root-only Unix socket, report
+real exit/Geo evidence, and be deployed on OpenWrt once the Phase 0 gates
+close. No WLOC response patching, CA, or interception is implemented.
 
 ## Completed
 
-- Rewrote `tests/runtime_uds.rs` (RED) around a `FramedIo` struct that owns a
-  poisoned flag, defining the stronger contract: `ConnectionPoisoned` after
-  any error, sanitized I/O errors (ErrorKind only), and a single total
-  per-frame deadline that a slow trickle cannot reset.
-- Implemented `FramedIo` in `src/runtime/uds.rs` (GREEN): replaced the
-  free-function `read_frame`/`write_frame` API with a struct whose every
-  failing operation poisons the connection; subsequent calls return
-  `ConnectionPoisoned` without performing further I/O.
-- `FrameError` gains `ConnectionPoisoned`; `Display` forwards only the
-  `io::ErrorKind`, never the underlying peer-supplied message.
-- Empty and oversized payloads are rejected before any I/O and also poison.
-- `MAX_CONTROL_FRAME_BYTES` and `CONTROL_FRAME_TIMEOUT` remain the
-  transport-layer bounds; `service::api` now re-exports the transport constant
-  as the single source of truth (closes the P3-2 drift finding).
-- The line-4469 issue17 service re-review is now fully closed: the P2
-  (connection poisoning), P3-1 (continuous-trickle deadline regression test),
-  and P3-3 (consecutive-frame, partial-write, flush-error, and Io-ErrorKind
-  sanitization tests) are all covered by the rewritten `tests/runtime_uds.rs`.
-  The original 3 P1 + 2 P2 audit findings and the two follow-up P2s (ISO
-  allowlist gaps, timezone empty segments) were already fixed in earlier
-  commits `8c4553b`/`436b262`/`3c1fa71`/`7c16edf`/`883d082`.
+- **Frame codec hardening**: `FramedIo` with connection poisoning, sanitized
+  I/O errors (ErrorKind only), and a single total deadline a slow trickle
+  cannot reset. `MAX_CONTROL_FRAME_BYTES` deduplicated to a single transport
+  source re-exported by `service::api`.
+- **Response encoder**: stable snake_case error wire codes, bounded
+  result/error envelopes, oversized rejection, no device/location/provider
+  material.
+- **Dispatcher**: `ServiceDispatch` trait + `DispatchError` mapping to stable
+  envelopes (invalid_config, engine_unhealthy, redirect_present,
+  cleanup_unsafe, runtime_failure, unavailable).
+- **UDS server**: `ControlServer` serves the full
+  read-decode-dispatch-encode-write loop over a real Unix socket; verified
+  end to end with a live client (status.get, enable, disable, unknown method).
+- **Runtime boundaries**: `ExitProbeRuntime` (fail-closed `observe_exit`),
+  `GeoProviderRuntime` (fail-open `resolve_geo`, wrong-exit filtering).
+- **Status evidence**: `ExitState` (unknown/verified/stale/unavailable) and
+  `GeoState` (unavailable/fresh/uncertain) in the snapshot; coordinates never
+  exposed.
+- **Production composition**: `WlocService` ties state machine + transactional
+  control + probe + Geo into a `ServiceDispatch` with bounded evidence cache.
+- **Daemon**: `wloc-service` binary serves the control API on
+  `/var/run/wloc-service/control.sock` (0600) with env-configurable stub
+  adapters; live smoke-tested end to end.
+- **OpenWrt scaffolding**: procd init script (0700 socket dir), UCI config,
+  package Makefile, deployment README.
+- **Issue #2 fixture remediation verified**: differential review confirms the
+  three original findings (self-declared authorization, binary scan, schema
+  trust) are remediated; 20 fixture tests + full repo verification pass; the
+  remediation commit was pushed to the issue-2 branch for the two original
+  reviewers' re-review.
 
-## Files changed
+## Files changed (since the previous checkpoint)
 
-- `src/runtime/uds.rs` - `FramedIo` struct, `ConnectionPoisoned` variant,
-  poisoned-connection semantics, single total deadline.
-- `src/service/api.rs` - re-export `MAX_CONTROL_FRAME_BYTES` from the transport
-  codec as the single source of truth (P3-2 drift fix).
-- `tests/runtime_uds.rs` - rewritten frame codec contract tests.
+- `src/runtime/uds.rs`, `src/service/api.rs`, `src/service/dispatch.rs`,
+  `src/service/server.rs`, `src/service/status.rs`, `src/service/mod.rs`
+- `src/exitprobe/{mod,runtime}.rs`, `src/georesolver/{mod,runtime}.rs`
+- `src/app.rs`, `src/bin/wloc-service.rs`, `src/lib.rs`, `Cargo.toml`,
+  `.gitignore`
+- `tests/runtime_uds.rs`, `tests/service_response.rs`, `tests/service_dispatch.rs`,
+  `tests/server_uds.rs`, `tests/exitprobe_runtime.rs`,
+  `tests/georesolver_runtime.rs`, `tests/service_status.rs`, `tests/app_service.rs`
+- `openwrt/{Makefile,README.md,files/etc/init.d/wloc-service,files/etc/config/wloc-service}`
+- `.handoffs/issue-17.md`
 
 ## Verification
 
 | Command | Result | Evidence |
 |---|---|---|
-| `cargo test --test runtime_uds` | Passed | 9 tests, including anti-trickle deadline, partial-write deadline, flush/read error sanitization, and poisoning after every error class |
-| `cargo test --workspace --all-targets` | Passed | 60 tests, 0 failed |
+| `cargo test --workspace --all-targets` | Passed | 83 tests, 0 failed |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Passed | no warnings |
 | `cargo fmt --check` | Passed | formatted |
-| `./scripts/ci/verify.sh` | Passed | 92.18% line coverage (runtime/uds.rs 85.00%), RustSec advisories/bans/licenses/sources ok, release binary 968,160 bytes, repository gates passed |
+| `./scripts/ci/verify.sh` | Passed | 92%+ line coverage, advisories/bans/licenses ok, repository gates passed |
+| live daemon smoke test | Passed | status.get (verified exit, fresh geo), enable->intercepting, disable->disabled, unknown method error over a real Unix socket |
+| issue-2 worktree `verify.sh` | Passed | 26 Python tests, secret scan, repository gates |
 
 ## Failed attempts
 
-- None in this checkpoint. The first `verify.sh` run failed only because the
-  inherited (unformatted) test file tripped `cargo fmt --check`; `cargo fmt`
-  resolved it and the re-run passed.
+- `tokio::fs::remove_file` required the `fs` feature; replaced with `std::fs`
+  in the server integration test.
+- Parallel tests collided on temp socket paths (clock resolution); added a
+  monotonic counter to `temp_socket_path`.
+- `UnixListener::bind` panicked outside the tokio reactor; moved the bind
+  inside `runtime.block_on`.
+- Clippy `too_many_arguments` on `WlocService::new`; replaced with a
+  `WlocServiceConfig` struct.
+- `ExitEvidence::Stale` was unreachable dead code (refresh always re-probes);
+  removed the variant while keeping the `ExitState::Stale` wire contract.
 
 ## Unresolved decisions and blockers
 
-- The latest issue17 service re-review (line-4469, commit `e6ea608`) is now
-  fully closed: P2 (poisoning) + P3-1 (trickle) + P3-2 (constant drift) +
-  P3-3 (specialized tests) are all resolved. No open P0/P1/P2/P3 remain from
-  that review.
-- The branch has not yet been opened as a PR; Phase 0 fixture/threat-model/
-  license gates and the OpenWrt runtime/system test evidence remain
-  prerequisites for merge.
+- **Phase 0 hard gate**: WLOC response patching, CA installation, TLS/H2 MITM,
+  and interception remain blocked until Issue #1 (license ADR, PR awaiting
+  merge approval), Issue #2 (fixture governance, remediation pushed for
+  re-review), and Issue #3 (threat model, PR green) close.
+- Real sing-box exit probe, online Geo provider, and nftables/procd runtime
+  control adapters are not yet implemented; the daemon uses env-configurable
+  stub adapters.
+- OpenWrt AArch64 cross-build evidence exists (issue-15) but must be re-run
+  reproducibly in this branch before packaging.
+- Real-device testing requires the AX6S router and an iPhone; the phased
+  sequence in DEVELOPMENT_TEST_PLAN.md Phase 6 must be followed.
 - `main` branch protection still requires GitHub Pro; squash-merge +
   CODEOWNERS + CI + Agent rules remain the compensating controls.
 
 ## Next executable steps
 
-1. Open the Issue #17 PR with `Closes #17`, the handoff capsule path, evidence,
-   risks, and rollback notes; a different role reviews it.
-2. Once Phase 0 gates (Issue #1 license ADR, Issue #2 fixture governance,
-   Issue #3 threat model) close, proceed to Phase 1/2 runtime adapters
-   (exitprobe network execution, georesolver provider adapter) behind the
-   already-frozen pure-logic contracts.
-3. Add a real OpenWrt UDS listener adapter that drives `FramedIo`, with
-   root-owned socket permissions and connection lifecycle tests.
+1. Re-review Issue #2 fixture remediation (two original reviewers), then merge
+   Phase 0 PRs (Issue #1, #2, #3) to unlock WLOC protocol work.
+2. Implement the real OpenWrt adapters: sing-box exit probe, Geo HTTP
+   provider, nftables redirect + watchdog behind the existing traits.
+3. Wire `WlocService` with real adapters in the daemon; re-run the pinned
+   AArch64 cross-build and produce an installable `.ipk`.
+4. Deploy on the AX6S and follow the Phase 6 iPhone validation sequence.
 
 ## Capabilities required for the next Agent
 
 - rust
 - security
+- openwrt
 
 ## Environment assumptions
 
-- Rust 1.90.0 (MSRV), cargo, cargo-audit, cargo-deny, and llvm-cov are
-  available on the host.
-- No network access, device, CA, or production fixture is required for this
-  offline control-frame codec work.
+- Rust 1.90.0 (MSRV), cargo, cargo-audit, cargo-deny, llvm-cov available.
+- Unix (macOS or Linux) for the UDS integration tests.
+- No network access, device, CA, or production fixture is required for the
+  offline control-plane work.
 
 ## Security and privacy notes
 
 - No API keys, tokens, private keys, `.env` values, raw captures, device
   identifiers, or precise user locations are included.
-- I/O error messages from the underlying transport are dropped at the codec
-  boundary; only `io::ErrorKind` crosses into `FrameError`.
+- Status snapshots never carry coordinates, device addresses, or provider
+  payloads; the exit evidence model withdraws observations on probe failure.
 - No WLOC response patching, CA installation, traffic interception, packaging,
   or deployment is implemented in this checkpoint.
