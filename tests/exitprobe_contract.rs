@@ -148,13 +148,7 @@ fn router_wan_must_be_known_for_the_observed_address_family() {
 
 #[test]
 fn special_purpose_ipv6_ranges_are_not_proxy_exits() {
-    for value in [
-        "::8.8.8.8",
-        "100::1",
-        "2001:2::1",
-        "2002::1",
-        "3fff::1",
-    ] {
+    for value in ["::8.8.8.8", "100::1", "2001:2::1", "2002::1", "3fff::1"] {
         assert_eq!(
             validate_observation(
                 NodeRef::new("node-1").expect("safe node reference"),

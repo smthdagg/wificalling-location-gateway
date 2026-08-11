@@ -138,7 +138,10 @@ fn every_post_start_failure_compensates_by_removing_redirect_then_stopping() {
 
 #[test]
 fn failed_cleanup_keeps_watchdog_and_engine_alive_in_passthrough() {
-    for cleanup_failure in [RuntimeStep::RemoveRedirect, RuntimeStep::VerifyRedirectAbsent] {
+    for cleanup_failure in [
+        RuntimeStep::RemoveRedirect,
+        RuntimeStep::VerifyRedirectAbsent,
+    ] {
         let mut runtime = FakeRuntime {
             fail_at: vec![RuntimeStep::InstallRedirect, cleanup_failure],
             healthy: true,
