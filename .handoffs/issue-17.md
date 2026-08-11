@@ -5,19 +5,33 @@
 - Source agent ID: zcode-wloc-service
 - Capabilities used: rust,security
 - Branch: codex/issue-17-wloc-service
-- Checkpoint parent: 93547c0d5eb1faa430c16e38f2447fa955cf1e0e
-- Updated at (UTC): 2026-08-11T14:10:54Z
+- Checkpoint parent: 0a978e4df9b947d6aae132ec1467246239549442
+- Updated at (UTC): 2026-08-11T14:53:31Z
 - Credentials included: no
 
 ## Objective
 
 Build the WLOC service control plane and runtime boundaries so the daemon can
 serve the frozen `wloc.service/v1` API over a root-only Unix socket, report
-real exit/Geo evidence, and be deployed on OpenWrt once the Phase 0 gates
-close. No WLOC response patching, CA, or interception is implemented.
+real exit/Geo evidence, and be deployed on OpenWrt. Phase 0 gates are now
+fully closed; no WLOC response patching, CA, or interception is implemented
+yet.
 
 ## Completed
 
+- **Phase 0 fully closed**: Issue #1 (license ADR, PR #18), Issue #3 (threat
+  model, PR #19), Issue #15 (Rust migration evidence, PR #16), and Issue #2
+  (fixture governance remediation, PR #20) were merged into `main`
+  (`ae13e3e`/`e61e0bb`/`215b4aa`/`05fcb8d`), plus the session-record docs
+  merge (`da61963`). The issue-17 branch was re-synced with the merged main.
+- **Real Geo provider**: `georesolver/http.rs` with a bounded blocking
+  HTTP/1.1 client (GeoHttpClient, default ip-api.com), a pure
+  `parse_geo_response` that validates semantics at the provider trust
+  boundary, offline mock-server round-trip tests, and a live smoke test
+  against the real ip-api.com API (verified: `8.8.8.8 -> US`). The daemon
+  defaults to the real provider (`WLOC_GEO_PROVIDER=stub` forces the stub).
+  Live end-to-end status.get over the real Unix socket reports `exit:
+  verified`, `geo: fresh` with no coordinates exposed.
 - **Frame codec hardening**: `FramedIo` with connection poisoning, sanitized
   I/O errors (ErrorKind only), and a single total deadline a slow trickle
   cannot reset. `MAX_CONTROL_FRAME_BYTES` deduplicated to a single transport
@@ -88,15 +102,15 @@ close. No WLOC response patching, CA, or interception is implemented.
 
 ## Unresolved decisions and blockers
 
-- **Phase 0 hard gate**: WLOC response patching, CA installation, TLS/H2 MITM,
-  and interception remain blocked until Issue #1 (license ADR, PR awaiting
-  merge approval), Issue #2 (fixture governance, remediation pushed for
-  re-review), and Issue #3 (threat model, PR green) close.
-- Real sing-box exit probe, online Geo provider, and nftables/procd runtime
-  control adapters are not yet implemented; the daemon uses env-configurable
-  stub adapters.
-- OpenWrt AArch64 cross-build evidence exists (issue-15) but must be re-run
-  reproducibly in this branch before packaging.
+- **Phase 3 protocol evidence (user input needed)**: the synthetic fixture
+  format only exercises encoders and failure paths; real WLOC compatibility
+  evidence requires either an `authorized-sanitized-capture` (project-owner
+  written approval + isolated lab capture, sanitized per the fixture
+  governance contract) or clean-room protocol notes from public sources.
+  Without this, the WLOC patch core cannot meaningfully start.
+- Real sing-box exit probe (through the node outbound) and nftables/procd
+  runtime control adapters are not yet implemented; the daemon uses the
+  env-configurable stub probe and the real Geo HTTP provider.
 - Real-device testing requires the AX6S router and an iPhone; the phased
   sequence in DEVELOPMENT_TEST_PLAN.md Phase 6 must be followed.
 - `main` branch protection still requires GitHub Pro; squash-merge +
@@ -104,12 +118,13 @@ close. No WLOC response patching, CA, or interception is implemented.
 
 ## Next executable steps
 
-1. Re-review Issue #2 fixture remediation (two original reviewers), then merge
-   Phase 0 PRs (Issue #1, #2, #3) to unlock WLOC protocol work.
-2. Implement the real OpenWrt adapters: sing-box exit probe, Geo HTTP
-   provider, nftables redirect + watchdog behind the existing traits.
-3. Wire `WlocService` with real adapters in the daemon; re-run the pinned
-   AArch64 cross-build and produce an installable `.ipk`.
+1. Provide Phase 3 protocol evidence: authorized capture or clean-room
+   protocol notes; then start the offline WLOC patch core with fixture
+   round-trip tests.
+2. Implement the real OpenWrt adapters: sing-box exit probe (temporary
+   outbound config), nftables redirect + watchdog behind the existing traits.
+3. Wire the daemon with the real probe; re-run the pinned AArch64 cross-build
+   and produce an installable `.ipk` (OpenWrt scaffolding already in place).
 4. Deploy on the AX6S and follow the Phase 6 iPhone validation sequence.
 
 ## Capabilities required for the next Agent
