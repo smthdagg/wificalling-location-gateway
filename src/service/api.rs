@@ -142,17 +142,17 @@ impl fmt::Display for ResponseEncodeError {
 impl std::error::Error for ResponseEncodeError {}
 
 #[derive(Serialize)]
-struct ErrorBody {
-    code: &'static str,
-    component: &'static str,
+struct ErrorBody<'a> {
+    code: &'a str,
+    component: &'a str,
     retryable: bool,
 }
 
 #[derive(Serialize)]
-struct ErrorResponse {
-    api_version: &'static str,
+struct ErrorResponse<'a> {
+    api_version: &'a str,
     request_id: String,
-    error: ErrorBody,
+    error: ErrorBody<'a>,
 }
 
 #[derive(Serialize)]
@@ -162,22 +162,25 @@ struct ResultResponse {
     result: serde_json::Value,
 }
 
-/// Encode a bounded error response frame. The envelope carries the stable
-/// wire code, a fixed `service` component, and the non-retryable flag. It
-/// never includes a `result` field, device material, or provider payload.
+/// Encode a bounded error response frame from raw envelope parts. This is the
+/// shared lower-level encoder used by both decode-error and dispatch-error
+/// response paths. The envelope carries no `result` field, device material, or
+/// provider payload.
 ///
 /// `request_id` may be empty when the request could not be parsed at all.
-pub fn encode_error_response(
+pub fn encode_error_parts(
     request_id: &str,
-    code: ApiErrorCode,
+    code: &str,
+    component: &str,
+    retryable: bool,
 ) -> Result<Vec<u8>, ResponseEncodeError> {
     let response = ErrorResponse {
         api_version: SERVICE_API_ID,
         request_id: request_id.to_owned(),
         error: ErrorBody {
-            code: code.wire_code(),
-            component: "service",
-            retryable: code.retryable(),
+            code,
+            component,
+            retryable,
         },
     };
     let bytes = serde_json::to_vec(&response).map_err(|_| ResponseEncodeError::Oversized)?;
@@ -185,6 +188,18 @@ pub fn encode_error_response(
         return Err(ResponseEncodeError::Oversized);
     }
     Ok(bytes)
+}
+
+/// Encode a bounded error response frame for a decode error. The envelope
+/// carries the stable wire code, a fixed `service` component, and the
+/// non-retryable flag.
+///
+/// `request_id` may be empty when the request could not be parsed at all.
+pub fn encode_error_response(
+    request_id: &str,
+    code: ApiErrorCode,
+) -> Result<Vec<u8>, ResponseEncodeError> {
+    encode_error_parts(request_id, code.wire_code(), "service", code.retryable())
 }
 
 /// Encode a bounded result response frame wrapping a pre-serialized result
