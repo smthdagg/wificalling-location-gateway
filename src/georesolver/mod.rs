@@ -3,12 +3,15 @@
 //! Provider network adapters are intentionally separate. Invalid, conflicting,
 //! expired, or wrong-exit data never creates a fallback coordinate.
 
+pub mod runtime;
+
 use std::net::IpAddr;
 
 use crate::service::GeoRecord;
 
 const MAX_PROVIDER_REF_BYTES: usize = 32;
-const MAX_CANDIDATES: usize = 2;
+/// Maximum providers consulted for a single resolution (and cache entries kept).
+pub const MAX_CANDIDATES: usize = 2;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProviderRef(String);
