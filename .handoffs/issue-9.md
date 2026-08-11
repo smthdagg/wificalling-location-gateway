@@ -2,11 +2,11 @@
 
 ## Identity and scope
 
-- Source agent ID: codex-resume-test
+- Source agent ID: codex-ci-fix
 - Capabilities used: ci,security,docs
-- Branch: codex/issue-9-resume-check-codex-resume-test-20260811055034-ea1011f3
-- Checkpoint parent: 6a291f7747aac8a3327ed835fb5f8a324d18ec03
-- Updated at (UTC): 2026-08-11T05:52:00Z
+- Branch: codex/issue-9-gitleaks-permission-codex-ci-fix-20260811055452-fc60cb2b
+- Checkpoint parent: 8fcc71cf4f8d522d56d14ab110f4307d844ad8e9
+- Updated at (UTC): 2026-08-11T05:56:00Z
 - Credentials included: no
 
 ## Objective
@@ -26,6 +26,8 @@ Replace permanent single-Agent ownership with resumable leases and exact commit 
 - Added capsule-to-authoritative-state identity validation after the takeover exercise.
 - Made handoff publication a single atomic update of lease and handoff refs; stale publishers cannot overwrite a new lease.
 - Added pre-push high-confidence secret scanning in addition to pinned Gitleaks CI.
+- Granted the pinned Gitleaks Action read-only pull-request metadata permission required to scan PR commits.
+- Verified a third Agent ID could take over the second Agent's atomic handoff.
 
 ## Files changed
 
@@ -45,10 +47,12 @@ Replace permanent single-Agent ownership with resumable leases and exact commit 
 | `./scripts/agent-lease.sh 9 codex-bootstrap 'ci,security,docs' 120` | Passed | Atomic ref `agent-leases/issue-9` points to strict state commit `7e513a3892ea8bee03562a7adfd426398ebf3c30` |
 | `python3 -m unittest discover -s tests -p 'test_*.py'` | Passed | Includes stale-generation rejection, atomic two-ref handoff rejection, capsule identity, and strict envelope tests |
 | `./scripts/agent-takeover.sh 9 codex-resume-test resume-check 'ci,security,docs' 30` | Passed | New worktree started exactly at `6a291f7747aac8a3327ed835fb5f8a324d18ec03` |
+| `./scripts/agent-takeover.sh 9 codex-ci-fix gitleaks-permission 'ci,security,docs' 30` | Passed | Third Agent started exactly at `8fcc71cf4f8d522d56d14ab110f4307d844ad8e9` |
 
 ## Failed attempts
 
 - Initial label/comment lease design failed independent review because it was vulnerable to TOCTOU and forged comment state; replaced with Git ref compare-and-swap.
+- First PR run reached Gitleaks but GitHub returned 403 because `pull-requests: read` was absent; permission was added explicitly.
 
 ## Unresolved decisions and blockers
 

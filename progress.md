@@ -52,3 +52,5 @@
 - 接管演练后新增 capsule 的 Issue/Agent/branch/capabilities 与权威 handoff state 强一致校验。
 - 二次 Reviewer 发现 lease/handoff 双 ref 非原子和 takeover 读取顺序竞态；已改为双 ref `git push --atomic`，并在租约线性化后读取 handoff。
 - 已增加本地高置信秘密扫描；明确 CAS 是可信写入 Agent 的协作锁，不是访问控制边界。
+- PR #10 的 PR 契约检查通过；Gitleaks 因缺少只读 PR 元数据权限返回 403。
+- 已由第三个 Agent ID `codex-ci-fix` 从第二个 Agent 的 `8fcc71c...` handoff 接管，并添加最小 `pull-requests: read` 权限。

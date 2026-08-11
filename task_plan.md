@@ -58,3 +58,4 @@
 | GitHub 私有仓库 `main` 分支保护返回 HTTP 403 | 1 | 当前账号需 GitHub Pro；保持仓库私有，使用 CI、CODEOWNERS、PR 契约和 Agent 规则作为替代，并把升级列为治理缺口 |
 | GitHub Actions 首轮 `verify` 因 ShellCheck SC1007/SC2038 失败 | 1 | 明确设置 `CDPATH=''`，并以 `find -exec ... +` 替代非空安全的 xargs 调用 |
 | 再次以完整历史和显式 `agent_type` 启动 Reviewer 失败 | 2 | 遵循已有记录，移除 `agent_type` 后成功启动只读 Reviewer；后续不得重复该组合 |
+| PR #10 的固定 SHA Gitleaks Action 返回 HTTP 403 | 1 | 增加最小 `pull-requests: read` workflow 权限；保留 `contents: read`，不授予写权限 |
