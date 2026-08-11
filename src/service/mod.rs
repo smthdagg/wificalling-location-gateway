@@ -17,6 +17,17 @@ pub mod status;
 pub const SERVICE_API_VERSION: u16 = 1;
 const MAX_CONNECTIONS: u16 = 32;
 const MAX_FAILURE_GRACE: Duration = Duration::from_secs(30);
+const MAX_GEO_TTL_SECONDS: u64 = 3_600;
+const ISO_3166_ALPHA2: &str = concat!(
+    "ADAEAFAGAIALAOARAQASATAUAWAXAZBABBBDBEBFBGBHBIBJBMBNBOBQBRBSBTBVBWBYBZ",
+    "CACCCDCFCHCICKCLCMCNCOCRCUCVCWCXCYCZDEDJDKDMDODZECEEEGEHERESETFIFJFKFMFOFR",
+    "GAGBGDGEGFGGGHGIGLGMGNGPGQGRGSGTGUGWGYHKHMHNHRHTHUIDIEILIMINIOIQIRISIT",
+    "JEJMJOJPKEKGKHKIKMKNKPKRKWKYKZLALBLCLILKLRLSLTLULVMAMCMDMEMFMGMHMKML",
+    "MMMNMOMPMQMRMSMTMUMVMWMXMYMZNANCNENFNGNINLNONPNRNUNZOMPAPEPFPGPH",
+    "PKPLPMPNPRPSPTPWPYQARERORSRURWSASBSCSDSESGSHSISJSKSLSMSNSOSRSSSTSV",
+    "SXSYSZTCTDTFTGTHTJTKTLTMTNTOTRTTTVTWTZUAUGUMUSUYUZVAVCVGVIVNVUWF",
+    "WSYEYTZAZMZW"
+);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ServiceConfig {
@@ -84,16 +95,21 @@ impl GeoRecord {
             && self
                 .country_code
                 .bytes()
-                .all(|value| value.is_ascii_uppercase());
+                .all(|value| value.is_ascii_uppercase())
+            && ISO_3166_ALPHA2
+                .as_bytes()
+                .chunks_exact(2)
+                .any(|code| code == self.country_code.as_bytes());
         let valid_coordinates = self.latitude.is_finite()
             && (-90.0..=90.0).contains(&self.latitude)
             && self.longitude.is_finite()
             && (-180.0..=180.0).contains(&self.longitude);
-        let valid_timezone = !self.timezone.is_empty()
-            && self.timezone.len() <= 64
-            && self.timezone.bytes().all(|value| {
-                value.is_ascii_alphanumeric() || matches!(value, b'/' | b'_' | b'-' | b'+')
-            });
+        let valid_timezone = self.timezone == "UTC"
+            || (self.timezone.contains('/')
+                && self.timezone.len() <= 64
+                && self.timezone.bytes().all(|value| {
+                    value.is_ascii_alphanumeric() || matches!(value, b'/' | b'_' | b'-' | b'+')
+                }));
 
         if !valid_country {
             return Err(GeoValidationError::InvalidCountryCode);
@@ -104,7 +120,8 @@ impl GeoRecord {
         if !valid_timezone {
             return Err(GeoValidationError::InvalidTimezone);
         }
-        if self.expires_at_unix <= now_unix {
+        if self.expires_at_unix <= now_unix || self.expires_at_unix - now_unix > MAX_GEO_TTL_SECONDS
+        {
             return Err(GeoValidationError::Expired);
         }
         Ok(ValidatedGeo(self.clone()))

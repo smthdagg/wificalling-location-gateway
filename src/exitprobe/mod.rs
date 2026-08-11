@@ -62,6 +62,7 @@ pub enum ExitProbeError {
     InvalidNodeRef,
     InvalidLimits,
     NonPublicAddress,
+    RouterWanUnknown,
     RouterWanAddress,
     ObservationFromFuture,
     StaleObservation,
@@ -70,7 +71,7 @@ pub enum ExitProbeError {
 pub fn validate_observation(
     node_ref: NodeRef,
     observed_ip: IpAddr,
-    router_wan_ip: Option<IpAddr>,
+    router_wan_ips: &[IpAddr],
     checked_at_unix: u64,
     now_unix: u64,
     limits: ProbeLimits,
@@ -81,7 +82,13 @@ pub fn validate_observation(
     if !is_public_address(observed_ip) {
         return Err(ExitProbeError::NonPublicAddress);
     }
-    if router_wan_ip == Some(observed_ip) {
+    if !router_wan_ips
+        .iter()
+        .any(|known| same_address_family(*known, observed_ip))
+    {
+        return Err(ExitProbeError::RouterWanUnknown);
+    }
+    if router_wan_ips.contains(&observed_ip) {
         return Err(ExitProbeError::RouterWanAddress);
     }
     if checked_at_unix > now_unix {
@@ -122,11 +129,25 @@ fn is_public_ipv4(address: Ipv4Addr) -> bool {
 
 fn is_public_ipv6(address: Ipv6Addr) -> bool {
     let segments = address.segments();
+    let global_unicast = (segments[0] & 0xe000) == 0x2000;
+    let special_2001_low = segments[0] == 0x2001 && segments[1] <= 0x01ff;
+    let documentation = (segments[0] == 0x2001 && segments[1] == 0x0db8)
+        || (segments[0] == 0x3fff && segments[1] <= 0x0fff);
     !(address.is_unspecified()
         || address.is_loopback()
         || address.is_multicast()
+        || !global_unicast
         || (segments[0] & 0xfe00) == 0xfc00
         || (segments[0] & 0xffc0) == 0xfe80
-        || (segments[0] == 0x2001 && segments[1] == 0x0db8)
+        || special_2001_low
+        || documentation
+        || segments[0] == 0x2002
         || address.to_ipv4_mapped().is_some())
+}
+
+const fn same_address_family(left: IpAddr, right: IpAddr) -> bool {
+    matches!(
+        (left, right),
+        (IpAddr::V4(_), IpAddr::V4(_)) | (IpAddr::V6(_), IpAddr::V6(_))
+    )
 }

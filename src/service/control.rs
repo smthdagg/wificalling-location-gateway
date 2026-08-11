@@ -24,6 +24,7 @@ pub enum ControlError {
     InvalidSafetyScope,
     EngineUnhealthy,
     RedirectStillPresent,
+    CleanupUnsafe,
     RuntimeFailure(RuntimeStep),
 }
 
@@ -54,7 +55,7 @@ pub fn enable(
 
     let result = enable_after_start(runtime);
     if result.is_err() {
-        compensate_after_start(runtime);
+        compensate_after_start(runtime)?;
     }
     result
 }
@@ -75,10 +76,19 @@ fn enable_after_start(runtime: &mut impl RuntimeControl) -> Result<(), ControlEr
     Ok(())
 }
 
-fn compensate_after_start(runtime: &mut impl RuntimeControl) {
-    let _redirect_removed = runtime.remove_redirect();
-    let _watchdog_disarmed = runtime.disarm_watchdog();
-    let _engine_stopped = runtime.stop_engine();
+fn compensate_after_start(runtime: &mut impl RuntimeControl) -> Result<(), ControlError> {
+    let removal = runtime.remove_redirect();
+    let redirect_absent = runtime.redirect_present();
+    if removal.is_err() || !matches!(redirect_absent, Ok(false)) {
+        return Err(ControlError::CleanupUnsafe);
+    }
+    runtime
+        .disarm_watchdog()
+        .map_err(|_| ControlError::CleanupUnsafe)?;
+    runtime
+        .stop_engine()
+        .map_err(|_| ControlError::CleanupUnsafe)?;
+    Ok(())
 }
 
 pub fn disable(runtime: &mut impl RuntimeControl) -> Result<(), ControlError> {

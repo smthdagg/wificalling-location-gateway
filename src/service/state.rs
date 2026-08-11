@@ -128,10 +128,7 @@ pub fn reduce(
             next.phase = ServicePhase::ReadyPassThrough;
         }
         ServiceEvent::WatchdogArmed => {
-            if !matches!(
-                current.phase,
-                ServicePhase::Starting | ServicePhase::ReadyPassThrough
-            ) {
+            if current.phase != ServicePhase::ReadyPassThrough || !current.safety.engine_ready {
                 return Err(TransitionError::InvalidTransition);
             }
             next.safety.watchdog_armed = true;
@@ -147,6 +144,14 @@ pub fn reduce(
             next.phase = ServicePhase::Intercepting;
         }
         ServiceEvent::EngineUnhealthy => {
+            if !matches!(
+                current.phase,
+                ServicePhase::Starting
+                    | ServicePhase::ReadyPassThrough
+                    | ServicePhase::Intercepting
+            ) {
+                return Err(TransitionError::InvalidTransition);
+            }
             next.safety.redirect_present = false;
             next.safety.engine_ready = false;
             next.phase = ServicePhase::DegradedPassThrough;
