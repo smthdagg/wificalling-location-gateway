@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf};
 use wificalling_location_gateway::runtime::uds::{
     read_frame, write_frame, FrameError, CONTROL_FRAME_TIMEOUT, MAX_CONTROL_FRAME_BYTES,
 };
@@ -97,7 +97,10 @@ async fn rejects_empty_and_oversized_headers_without_reading_a_body() {
             chunk_size: 1,
         };
         assert_eq!(read_frame(&mut reader).await, Err(expected));
-        assert_eq!(reader.offset, 4, "body must not be read after invalid header");
+        assert_eq!(
+            reader.offset, 4,
+            "body must not be read after invalid header"
+        );
     }
 }
 
@@ -161,7 +164,8 @@ async fn supports_generic_async_read_and_write_implementations() {
     }
 
     let payload = b"generic";
-    let mut source = encoded(payload).as_slice();
+    let source_bytes = encoded(payload);
+    let mut source = source_bytes.as_slice();
     let mut destination = Vec::new();
     generic_roundtrip(&mut source, &mut destination).await;
     assert_eq!(destination, encoded(payload));
