@@ -118,3 +118,27 @@ fn provider_and_candidate_count_limits_are_strict() {
         GeoResolverError::TooManyCandidates
     );
 }
+
+#[test]
+fn semantic_placeholders_and_excessive_ttl_are_unavailable() {
+    for record in [
+        GeoRecord {
+            country_code: "ZZ".to_owned(),
+            ..london()
+        },
+        GeoRecord {
+            timezone: "+".to_owned(),
+            ..london()
+        },
+        GeoRecord {
+            expires_at_unix: 10_000,
+            ..london()
+        },
+    ] {
+        assert_eq!(
+            resolve_candidates(exit_ip(), &[candidate("primary", record)], 1_000)
+                .expect("bounded candidate set"),
+            GeoResolution::Unavailable
+        );
+    }
+}

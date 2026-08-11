@@ -5,15 +5,16 @@ use wificalling_location_gateway::service::control::{
 #[derive(Default)]
 struct FakeRuntime {
     operations: Vec<RuntimeStep>,
-    fail_at: Option<RuntimeStep>,
+    fail_at: Vec<RuntimeStep>,
     healthy: bool,
     redirect_present: bool,
+    install_side_effect_before_failure: bool,
 }
 
 impl FakeRuntime {
     fn record(&mut self, step: RuntimeStep) -> Result<(), RuntimeFailure> {
         self.operations.push(step);
-        if self.fail_at == Some(step) {
+        if self.fail_at.contains(&step) {
             return Err(RuntimeFailure);
         }
         Ok(())
@@ -35,6 +36,9 @@ impl RuntimeControl for FakeRuntime {
     }
 
     fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        if self.install_side_effect_before_failure {
+            self.redirect_present = true;
+        }
         self.record(RuntimeStep::InstallRedirect)?;
         self.redirect_present = true;
         Ok(())
@@ -104,7 +108,7 @@ fn every_post_start_failure_compensates_by_removing_redirect_then_stopping() {
         RuntimeStep::InstallRedirect,
     ] {
         let mut runtime = FakeRuntime {
-            fail_at: Some(failed_step),
+            fail_at: vec![failed_step],
             healthy: true,
             ..FakeRuntime::default()
         };
@@ -112,6 +116,7 @@ fn every_post_start_failure_compensates_by_removing_redirect_then_stopping() {
         assert!(enable(&mut runtime, true, true).is_err());
         assert!(runtime.operations.ends_with(&[
             RuntimeStep::RemoveRedirect,
+            RuntimeStep::VerifyRedirectAbsent,
             RuntimeStep::DisarmWatchdog,
             RuntimeStep::StopEngine,
         ]));
@@ -125,9 +130,29 @@ fn every_post_start_failure_compensates_by_removing_redirect_then_stopping() {
     );
     assert!(unhealthy.operations.ends_with(&[
         RuntimeStep::RemoveRedirect,
+        RuntimeStep::VerifyRedirectAbsent,
         RuntimeStep::DisarmWatchdog,
         RuntimeStep::StopEngine,
     ]));
+}
+
+#[test]
+fn failed_cleanup_keeps_watchdog_and_engine_alive_in_passthrough() {
+    for cleanup_failure in [RuntimeStep::RemoveRedirect, RuntimeStep::VerifyRedirectAbsent] {
+        let mut runtime = FakeRuntime {
+            fail_at: vec![RuntimeStep::InstallRedirect, cleanup_failure],
+            healthy: true,
+            install_side_effect_before_failure: true,
+            ..FakeRuntime::default()
+        };
+
+        assert_eq!(
+            enable(&mut runtime, true, true),
+            Err(ControlError::CleanupUnsafe)
+        );
+        assert!(!runtime.operations.contains(&RuntimeStep::DisarmWatchdog));
+        assert!(!runtime.operations.contains(&RuntimeStep::StopEngine));
+    }
 }
 
 #[test]

@@ -88,3 +88,24 @@ fn disable_withdraws_redirect_before_the_engine_stops_and_is_idempotent() {
         disabled
     );
 }
+
+#[test]
+fn lifecycle_events_reject_out_of_order_or_spurious_health_changes() {
+    let starting = reduce(
+        &ServiceState::disabled(),
+        ServiceEvent::BeginEnable {
+            scope_valid: true,
+            ipv6_ready: true,
+        },
+    )
+    .expect("valid enable must start");
+
+    assert_eq!(
+        reduce(&starting, ServiceEvent::WatchdogArmed),
+        Err(TransitionError::InvalidTransition)
+    );
+    assert_eq!(
+        reduce(&ServiceState::disabled(), ServiceEvent::EngineUnhealthy),
+        Err(TransitionError::InvalidTransition)
+    );
+}
