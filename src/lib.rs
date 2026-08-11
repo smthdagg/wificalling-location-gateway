@@ -6,6 +6,7 @@ use rustls::sign::CertifiedKey;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 pub mod exitprobe;
+pub mod georesolver;
 pub mod service;
 pub mod tls_h2;
 
