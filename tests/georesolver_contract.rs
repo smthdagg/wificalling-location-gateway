@@ -142,3 +142,35 @@ fn semantic_placeholders_and_excessive_ttl_are_unavailable() {
         );
     }
 }
+
+#[test]
+fn valid_iso_boundary_codes_are_not_lost_by_the_compact_allowlist() {
+    for country_code in ["AM", "BL", "CG", "LY", "VE"] {
+        let record = GeoRecord {
+            country_code: country_code.to_owned(),
+            ..london()
+        };
+        assert_eq!(
+            resolve_candidates(exit_ip(), &[candidate("primary", record.clone())], 1_000)
+                .expect("bounded candidate set"),
+            GeoResolution::Fresh(record),
+            "rejected valid ISO code {country_code}"
+        );
+    }
+}
+
+#[test]
+fn timezone_shape_rejects_empty_path_segments() {
+    for timezone in ["/", "A/", "/A", "A//B"] {
+        let record = GeoRecord {
+            timezone: timezone.to_owned(),
+            ..london()
+        };
+        assert_eq!(
+            resolve_candidates(exit_ip(), &[candidate("primary", record)], 1_000)
+                .expect("bounded candidate set"),
+            GeoResolution::Unavailable,
+            "accepted invalid timezone {timezone}"
+        );
+    }
+}
