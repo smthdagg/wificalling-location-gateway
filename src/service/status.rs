@@ -23,6 +23,27 @@ pub enum EngineHealth {
     Unhealthy,
 }
 
+/// Evidence state for the exit observation. `Verified` means a fresh probe
+/// result; `Stale` means the last probe is older than the configured limit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExitState {
+    Unknown,
+    Verified,
+    Stale,
+    Unavailable,
+}
+
+/// Evidence state for the Geo resolution. Coordinates are never included in
+/// the snapshot; only state and expiry are exposed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeoState {
+    Unavailable,
+    Fresh,
+    Uncertain,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StatusInputs {
     pub generation: u64,
@@ -32,6 +53,10 @@ pub struct StatusInputs {
     pub engine_health: EngineHealth,
     pub engine_uptime_seconds: u64,
     pub assigned_device_configured: bool,
+    pub exit_state: ExitState,
+    pub exit_checked_at: Option<u64>,
+    pub geo_state: GeoState,
+    pub geo_expires_at: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -66,13 +91,13 @@ struct EngineSnapshot {
 
 #[derive(Serialize)]
 struct ExitSnapshot {
-    state: &'static str,
+    state: ExitState,
     checked_at: Option<u64>,
 }
 
 #[derive(Serialize)]
 struct GeoSnapshot {
-    state: &'static str,
+    state: GeoState,
     expires_at: Option<u64>,
 }
 
@@ -104,12 +129,12 @@ pub fn encode_status(inputs: &StatusInputs) -> Result<Vec<u8>, serde_json::Error
             uptime_seconds: inputs.engine_uptime_seconds,
         },
         exit: ExitSnapshot {
-            state: "unknown",
-            checked_at: None,
+            state: inputs.exit_state,
+            checked_at: inputs.exit_checked_at,
         },
         geo: GeoSnapshot {
-            state: "unavailable",
-            expires_at: None,
+            state: inputs.geo_state,
+            expires_at: inputs.geo_expires_at,
         },
         assigned_device_configured: inputs.assigned_device_configured,
         last_error: None,

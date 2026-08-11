@@ -1,11 +1,10 @@
 use wificalling_location_gateway::service::state::ServiceState;
 use wificalling_location_gateway::service::status::{
-    encode_status, DesiredState, EngineHealth, StatusInputs,
+    encode_status, DesiredState, EngineHealth, ExitState, GeoState, StatusInputs,
 };
 
-#[test]
-fn disabled_status_matches_the_frozen_coordinate_free_contract() {
-    let encoded = encode_status(&StatusInputs {
+fn disabled_inputs() -> StatusInputs {
+    StatusInputs {
         generation: 7,
         observed_at_unix: 123,
         desired_state: DesiredState::Disabled,
@@ -13,8 +12,16 @@ fn disabled_status_matches_the_frozen_coordinate_free_contract() {
         engine_health: EngineHealth::Stopped,
         engine_uptime_seconds: 0,
         assigned_device_configured: false,
-    })
-    .expect("bounded status must encode");
+        exit_state: ExitState::Unknown,
+        exit_checked_at: None,
+        geo_state: GeoState::Unavailable,
+        geo_expires_at: None,
+    }
+}
+
+#[test]
+fn disabled_status_matches_the_frozen_coordinate_free_contract() {
+    let encoded = encode_status(&disabled_inputs()).expect("bounded status must encode");
 
     assert_eq!(
         String::from_utf8(encoded).expect("status is UTF-8 JSON"),
@@ -32,6 +39,10 @@ fn default_status_cannot_expose_device_or_location_material() {
         engine_health: EngineHealth::Unhealthy,
         engine_uptime_seconds: u64::MAX,
         assigned_device_configured: true,
+        exit_state: ExitState::Verified,
+        exit_checked_at: Some(u64::MAX),
+        geo_state: GeoState::Fresh,
+        geo_expires_at: Some(u64::MAX),
     })
     .expect("bounded status must encode");
     let status = String::from_utf8(encoded).expect("status is UTF-8 JSON");
@@ -49,4 +60,52 @@ fn default_status_cannot_expose_device_or_location_material() {
     }
     assert!(status.contains(r#""assigned_device_configured":true"#));
     assert!(status.contains(r#""response_mode":"forward_original""#));
+}
+
+#[test]
+fn verified_exit_and_fresh_geo_are_reported_without_coordinates() {
+    let encoded = encode_status(&StatusInputs {
+        exit_state: ExitState::Verified,
+        exit_checked_at: Some(4_000_000),
+        geo_state: GeoState::Fresh,
+        geo_expires_at: Some(4_003_600),
+        ..disabled_inputs()
+    })
+    .expect("bounded status must encode");
+    let status = String::from_utf8(encoded).expect("status is UTF-8 JSON");
+
+    assert!(status.contains(r#""exit":{"state":"verified","checked_at":4000000}"#));
+    assert!(status.contains(r#""geo":{"state":"fresh","expires_at":4003600}"#));
+    assert!(
+        !status.contains("latitude") && !status.contains("longitude"),
+        "fresh geo evidence must never carry coordinates"
+    );
+}
+
+#[test]
+fn stale_exit_and_uncertain_geo_are_reported_with_their_states() {
+    let encoded = encode_status(&StatusInputs {
+        exit_state: ExitState::Stale,
+        exit_checked_at: Some(1),
+        geo_state: GeoState::Uncertain,
+        geo_expires_at: None,
+        ..disabled_inputs()
+    })
+    .expect("bounded status must encode");
+    let status = String::from_utf8(encoded).expect("status is UTF-8 JSON");
+
+    assert!(status.contains(r#""exit":{"state":"stale","checked_at":1}"#));
+    assert!(status.contains(r#""geo":{"state":"uncertain","expires_at":null}"#));
+}
+
+#[test]
+fn unavailable_exit_state_is_the_fail_closed_wire_value() {
+    let encoded = encode_status(&StatusInputs {
+        exit_state: ExitState::Unavailable,
+        exit_checked_at: None,
+        ..disabled_inputs()
+    })
+    .expect("bounded status must encode");
+    let status = String::from_utf8(encoded).expect("status is UTF-8 JSON");
+    assert!(status.contains(r#""exit":{"state":"unavailable","checked_at":null}"#));
 }
