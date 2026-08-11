@@ -1,0 +1,14 @@
+# WLOC service configuration
+#
+# The control daemon serves the frozen wloc.service/v1 API on a root-only
+# Unix socket. The runtime adapters (exit probe, Geo provider, nftables
+# redirect) are wired from these options as they land; the redirect path
+# remains explicitly disabled until the Phase 0 gates are closed.
+
+config wloc-service 'main'
+	option enabled '1'
+	option node_ref 'default'
+	option assigned_device ''
+	option probe_interval '300'
+	option geo_provider 'stub'
+	option country_override ''
