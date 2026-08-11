@@ -9,6 +9,8 @@ use std::time::Duration;
 
 use crate::APPROVED_WLOC_HOSTS;
 
+pub mod api;
+
 pub const SERVICE_API_VERSION: u16 = 1;
 const MAX_CONNECTIONS: u16 = 32;
 const MAX_FAILURE_GRACE: Duration = Duration::from_secs(30);

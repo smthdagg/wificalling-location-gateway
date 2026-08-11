@@ -19,6 +19,8 @@ h2 = "=0.4.15"
 http = "=1.5.0"
 prost = { version = "=0.14.4", default-features = false, features = ["derive"] }
 rustls = { version = "=0.23.43", default-features = false, features = ["ring", "std", "tls12"] }
+serde = { version = "=1.0.228", default-features = false, features = ["derive", "std"] }
+serde_json = { version = "=1.0.145", default-features = false, features = ["std"] }
 tokio = { version = "=1.48.0", default-features = false, features = ["io-util", "macros", "rt", "time"] }
 tokio-rustls = { version = "=0.26.4", default-features = false, features = ["ring", "tls12"] }
 
