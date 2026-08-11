@@ -15,6 +15,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use wificalling_location_gateway::app::{WlocService, WlocServiceConfig};
 use wificalling_location_gateway::exitprobe::runtime::{ExitProbeRuntime, ProbeFailure};
 use wificalling_location_gateway::exitprobe::{NodeRef, ProbeLimits};
+use wificalling_location_gateway::georesolver::http::GeoHttpClient;
 use wificalling_location_gateway::georesolver::runtime::{GeoProviderRuntime, ProviderFailure};
 use wificalling_location_gateway::georesolver::ProviderRef;
 use wificalling_location_gateway::service::control::{RuntimeControl, RuntimeFailure};
@@ -117,17 +118,26 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let socket_path = std::env::var("WLOC_SOCKET")
         .unwrap_or_else(|_| "/var/run/wloc-service/control.sock".into());
 
+    // Default to the real Geo HTTP provider; WLOC_GEO_PROVIDER=stub forces
+    // the deterministic stub for offline development.
+    let geo_provider: String = std::env::var("WLOC_GEO_PROVIDER").unwrap_or_else(|_| "http".into());
+    let geo: Box<dyn GeoProviderRuntime> = if geo_provider == "stub" {
+        Box::new(StubGeo {
+            country_code: env_or("WLOC_STUB_COUNTRY", "US".to_owned()),
+            latitude: env_or("WLOC_STUB_LAT", 37.77_f64),
+            longitude: env_or("WLOC_STUB_LON", -122.41_f64),
+        })
+    } else {
+        Box::new(GeoHttpClient::ip_api_default())
+    };
+
     let service = WlocService::new(
         StubRuntime,
         StubProbe {
             exit_ip: env_or("WLOC_STUB_EXIT_IP", IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))),
             wan_ip: env_or("WLOC_STUB_WAN_IP", IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))),
         },
-        StubGeo {
-            country_code: env_or("WLOC_STUB_COUNTRY", "US".to_owned()),
-            latitude: env_or("WLOC_STUB_LAT", 37.77_f64),
-            longitude: env_or("WLOC_STUB_LON", -122.41_f64),
-        },
+        geo,
         WlocServiceConfig {
             node_ref: NodeRef::new("default").expect("static node ref is valid"),
             providers: vec![ProviderRef::new("stub").expect("static provider ref is valid")],

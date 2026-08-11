@@ -42,6 +42,16 @@ pub trait GeoProviderRuntime {
     ) -> Result<Option<(IpAddr, GeoRecord)>, ProviderFailure>;
 }
 
+impl GeoProviderRuntime for Box<dyn GeoProviderRuntime> {
+    fn lookup(
+        &mut self,
+        provider: ProviderRef,
+        ip: IpAddr,
+    ) -> Result<Option<(IpAddr, GeoRecord)>, ProviderFailure> {
+        (**self).lookup(provider, ip)
+    }
+}
+
 /// Query up to [`MAX_CANDIDATES`] providers and resolve the exit location.
 ///
 /// Providers are consulted in order; failures, empty results, wrong-exit

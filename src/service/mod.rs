@@ -92,17 +92,19 @@ pub enum GeoValidationError {
     Expired,
 }
 
+/// Validate a two-letter ISO 3166 alpha-2 country code.
+pub fn is_valid_country_code(code: &str) -> bool {
+    code.len() == 2
+        && code.bytes().all(|value| value.is_ascii_uppercase())
+        && ISO_3166_ALPHA2
+            .as_bytes()
+            .chunks_exact(2)
+            .any(|candidate| candidate == code.as_bytes())
+}
+
 impl GeoRecord {
     pub fn validate_at(&self, now_unix: u64) -> Result<ValidatedGeo, GeoValidationError> {
-        let valid_country = self.country_code.len() == 2
-            && self
-                .country_code
-                .bytes()
-                .all(|value| value.is_ascii_uppercase())
-            && ISO_3166_ALPHA2
-                .as_bytes()
-                .chunks_exact(2)
-                .any(|code| code == self.country_code.as_bytes());
+        let valid_country = is_valid_country_code(&self.country_code);
         let valid_coordinates = self.latitude.is_finite()
             && (-90.0..=90.0).contains(&self.latitude)
             && self.longitude.is_finite()
