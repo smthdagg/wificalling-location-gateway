@@ -12,6 +12,8 @@ use crate::APPROVED_WLOC_HOSTS;
 pub mod api;
 pub mod control;
 pub mod dispatch;
+#[cfg(unix)]
+pub mod server;
 pub mod state;
 pub mod status;
 
