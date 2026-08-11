@@ -54,3 +54,5 @@
 - 已增加本地高置信秘密扫描；明确 CAS 是可信写入 Agent 的协作锁，不是访问控制边界。
 - PR #10 的 PR 契约检查通过；Gitleaks 因缺少只读 PR 元数据权限返回 403。
 - 已由第三个 Agent ID `codex-ci-fix` 从第二个 Agent 的 `8fcc71c...` handoff 接管，并添加最小 `pull-requests: read` 权限。
+- PR #11 的 PR 契约再次通过；Gitleaks 因默认 shallow checkout 缺少扫描范围父提交而失败。
+- 已由第四个 Agent ID `codex-ci-history` 从 `127c25d...` 接管，并为验证 Job 启用完整 Git 历史。

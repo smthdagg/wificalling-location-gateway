@@ -2,11 +2,11 @@
 
 ## Identity and scope
 
-- Source agent ID: codex-ci-fix
+- Source agent ID: codex-ci-history
 - Capabilities used: ci,security,docs
-- Branch: codex/issue-9-gitleaks-permission-codex-ci-fix-20260811055452-fc60cb2b
-- Checkpoint parent: 8fcc71cf4f8d522d56d14ab110f4307d844ad8e9
-- Updated at (UTC): 2026-08-11T05:56:00Z
+- Branch: codex/issue-9-gitleaks-history-codex-ci-history-20260811055701-1ae84c1f
+- Checkpoint parent: 127c25dea84a81f79e22b4edf1cb7ec624ba5c4f
+- Updated at (UTC): 2026-08-11T05:58:00Z
 - Credentials included: no
 
 ## Objective
@@ -28,6 +28,8 @@ Replace permanent single-Agent ownership with resumable leases and exact commit 
 - Added pre-push high-confidence secret scanning in addition to pinned Gitleaks CI.
 - Granted the pinned Gitleaks Action read-only pull-request metadata permission required to scan PR commits.
 - Verified a third Agent ID could take over the second Agent's atomic handoff.
+- Configured full Git history checkout so pinned Gitleaks can scan the complete PR commit range.
+- Verified a fourth Agent ID could take over the third Agent's checkpoint.
 
 ## Files changed
 
@@ -48,11 +50,13 @@ Replace permanent single-Agent ownership with resumable leases and exact commit 
 | `python3 -m unittest discover -s tests -p 'test_*.py'` | Passed | Includes stale-generation rejection, atomic two-ref handoff rejection, capsule identity, and strict envelope tests |
 | `./scripts/agent-takeover.sh 9 codex-resume-test resume-check 'ci,security,docs' 30` | Passed | New worktree started exactly at `6a291f7747aac8a3327ed835fb5f8a324d18ec03` |
 | `./scripts/agent-takeover.sh 9 codex-ci-fix gitleaks-permission 'ci,security,docs' 30` | Passed | Third Agent started exactly at `8fcc71cf4f8d522d56d14ab110f4307d844ad8e9` |
+| `./scripts/agent-takeover.sh 9 codex-ci-history gitleaks-history 'ci,security,docs' 30` | Passed | Fourth Agent started exactly at `127c25dea84a81f79e22b4edf1cb7ec624ba5c4f` |
 
 ## Failed attempts
 
 - Initial label/comment lease design failed independent review because it was vulnerable to TOCTOU and forged comment state; replaced with Git ref compare-and-swap.
 - First PR run reached Gitleaks but GitHub returned 403 because `pull-requests: read` was absent; permission was added explicitly.
+- Second PR run reached Gitleaks but shallow checkout omitted the requested parent commit; verification checkout now uses full history.
 
 ## Unresolved decisions and blockers
 
