@@ -77,7 +77,10 @@ fn conflicting_valid_providers_are_marked_uncertain() {
     assert_eq!(
         resolve_candidates(
             exit_ip(),
-            &[candidate("primary", london()), candidate("backup", conflict)],
+            &[
+                candidate("primary", london()),
+                candidate("backup", conflict)
+            ],
             1_000,
         )
         .expect("bounded candidate set"),
@@ -90,11 +93,7 @@ fn cache_is_bound_to_the_exit_ip_and_expiry() {
     let cache = GeoCacheEntry::new(exit_ip(), london());
     assert_eq!(select_cached(&cache, exit_ip(), 1_000), Some(london()));
     assert_eq!(
-        select_cached(
-            &cache,
-            IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)),
-            1_000,
-        ),
+        select_cached(&cache, IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 1_000,),
         None
     );
     assert_eq!(select_cached(&cache, exit_ip(), 2_000), None);

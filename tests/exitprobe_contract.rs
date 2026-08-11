@@ -33,7 +33,10 @@ fn verified_observation_records_only_a_non_secret_node_reference_and_public_exit
 #[test]
 fn unsafe_node_references_and_probe_limits_are_rejected() {
     for value in ["", "node secret", "ss://credential", "user@example.com"] {
-        assert_eq!(NodeRef::new(value).unwrap_err(), ExitProbeError::InvalidNodeRef);
+        assert_eq!(
+            NodeRef::new(value).unwrap_err(),
+            ExitProbeError::InvalidNodeRef
+        );
     }
 
     let node = NodeRef::new("node-1").expect("safe node reference");
