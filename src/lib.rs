@@ -5,6 +5,7 @@ use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
+pub mod app;
 pub mod exitprobe;
 pub mod georesolver;
 pub mod runtime;
