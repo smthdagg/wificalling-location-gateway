@@ -20,7 +20,7 @@
 | 11. 可接管协作模型 | 完成 | 能力声明、短租约、检查点与接管状态机 |
 | 12. 交接工具与模板 | 完成 | handoff capsule、lease/publish/takeover 脚本与 CI 校验 |
 | 13. GitHub 任务迁移 | 完成 | 状态/能力标签、现有 Issue 能力约束与新流程 |
-| 14. 端到端验证与交付 | 进行中 | 模拟释放/接管、PR/CI、远程状态验证 |
+| 14. 端到端验证与交付 | 完成 | 模拟释放/接管、PR/CI、远程状态验证 |
 
 ## 约束与原则
 
@@ -60,3 +60,4 @@
 | 再次以完整历史和显式 `agent_type` 启动 Reviewer 失败 | 2 | 遵循已有记录，移除 `agent_type` 后成功启动只读 Reviewer；后续不得重复该组合 |
 | PR #10 的固定 SHA Gitleaks Action 返回 HTTP 403 | 1 | 增加最小 `pull-requests: read` workflow 权限；保留 `contents: read`，不授予写权限 |
 | PR #11 的 Gitleaks 因浅克隆缺少父提交而失败 | 1 | 验证 Job 的 `actions/checkout@v5` 设置 `fetch-depth: 0`，使完整 PR commit range 可扫描 |
+| 清理已合并 continuation 分支时最后一个本地分支不存在 | 1 | `gh pr merge --delete-branch` 已自动移除该分支；其他三个临时分支和 worktree 均已按精确路径清理 |
