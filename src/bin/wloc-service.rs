@@ -1,0 +1,162 @@
+//! Run the WLOC service control daemon over a root-owned Unix socket.
+//!
+//! The daemon serves the frozen control API on a local Unix socket. Runtime
+//! adapters are stubs until the OpenWrt sing-box/nftables/Geo adapters land;
+//! their behavior is configurable through the `WLOC_STUB_*` environment
+//! variables so the control plane can be exercised end to end on any host.
+//!
+//! Socket path: `WLOC_SOCKET` (default `/var/run/wloc-service/control.sock`).
+
+use std::error::Error;
+use std::net::{IpAddr, Ipv4Addr};
+use std::path::Path;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use wificalling_location_gateway::app::{WlocService, WlocServiceConfig};
+use wificalling_location_gateway::exitprobe::runtime::{ExitProbeRuntime, ProbeFailure};
+use wificalling_location_gateway::exitprobe::{NodeRef, ProbeLimits};
+use wificalling_location_gateway::georesolver::runtime::{GeoProviderRuntime, ProviderFailure};
+use wificalling_location_gateway::georesolver::ProviderRef;
+use wificalling_location_gateway::service::control::{RuntimeControl, RuntimeFailure};
+use wificalling_location_gateway::service::server::ControlServer;
+use wificalling_location_gateway::service::GeoRecord;
+
+fn env_or<T>(name: &str, default: T) -> T
+where
+    T: std::str::FromStr,
+{
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(default)
+}
+
+fn now_unix() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
+/// No-op runtime control: every adapter step succeeds and the engine is
+/// healthy. Replaced by the nftables/procd adapter on OpenWrt.
+struct StubRuntime;
+
+impl RuntimeControl for StubRuntime {
+    fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure> {
+        Ok(true)
+    }
+    fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn remove_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn redirect_present(&mut self) -> Result<bool, RuntimeFailure> {
+        Ok(false)
+    }
+    fn disarm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn drain_engine(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn stop_engine(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+}
+
+/// Stub exit probe: reports the configured exit and WAN addresses.
+struct StubProbe {
+    exit_ip: IpAddr,
+    wan_ip: IpAddr,
+}
+
+impl ExitProbeRuntime for StubProbe {
+    fn probe_exit_ip(&mut self) -> Result<IpAddr, ProbeFailure> {
+        Ok(self.exit_ip)
+    }
+    fn router_wan_ips(&mut self) -> Result<Vec<IpAddr>, ProbeFailure> {
+        Ok(vec![self.wan_ip])
+    }
+}
+
+/// Stub Geo provider: returns a fixed, valid record for the queried exit.
+struct StubGeo {
+    country_code: String,
+    latitude: f64,
+    longitude: f64,
+}
+
+impl GeoProviderRuntime for StubGeo {
+    fn lookup(
+        &mut self,
+        _provider: ProviderRef,
+        ip: IpAddr,
+    ) -> Result<Option<(IpAddr, GeoRecord)>, ProviderFailure> {
+        Ok(Some((
+            ip,
+            GeoRecord {
+                country_code: self.country_code.clone(),
+                latitude: self.latitude,
+                longitude: self.longitude,
+                timezone: "UTC".to_owned(),
+                expires_at_unix: now_unix() + 3_600,
+            },
+        )))
+    }
+}
+
+fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let socket_path = std::env::var("WLOC_SOCKET")
+        .unwrap_or_else(|_| "/var/run/wloc-service/control.sock".into());
+
+    let service = WlocService::new(
+        StubRuntime,
+        StubProbe {
+            exit_ip: env_or("WLOC_STUB_EXIT_IP", IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))),
+            wan_ip: env_or("WLOC_STUB_WAN_IP", IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))),
+        },
+        StubGeo {
+            country_code: env_or("WLOC_STUB_COUNTRY", "US".to_owned()),
+            latitude: env_or("WLOC_STUB_LAT", 37.77_f64),
+            longitude: env_or("WLOC_STUB_LON", -122.41_f64),
+        },
+        WlocServiceConfig {
+            node_ref: NodeRef::new("default").expect("static node ref is valid"),
+            providers: vec![ProviderRef::new("stub").expect("static provider ref is valid")],
+            probe_limits: ProbeLimits {
+                max_observation_age: Duration::from_secs(300),
+            },
+            scope_valid: true,
+            ipv6_ready: true,
+            assigned_device_configured: true,
+        },
+    );
+
+    if let Some(parent) = Path::new(&socket_path).parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let _ = std::fs::remove_file(&socket_path);
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let listener = runtime.block_on(async { tokio::net::UnixListener::bind(&socket_path) })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))?;
+    }
+
+    eprintln!("wloc-service listening on {socket_path}");
+    let server = ControlServer::new(service);
+    runtime.block_on(server.serve(listener));
+    Ok(())
+}

@@ -13,6 +13,10 @@ path = "src/lib.rs"
 name = "wloc-gateway-spike"
 path = "src/main.rs"
 
+[[bin]]
+name = "wloc-service"
+path = "src/bin/wloc-service.rs"
+
 [dependencies]
 bytes = "=1.12.1"
 h2 = "=0.4.15"
