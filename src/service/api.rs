@@ -6,7 +6,9 @@
 use serde::Deserialize;
 
 pub const SERVICE_API_ID: &str = "wloc.service/v1";
-pub const MAX_CONTROL_FRAME_BYTES: usize = 16 * 1024;
+/// Single source of truth for the control-frame size bound. Re-exported from
+/// the transport codec so the API decoder and the frame layer cannot drift.
+pub use crate::runtime::uds::MAX_CONTROL_FRAME_BYTES;
 const MAX_REQUEST_ID_BYTES: usize = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
