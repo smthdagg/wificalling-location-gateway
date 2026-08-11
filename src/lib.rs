@@ -5,6 +5,7 @@ use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
+pub mod exitprobe;
 pub mod service;
 pub mod tls_h2;
 
