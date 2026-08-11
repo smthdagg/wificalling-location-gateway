@@ -62,8 +62,19 @@ pub struct GeoRecord {
     pub expires_at_unix: u64,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidatedGeo(GeoRecord);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GeoValidationError {
+    InvalidCountryCode,
+    InvalidCoordinates,
+    InvalidTimezone,
+    Expired,
+}
+
 impl GeoRecord {
-    fn is_usable_at(&self, now_unix: u64) -> bool {
+    pub fn validate_at(&self, now_unix: u64) -> Result<ValidatedGeo, GeoValidationError> {
         let valid_country = self.country_code.len() == 2
             && self
                 .country_code
@@ -79,7 +90,19 @@ impl GeoRecord {
                 value.is_ascii_alphanumeric() || matches!(value, b'/' | b'_' | b'-' | b'+')
             });
 
-        valid_country && valid_coordinates && valid_timezone && self.expires_at_unix > now_unix
+        if !valid_country {
+            return Err(GeoValidationError::InvalidCountryCode);
+        }
+        if !valid_coordinates {
+            return Err(GeoValidationError::InvalidCoordinates);
+        }
+        if !valid_timezone {
+            return Err(GeoValidationError::InvalidTimezone);
+        }
+        if self.expires_at_unix <= now_unix {
+            return Err(GeoValidationError::Expired);
+        }
+        Ok(ValidatedGeo(self.clone()))
     }
 }
 
@@ -90,35 +113,42 @@ pub enum RuntimeHealth {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RoutingAction {
-    Intercept,
-    PassThrough,
-    RemoveRedirect,
+pub enum IngressDisposition {
+    RouteToMitm,
+    BypassMitm,
+    WithdrawRedirect,
 }
 
-pub fn decide_routing(
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResponseMode {
+    ForwardOriginal,
+    PatchAuthorized,
+}
+
+/// Private-protocol handling remains gated, so the current service can only
+/// forward an upstream response unchanged.
+pub const fn current_response_mode() -> ResponseMode {
+    ResponseMode::ForwardOriginal
+}
+
+pub fn decide_ingress(
     config: &ServiceConfig,
     traffic: &TrafficMeta,
-    geo: Option<&GeoRecord>,
     health: RuntimeHealth,
-    now_unix: u64,
-) -> RoutingAction {
+) -> IngressDisposition {
     if !config.enabled {
-        return RoutingAction::PassThrough;
+        return IngressDisposition::BypassMitm;
     }
     if config.validate().is_err() || health != RuntimeHealth::Healthy {
-        return RoutingAction::RemoveRedirect;
+        return IngressDisposition::WithdrawRedirect;
     }
     if traffic.source_ip != config.assigned_device
         || traffic.transport != Transport::Tcp
         || traffic.destination_port != 443
         || !APPROVED_WLOC_HOSTS.contains(&traffic.hostname.as_str())
     {
-        return RoutingAction::PassThrough;
-    }
-    if !geo.is_some_and(|record| record.is_usable_at(now_unix)) {
-        return RoutingAction::PassThrough;
+        return IngressDisposition::BypassMitm;
     }
 
-    RoutingAction::Intercept
+    IngressDisposition::RouteToMitm
 }
