@@ -46,6 +46,10 @@ impl RuntimeControl for FakeRuntime {
         Ok(())
     }
 
+    fn disarm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
+        self.record(RuntimeStep::DisarmWatchdog)
+    }
+
     fn redirect_present(&mut self) -> Result<bool, RuntimeFailure> {
         self.record(RuntimeStep::VerifyRedirectAbsent)?;
         Ok(self.redirect_present)
@@ -108,6 +112,7 @@ fn every_post_start_failure_compensates_by_removing_redirect_then_stopping() {
         assert!(enable(&mut runtime, true, true).is_err());
         assert!(runtime.operations.ends_with(&[
             RuntimeStep::RemoveRedirect,
+            RuntimeStep::DisarmWatchdog,
             RuntimeStep::StopEngine,
         ]));
         assert!(!runtime.redirect_present);
@@ -120,6 +125,7 @@ fn every_post_start_failure_compensates_by_removing_redirect_then_stopping() {
     );
     assert!(unhealthy.operations.ends_with(&[
         RuntimeStep::RemoveRedirect,
+        RuntimeStep::DisarmWatchdog,
         RuntimeStep::StopEngine,
     ]));
 }
@@ -138,6 +144,7 @@ fn disable_removes_and_verifies_redirect_before_drain_and_stop() {
         [
             RuntimeStep::RemoveRedirect,
             RuntimeStep::VerifyRedirectAbsent,
+            RuntimeStep::DisarmWatchdog,
             RuntimeStep::DrainEngine,
             RuntimeStep::StopEngine,
         ]

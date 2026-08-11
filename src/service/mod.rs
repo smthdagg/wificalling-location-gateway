@@ -10,6 +10,7 @@ use std::time::Duration;
 use crate::APPROVED_WLOC_HOSTS;
 
 pub mod api;
+pub mod control;
 pub mod state;
 
 pub const SERVICE_API_VERSION: u16 = 1;
