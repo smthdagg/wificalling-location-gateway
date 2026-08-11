@@ -2,9 +2,9 @@
 set -eu
 
 if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
-    echo "deprecated wrapper: use agent-lease.sh directly" >&2
     echo "usage: $0 <issue-number> <agent-id> <capability-csv> [ttl-minutes]" >&2
     exit 2
 fi
 
-exec "$(dirname "$0")/agent-lease.sh" "$@"
+ttl=${4:-120}
+exec python3 "$(dirname "$0")/agent_state.py" lease "$1" "$2" "$3" --ttl "$ttl"

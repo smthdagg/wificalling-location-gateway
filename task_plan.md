@@ -17,6 +17,10 @@
 | 8. GitHub 私有仓库部署 | 完成 | 私有远程仓库、标签、里程碑、首批任务 |
 | 9. 协作机制验证 | 完成 | 本地校验、GitHub 状态、权限和分支保护检查 |
 | 10. 交付 | 完成 | 使用说明、Agent 启动方式、剩余人工权限项 |
+| 11. 可接管协作模型 | 完成 | 能力声明、短租约、检查点与接管状态机 |
+| 12. 交接工具与模板 | 完成 | handoff capsule、lease/publish/takeover 脚本与 CI 校验 |
+| 13. GitHub 任务迁移 | 完成 | 状态/能力标签、现有 Issue 能力约束与新流程 |
+| 14. 端到端验证与交付 | 进行中 | 模拟释放/接管、PR/CI、远程状态验证 |
 
 ## 约束与原则
 
@@ -40,6 +44,9 @@
 - 私有仓库采用 Issue 作为唯一任务源、每个 Agent 独立分支与 worktree、PR 作为唯一合并入口。
 - Phase 0 协议证据门禁未完成前，只允许基础设施、fixture 工具和威胁模型工作，不实现 WLOC response patch。
 - Agent 不共享工作目录，不直接向 `main` 推送，不修改未获分配的所有权目录。
+- Agent 身份、API Key 和登录凭据始终留在各自环境；仓库只记录非秘密能力声明和可复现环境要求。
+- Issue 所有权改为有期限的协作租约；租约可主动释放，过期租约可由符合能力要求的 Agent 接管。
+- 每次释放或长时间暂停前必须推送精确 commit，并更新 `.handoffs/issue-<n>.md`；聊天记录不能替代交接胶囊。
 
 ## 错误记录
 
@@ -50,3 +57,4 @@
 | 用户纠正后发现上一任务 ID 仍非目标任务 | 1 | 读取 `019feec1-a2dc-7a70-bdba-3c2fc0176b14` 全部 12 页、117 回合并替换权威计划 |
 | GitHub 私有仓库 `main` 分支保护返回 HTTP 403 | 1 | 当前账号需 GitHub Pro；保持仓库私有，使用 CI、CODEOWNERS、PR 契约和 Agent 规则作为替代，并把升级列为治理缺口 |
 | GitHub Actions 首轮 `verify` 因 ShellCheck SC1007/SC2038 失败 | 1 | 明确设置 `CDPATH=''`，并以 `find -exec ... +` 替代非空安全的 xargs 调用 |
+| 再次以完整历史和显式 `agent_type` 启动 Reviewer 失败 | 2 | 遵循已有记录，移除 `agent_type` 后成功启动只读 Reviewer；后续不得重复该组合 |

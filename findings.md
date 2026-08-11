@@ -56,3 +56,11 @@
 - 计划推荐 Go，而不是 C + TLS/nghttp2；多 Agent 首批任务应先覆盖协议证据、威胁模型、测试夹具、出口探测和 OpenWrt 隔离设计。
 - GitHub Projects v2 不是首期硬依赖；Issue + 标签 + Milestone + PR 已足以形成可审计任务队列，避免额外 project scope 和自动化复杂度。
 - GitHub API 明确拒绝为当前账号的私有仓库启用 branch protection（HTTP 403，要求 GitHub Pro 或公开仓库）。这不影响私有仓库、Issues、Actions 和 PR，但服务端无法强制禁止管理员直推。
+
+## 可接管 Agent 模型
+
+- 不同 Agent 使用不同 API Key 时，凭据不应集中保存或进入 Git/GitHub；接管只需要代码、测试证据、环境能力和任务状态。
+- GitHub assignee 无法区分共用同一 GitHub 身份但使用不同模型/API Key 的 Agent，因此 Agent ID 与能力必须写入结构化租约/交接记录。
+- GitHub Issue 标签更新不是强一致锁；租约属于协作锁。代码连续性的真正锚点是已推送的不可变 commit SHA。
+- 最小可靠交接单元应包含：Issue、分支、commit、完成项、未完成项、测试命令/结果、失败记录、下一步、所需能力、环境假设和安全事项。
+- 接管 Agent 可以能力不同，但不得绕过任务的 required capabilities；能力不足时可做研究或复核，不能执行受限实现。

@@ -6,6 +6,8 @@ if [ "$#" -ne 3 ]; then
     exit 2
 fi
 
+echo 'note: this is a low-level fresh-work helper; prefer agent-takeover.sh for resumable tasks' >&2
+
 issue=$1
 agent=$2
 slug=$3

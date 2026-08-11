@@ -18,6 +18,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - name: Scan committed content for secrets
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify repository
         run: ./scripts/ci/verify.sh
 
@@ -26,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v5
       - name: Validate branch and linked Issue
         env:
           BRANCH_NAME: ${{ github.head_ref }}
@@ -35,7 +40,18 @@ jobs:
             codex/issue-[0-9]*-*) ;;
             *) echo "Branch must match codex/issue-<number>-<slug>" >&2; exit 1 ;;
           esac
-          printf '%s' "$PR_BODY" | grep -Eq '(Closes|Fixes|Resolves) #[0-9]+' || {
-            echo "PR body must link its task with Closes #<number>" >&2
+          issue_id=$(printf '%s' "$BRANCH_NAME" | sed -E 's#^codex/issue-([0-9]+)-.*#\1#')
+          printf '%s' "$PR_BODY" | grep -Eq "(Closes|Fixes|Resolves) #${issue_id}([^0-9]|$)" || {
+            echo "PR body must close branch Issue #$issue_id" >&2
             exit 1
           }
+          capsule=".handoffs/issue-${issue_id}.md"
+          test -s "$capsule" || {
+            echo "PR must contain $capsule" >&2
+            exit 1
+          }
+          printf '%s' "$PR_BODY" | grep -Fq "Handoff capsule: \`$capsule\`" || {
+            echo "PR body must reference $capsule" >&2
+            exit 1
+          }
+          ./scripts/ci/verify-handoffs.sh

@@ -16,6 +16,10 @@ find scripts -type f -name '*.sh' -print | while IFS= read -r script; do
     sh -n "$script"
 done
 
+./scripts/ci/verify-handoffs.sh
+./tests/scripts/test-agent-handoff-tools.sh
+python3 -m unittest discover -s tests -p 'test_*.py'
+
 if command -v shellcheck >/dev/null 2>&1; then
     find scripts -type f -name '*.sh' -exec shellcheck {} +
 fi

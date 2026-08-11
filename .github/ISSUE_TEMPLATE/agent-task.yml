@@ -50,6 +50,25 @@ body:
     validations:
       required: true
   - type: textarea
+    id: capabilities
+    attributes:
+      label: Required capabilities
+      description: List non-secret capability tags. Never list API keys, token identifiers, or account details.
+      placeholder: |
+        - go
+        - tls-h2
+        - security-review
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and access constraints
+      description: Hardware, architecture, fixtures, or tools required. Credentials remain local to each Agent.
+      placeholder: "No external credentials; synthetic fixtures only"
+    validations:
+      required: true
+  - type: textarea
     id: dependencies
     attributes:
       label: Dependencies and blockers
@@ -79,4 +98,6 @@ body:
         - label: Failure and rollback behavior is specified.
           required: true
         - label: This task respects Phase 0 fixture and license gates.
+          required: true
+        - label: Required capabilities are non-secret and no API key will be shared through Git or GitHub.
           required: true

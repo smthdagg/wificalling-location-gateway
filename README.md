@@ -20,14 +20,25 @@ flowchart LR
 
 Seven tasks are ready for parallel work. Engine implementation remains blocked until the license boundary, authorized fixture contract, and threat model are closed.
 
-## Start an Agent
+## Start or resume an Agent
 
 ```sh
-./scripts/claim-issue.sh <issue-number>
-./scripts/agent-worktree.sh <issue-number> <agent-name> <slug>
+./scripts/agent-takeover.sh <issue> <agent-id> <slug> <capabilities> [ttl-minutes]
 ```
 
-Give the Agent the Issue URL and generated worktree path. Every Agent must follow [AGENTS.md](AGENTS.md), and every pull request must run:
+Example:
+
+```sh
+./scripts/agent-takeover.sh 4 terra-net exit-probe 'go,network,test' 120
+```
+
+Before the Agent pauses or another Agent takes over, update `.handoffs/issue-4.md`, commit it, then publish the checkpoint:
+
+```sh
+./scripts/agent-handoff.sh 4 terra-net 'go,network,test'
+```
+
+Each Agent keeps its own API key and login environment. Handoffs contain capability names and reproducible state only—never credentials. Every Agent must follow [AGENTS.md](AGENTS.md), and every pull request must run:
 
 ```sh
 ./scripts/ci/verify.sh

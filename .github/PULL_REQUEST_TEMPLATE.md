@@ -4,6 +4,8 @@ Closes #
 
 Role: `role:`
 
+Handoff capsule: `.handoffs/issue-<number>.md`
+
 ## Outcome
 
 Describe the user-visible or engineering outcome, not only the files changed.
@@ -31,4 +33,4 @@ Explain how to disable or revert this change without damaging Gateway 1.7.
 
 ## Handoff
 
-List follow-up Issues, new contracts, or blocked Agents.
+List follow-up Issues, new contracts, blocked Agents, and capabilities required for takeover. Do not include credentials.

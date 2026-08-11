@@ -9,12 +9,23 @@ tmp/
 *.log
 *.out
 *.test
+.env
+.env.*
+!.env.example
+!.env.*.example
+credentials
+credentials.*
+secrets
+secrets.*
 
 # Never commit generated secrets or captured production traffic.
 *.key
 *.pem
 *.p12
 *.pfx
+*.crt.key
+id_rsa
+id_ed25519
 fixtures/private/
 captures/
 
