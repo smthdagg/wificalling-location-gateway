@@ -90,6 +90,11 @@ impl MitmProxy {
         client_tcp: TcpStream,
         patch: Option<&PatchTarget>,
     ) -> Result<(), MitmProxyError> {
+        let client_addr = client_tcp
+            .peer_addr()
+            .ok()
+            .map(|addr| addr.ip().to_string())
+            .unwrap_or_else(|| "-".to_owned());
         let client_tls = TlsAcceptor::from(Arc::clone(&self.tls_config))
             .accept(client_tcp)
             .await
@@ -109,7 +114,7 @@ impl MitmProxy {
                 Err(_) => break,
             };
             let (request, mut respond) = request;
-            match self.forward_upstream(request, patch).await {
+            match self.forward_upstream(request, patch, &client_addr).await {
                 Ok((original_len, patched_body)) => {
                     self.append_rewrite_event(patch, original_len, patched_body.len());
                     let mut send = respond
@@ -136,12 +141,13 @@ impl MitmProxy {
         &self,
         request: Request<h2::RecvStream>,
         patch: Option<&PatchTarget>,
+        client_addr: &str,
     ) -> Result<(usize, Vec<u8>), MitmProxyError> {
         let hostname = approved_host(&request)?;
         let is_wloc =
             request.uri().path() == WLOC_PATH || request.uri().path().ends_with("/clls/wloc");
         eprintln!(
-            "wloc proxy: request host={hostname} method={} uri={} is_wloc={is_wloc}",
+            "wloc proxy: request from {client_addr} host={hostname} method={} uri={} is_wloc={is_wloc}",
             request.method(),
             request.uri()
         );
