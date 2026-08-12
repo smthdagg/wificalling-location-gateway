@@ -1,5 +1,6 @@
 'use strict';
 'require view';
+'require wificalling-location-gateway.i18n as wlocI18n';
 'require wificalling-location-gateway.tabs as wlocTabs';
 'require fs';
 'require poll';
@@ -19,6 +20,7 @@ return view.extend({
 	},
 
 	render: function(data) {
+		wlocI18n.localizeTabs();
 		wlocTabs.localize();
 		var raw = data[0];
 		var eventsRaw = data[1];
@@ -28,29 +30,29 @@ return view.extend({
 		function parse(value) { try { return JSON.parse(value); } catch (e) { return { devices: [] }; } }
 		function wfcLabel(v) {
 			switch (v) {
-				case 'registered': return _('已注册');
-				case 'connecting': return _('连接中');
-				case 'not_detected': return _('未检测到');
-				case 'likely_registered': return _('疑似已注册');
-				case 'active_traffic': return _('活动流量');
-				case 'nat_t_seen': return _('已见 NAT-T');
-				case 'negotiating': return _('协商中');
-				case 'no_session': return _('无会话');
+				case 'registered': return wlocI18n.t('Registered');
+				case 'connecting': return wlocI18n.t('Connecting');
+				case 'not_detected': return wlocI18n.t('Not detected');
+				case 'likely_registered': return wlocI18n.t('Likely registered');
+				case 'active_traffic': return wlocI18n.t('Active traffic');
+				case 'nat_t_seen': return wlocI18n.t('NAT-T seen');
+				case 'negotiating': return wlocI18n.t('Negotiating');
+				case 'no_session': return wlocI18n.t('No session');
 				default: return v || '-';
 			}
 		}
 		function activityLabel(v) {
 			switch (v) {
-				case 'handshake_success': return _('握手成功');
-				case 'handshake_failed': return _('握手失败');
-				case 'sustained_traffic': return _('持续流量');
+				case 'handshake_success': return wlocI18n.t('Handshake success');
+				case 'handshake_failed': return wlocI18n.t('Handshake failed');
+				case 'sustained_traffic': return wlocI18n.t('Sustained traffic');
 				default: return v || '-';
 			}
 		}
 		function meaningLabel(v) {
 			switch (v) {
-				case 'likely_call': return _('通话进行中（由持续加密流量推断）');
-				default: return _('加密活动；通话/短信无法区分');
+				case 'likely_call': return wlocI18n.t('Call in progress (inferred from sustained encrypted traffic)');
+				default: return wlocI18n.t('Encrypted activity; call/SMS unknown');
 			}
 		}
 		function lines(value) { return value.trim() ? value.trim().split('\n').reverse() : []; }
@@ -61,7 +63,7 @@ return view.extend({
 			return (source.devices || []).map(function(d) {
 				var values = [d.label, d.ip, wfcLabel(d.wificalling || d.state), d.node || '-', d.epdg_ip || '-',
 					(d.ike_seen ? '500' : '-') + ' / ' + (d.nat_t_seen ? '4500' : '-'),
-					d.assured ? _('是') : _('否'), d.sent_packets + ' ↑ / ' + d.reply_packets + ' ↓', when(d.last_activity)];
+					d.assured ? wlocI18n.t('Yes') : wlocI18n.t('No'), d.sent_packets + ' ↑ / ' + d.reply_packets + ' ↓', when(d.last_activity)];
 				return E('tr', { class: 'tr' }, values.map(function(x) { return E('td', { class: 'td' }, String(x)); }));
 			});
 		}
@@ -81,12 +83,12 @@ return view.extend({
 		renderLog(eventsRaw);
 
 		var clear = E('button', { class: 'btn cbi-button-negative', click: function() {
-			ui.showModal(_('清空活动日志？'), [E('p', {}, _('此操作仅永久删除 Wi-Fi Calling 活动历史。设置与系统日志不受影响。')),
-				E('div', { class: 'right' }, [E('button', { class: 'btn', click: ui.hideModal }, _('取消')),
+			ui.showModal(wlocI18n.t('Clear activity log?'), [E('p', {}, wlocI18n.t('This permanently removes only the Wi-Fi Calling activity history. Settings and system logs are not affected.')),
+				E('div', { class: 'right' }, [E('button', { class: 'btn', click: ui.hideModal }, wlocI18n.t('Cancel')),
 				E('button', { class: 'btn cbi-button-negative', click: function() {
-					fs.write('/var/run/wificalling-gateway/events.log', '').then(function() { renderLog(''); ui.hideModal(); ui.addNotification(null, E('p', {}, _('活动日志已清空。')), 'info'); }).catch(function(err) { ui.addNotification(null, E('p', {}, _('无法清空日志：') + ' ' + err.message), 'error'); });
-				} }, _('清空日志'))])]);
-		} }, _('清空日志'));
+					fs.write('/var/run/wificalling-gateway/events.log', '').then(function() { renderLog(''); ui.hideModal(); ui.addNotification(null, E('p', {}, wlocI18n.t('Activity log cleared.')), 'info'); }).catch(function(err) { ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to clear log: ') + ' ' + err.message), 'error'); });
+				} }, wlocI18n.t('Clear log'))])]);
+		} }, wlocI18n.t('Clear log'));
 
 		/* ---------- 轮询刷新 ---------- */
 		poll.add(function() {
@@ -97,27 +99,27 @@ return view.extend({
 		}, 5);
 
 		var children = [
-			E('h2', {}, _('Wi-Fi 通话监控与日志')),
+			E('h2', {}, wlocI18n.t('Wi-Fi Calling Monitor & Log')),
 			E('div', { class: 'cbi-section' }, [
-				E('h3', {}, _('设备隧道状态')),
-				E('p', {}, _('已注册表示观察到 ASSURED 双向 UDP 4500 隧道。这是网络证据，不代表运营商已激活服务。')),
+				E('h3', {}, wlocI18n.t('Device tunnel status')),
+				E('p', {}, wlocI18n.t('Registered means an ASSURED bidirectional UDP 4500 tunnel was observed. This is network evidence, not carrier activation confirmation.')),
 				E('table', { class: 'table' }, [
-					E('tr', { class: 'tr table-titles' }, [_('设备'), _('IP'), _('Wi-Fi 通话状态'), _('节点'), _('ePDG IP'), _('UDP 500/4500'), _('ASSURED'), _('数据包'), _('最后活动')].map(function(x) { return E('th', { class: 'th' }, x); })),
+					E('tr', { class: 'tr table-titles' }, [wlocI18n.t('Device'), wlocI18n.t(wlocI18n.t('IP')), wlocI18n.t('Wi-Fi Calling status'), wlocI18n.t('Node'), wlocI18n.t(wlocI18n.t('ePDG IP')), wlocI18n.t(wlocI18n.t('UDP 500/4500')), wlocI18n.t(wlocI18n.t('ASSURED')), wlocI18n.t('Packets'), wlocI18n.t('Last activity')].map(function(x) { return E('th', { class: 'th' }, x); })),
 					statusBody
 				])
 			]),
 			E('div', { class: 'cbi-section' }, [
-				E('h3', {}, _('加密 IMS 活动日志')),
-				E('p', {}, _('记录握手成功或失败，以及响铃、通话等持续加密通讯。短暂流量脉冲不记录。隧道内容全程加密：通话根据持续双向流量推断，短信无法区分，电话号码与消息内容永远不可见。')),
-				E('p', {}, [_('记录数：') + ' ', logCount, ' ', clear]),
+				E('h3', {}, wlocI18n.t('Encrypted IMS activity log')),
+				E('p', {}, wlocI18n.t('Records handshake success or failure and sustained encrypted communication such as ringing or calls. Brief traffic bursts are not logged. The tunnel content is encrypted: a call is inferred from sustained bidirectional traffic, SMS cannot be distinguished, and phone numbers or message content are never visible.')),
+				E('p', {}, [wlocI18n.t('Records: ') + ' ', logCount, ' ', clear]),
 				E('table', { class: 'table' }, [
-					E('tr', { class: 'tr table-titles' }, [_('时间'), _('设备'), _('IP'), _('Wi-Fi 通话'), _('活动'), _('数据包增量'), _('含义')].map(function(x) { return E('th', { class: 'th' }, x); })),
+					E('tr', { class: 'tr table-titles' }, [wlocI18n.t('Time'), wlocI18n.t('Device'), wlocI18n.t(wlocI18n.t('IP')), wlocI18n.t('Wi-Fi Calling'), wlocI18n.t('Activity'), wlocI18n.t('Packet delta'), wlocI18n.t('Meaning')].map(function(x) { return E('th', { class: 'th' }, x); })),
 					logBody
 				])
 			])
 		];
 		if (logEnabled === '0')
-			children.splice(3, 0, E('div', { class: 'alert-message warning' }, _('活动日志记录已禁用。请在设置中启用。')));
+			children.splice(3, 0, E('div', { class: 'alert-message warning' }, wlocI18n.t('Activity log recording is disabled. Enable it in Settings.')));
 		return E([], children);
 	}
 });

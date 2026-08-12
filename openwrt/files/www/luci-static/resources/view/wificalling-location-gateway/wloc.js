@@ -1,5 +1,6 @@
 'use strict';
 'require view';
+'require wificalling-location-gateway.i18n as wlocI18n';
 'require wificalling-location-gateway.tabs as wlocTabs';
 'require form';
 'require fs';
@@ -59,26 +60,27 @@ return view.extend({
 	},
 
 	render: function(data) {
+		wlocI18n.localizeTabs();
 		wlocTabs.localize();
 		var status;
 		try { status = JSON.parse(data[0]); } catch (e) { status = {}; }
 		var eventsText = data[1] || '';
 
-		var m = new form.Map('wloc-service', _('WLOC 设置'),
-			_('WLOC 定位拦截：改写 Apple WLOC 响应，使测试设备上报网关指定的位置。GPS 数值只保留在本路由器上。'));
+		var m = new form.Map('wloc-service', wlocI18n.t('WLOC Settings'),
+			wlocI18n.t('WLOC location interception: spoofs the Apple WLOC response so the test device reports the gateway-chosen location. GPS values stay on this router.'));
 
 		/* ---------- 3. Module on/off switch ---------- */
 		var so = m.section(form.NamedSection, 'main', 'wloc-service');
 		so.anonymous = true;
-		so.title = _('模块');
+		so.title = wlocI18n.t('Module');
 
-		var enabled = so.option(form.Flag, 'enabled', _('启用 WLOC 拦截'),
-			_('打开/关闭 WLOC 改写。nftables 重定向规则保留；关闭时 Apple WLOC 流量原样透传。'));
+		var enabled = so.option(form.Flag, 'enabled', wlocI18n.t('Enable WLOC interception'),
+			wlocI18n.t('Turns the WLOC rewrite on/off. The nftables redirect stays in place; while off, Apple WLOC traffic passes through untouched.'));
 		enabled.onchange = function(ev, section_id, value) {
 			var on = (value === true || value === 1 || value === '1');
 			callCtl(on ? 'enable' : 'disable', null, null, null).then(function(r) {
 				if (r.error) {
-					notify(_('切换失败'), r.error);
+					notify(wlocI18n.t('Switch failed'), r.error);
 					return;
 				}
 				uci.set('wloc-service', 'main', 'enabled', on ? '1' : '0');
@@ -87,15 +89,15 @@ return view.extend({
 			});
 		};
 
-		so.option(form.DummyValue, '_phase', _('服务阶段')).cfgvalue = function() {
+		so.option(form.DummyValue, '_phase', wlocI18n.t('Service phase')).cfgvalue = function() {
 			return status.service_phase || '-';
 		};
 
 		/* ---------- 2. Location mode: auto / manual ---------- */
-		var mode = so.option(form.ListValue, 'geo_source', _('定位模式'),
-			_('自动模式跟随测试设备绑定的 sing-box 节点出口；手动模式使用下方搜索或输入的坐标。'));
-		mode.value('auto', _('自动（跟随节点）'));
-		mode.value('manual', _('手动位置'));
+		var mode = so.option(form.ListValue, 'geo_source', wlocI18n.t('Location mode'),
+			wlocI18n.t('Auto follows the sing-box node bound to the test device. Manual uses the search result or coordinates below.'));
+		mode.value('auto', wlocI18n.t('Auto (follow node)'));
+		mode.value('manual', wlocI18n.t('Manual location'));
 		mode.onchange = function(ev, section_id, value) {
 			var main = uci.get('wloc-service', 'main');
 			uci.set('wloc-service', 'main', 'geo_source', value);
@@ -103,18 +105,18 @@ return view.extend({
 			ui.changes.apply(true);
 			if (value === 'auto') {
 				callCtl('geo-clear', null, null, null).then(function(r) {
-					if (r.error) notify(_('模式切换失败'), r.error);
+					if (r.error) notify(wlocI18n.t('Mode switch failed'), r.error);
 				});
 			}
 			else if (main && main.manual_lat && main.manual_lon) {
 				callCtl('geo-set', null, main.manual_lat, main.manual_lon).then(function(r) {
-					if (r.error) notify(_('模式切换失败'), r.error);
+					if (r.error) notify(wlocI18n.t('Mode switch failed'), r.error);
 				});
 			}
 		};
 
-		so.option(form.Value, 'manual_lat', _('手动纬度'));
-		so.option(form.Value, 'manual_lon', _('手动经度'));
+		so.option(form.Value, 'manual_lat', wlocI18n.t('Manual latitude'));
+		so.option(form.Value, 'manual_lon', wlocI18n.t('Manual longitude'));
 
 		/* ---------- 6. Manual search + coordinate apply ---------- */
 		var searchResult = E('div', { 'class': 'cbi-row', 'id': 'wloc-search-result' });
@@ -122,7 +124,7 @@ return view.extend({
 			'class': 'cbi-input-text',
 			'id': 'wloc-search-query',
 			'type': 'text',
-			'placeholder': _('例如：伦敦')
+			'placeholder': wlocI18n.t('e.g. London, UK')
 		});
 		var searchBtn = E('button', {
 			'class': 'cbi-button cbi-button-apply',
@@ -136,7 +138,7 @@ return view.extend({
 					searchBtn.disabled = false;
 					var found = r && r.result;
 					if (r.error || !found || found.latitude == null || found.longitude == null) {
-						notify(_('搜索失败'), r.error || _('未找到该地名'));
+						notify(wlocI18n.t('Search failed'), r.error || wlocI18n.t('Place not found'));
 						return;
 					}
 					var city = found.city || q;
@@ -145,12 +147,12 @@ return view.extend({
 					document.getElementById('wloc-coord-lat').value = lat;
 					document.getElementById('wloc-coord-lon').value = lon;
 					searchResult.innerHTML = '';
-					searchResult.appendChild(E('p', {}, _('搜索结果：') + city +
-						_('（纬度 ') + lat + _('，经度 ') + lon + _('）') +
-						_('，确认后点击「应用坐标」。')));
+					searchResult.appendChild(E('p', {}, wlocI18n.t('Search result: ') + city +
+						wlocI18n.t(' (lat ') + lat + wlocI18n.t(', lon ') + lon + wlocI18n.t(')') +
+						wlocI18n.t(') - click "Apply coordinates" to activate.')));
 				});
 			}
-		}, _('搜索'));
+		}, wlocI18n.t('Search'));
 
 		var coordLat = E('input', { 'class': 'cbi-input-text', 'id': 'wloc-coord-lat', 'type': 'text', 'placeholder': '51.5074' });
 		var coordLon = E('input', { 'class': 'cbi-input-text', 'id': 'wloc-coord-lon', 'type': 'text', 'placeholder': '-0.1278' });
@@ -165,7 +167,7 @@ return view.extend({
 				callCtl('geo-set', null, lat, lon).then(function(r) {
 					coordBtn.disabled = false;
 					if (r.error) {
-						notify(_('应用失败'), r.error);
+						notify(wlocI18n.t('Apply failed'), r.error);
 						return;
 					}
 					uci.set('wloc-service', 'main', 'manual_lat', lat);
@@ -173,23 +175,23 @@ return view.extend({
 					uci.set('wloc-service', 'main', 'geo_source', 'manual');
 					uci.save('wloc-service');
 					ui.changes.apply(true);
-					notify(_('已应用'), _('坐标已成为当前生效位置。'));
+					notify(wlocI18n.t('Applied'), wlocI18n.t('Coordinates are now the active location.'));
 				});
 			}
-		}, _('应用坐标'));
+		}, wlocI18n.t('Apply coordinates'));
 
 		var searchBox = E('div', { 'class': 'cbi-section' }, [
-			E('h3', {}, _('手动搜索')),
+			E('h3', {}, wlocI18n.t('Manual search')),
 			E('div', { 'class': 'cbi-row' },
 				E('div', { 'class': 'cbi-value' }, [
 					E('label', { 'for': 'wloc-search-query', 'class': 'cbi-value-title' },
-						[ _('地名'), ' ', _('（在线搜索）') ]),
+						[ wlocI18n.t('Place name'), ' ', wlocI18n.t('(online search)') ]),
 					E('div', { 'class': 'cbi-value-field' }, [ queryField, ' ', searchBtn ])
 				])),
 			searchResult,
 			E('div', { 'class': 'cbi-row' },
 				E('div', { 'class': 'cbi-value' }, [
-					E('label', { 'class': 'cbi-value-title' }, _('或直接输入坐标')),
+					E('label', { 'class': 'cbi-value-title' }, wlocI18n.t('Or enter coordinates')),
 					E('div', { 'class': 'cbi-value-field' }, [ coordLat, ' ', coordLon, ' ', coordBtn ])
 				]))
 		]);
@@ -199,9 +201,9 @@ return view.extend({
 		var presetTable = E('table', { 'class': 'cbi-section-table' }, [
 			E('thead', {},
 				E('tr', {}, [
-					E('th', {}, _('名称')),
-					E('th', {}, _('纬度')),
-					E('th', {}, _('经度')),
+					E('th', {}, wlocI18n.t('Label')),
+					E('th', {}, wlocI18n.t('Latitude')),
+					E('th', {}, wlocI18n.t('Longitude')),
 					E('th', {}, '')
 				])),
 			presetBody
@@ -210,7 +212,7 @@ return view.extend({
 		function applyPreset(sid) {
 			var s = uci.get('wloc-service', sid);
 			if (!s || !s.latitude || !s.longitude) {
-				notify(_('应用失败'), _('预设没有坐标。'));
+				notify(wlocI18n.t('Apply failed'), wlocI18n.t('Preset has no coordinates.'));
 				return;
 			}
 			uci.set('wloc-service', 'main', 'manual_lat', s.latitude);
@@ -221,10 +223,10 @@ return view.extend({
 			}).then(function() {
 				return callCtl('geo-set', null, s.latitude, s.longitude);
 			}).then(function(r) {
-				if (r && r.error) notify(_('应用失败'), r.error);
-				else notify(_('已应用'), _('预设已成为当前生效位置。'));
+				if (r && r.error) notify(wlocI18n.t('Apply failed'), r.error);
+				else notify(wlocI18n.t('Applied'), wlocI18n.t('Preset is now the active location.'));
 			}).catch(function(e) {
-				notify(_('应用失败'), String(e));
+				notify(wlocI18n.t('Apply failed'), String(e));
 			});
 		}
 
@@ -235,7 +237,7 @@ return view.extend({
 			}).then(function() {
 				renderPresets();
 			}).catch(function(e) {
-				notify(_('应用失败'), String(e));
+				notify(wlocI18n.t('Apply failed'), String(e));
 			});
 		}
 
@@ -243,7 +245,7 @@ return view.extend({
 			presetBody.innerHTML = '';
 			var presets = uci.sections('wloc-service', 'preset');
 			if (!presets.length) {
-				presetBody.appendChild(E('tr', {}, [ E('td', { 'colspan': 4 }, _('暂无已保存的位置。')) ]));
+				presetBody.appendChild(E('tr', {}, [ E('td', { 'colspan': 4 }, wlocI18n.t('No saved locations yet.')) ]));
 				return;
 			}
 			presets.forEach(function(s) {
@@ -256,12 +258,12 @@ return view.extend({
 						E('button', {
 							'class': 'cbi-button cbi-button-apply',
 							'click': function() { applyPreset(sid); }
-						}, _('应用')),
+						}, wlocI18n.t('Apply')),
 						' ',
 						E('button', {
 							'class': 'cbi-button cbi-button-remove',
 							'click': function() { removePreset(sid); }
-						}, _('删除'))
+						}, wlocI18n.t('Delete'))
 					])
 				]));
 			});
@@ -271,10 +273,10 @@ return view.extend({
 		var addPresetBtn = E('button', {
 			'class': 'cbi-button cbi-button-add',
 			'click': function() {
-				var labelInput = E('input', { 'class': 'cbi-input-text', 'placeholder': _('名称') });
+				var labelInput = E('input', { 'class': 'cbi-input-text', 'placeholder': wlocI18n.t('Label') });
 				var latInput = E('input', { 'class': 'cbi-input-text', 'placeholder': '51.5074' });
 				var lonInput = E('input', { 'class': 'cbi-input-text', 'placeholder': '-0.1278' });
-				ui.showModal(_('添加已保存位置'), [
+				ui.showModal(wlocI18n.t('Add saved location'), [
 					E('p', {}, [
 						labelInput, ' ', latInput, ' ', lonInput
 					]),
@@ -295,18 +297,18 @@ return view.extend({
 							}).then(function() {
 								ui.hideModal();
 								renderPresets();
-								notify(_('已应用'), _('预设已保存。'));
+								notify(wlocI18n.t('Applied'), wlocI18n.t('Preset saved.'));
 							}).catch(function(e) {
-								notify(_('应用失败'), String(e));
+								notify(wlocI18n.t('Apply failed'), String(e));
 							});
 						} }, _('Save'))
 					])
 				]);
 			}
-		}, _('添加已保存位置'));
+		}, wlocI18n.t('Add saved location'));
 
 		var presetsBox = E('div', { 'class': 'cbi-section' }, [
-			E('h3', {}, _('已保存的位置')),
+			E('h3', {}, wlocI18n.t('Saved locations')),
 			presetTable,
 			E('p', {}, addPresetBtn)
 		]);
@@ -314,7 +316,7 @@ return view.extend({
 		/* ---------- 1. Safari certificate ---------- */
 		var certLink = E('a', { 'href': PROFILE_URL, 'target': '_blank', 'id': 'wloc-cert-link' }, PROFILE_URL);
 		var certText = E('div', { 'class': 'cbi-value' }, [
-			E('label', { 'class': 'cbi-value-title' }, _('描述文件链接')),
+			E('label', { 'class': 'cbi-value-title' }, wlocI18n.t('Profile link')),
 			E('div', { 'class': 'cbi-value-field' }, certLink)
 		]);
 
@@ -326,26 +328,26 @@ return view.extend({
 				regenProfile().then(function(r) {
 					regenBtn.disabled = false;
 					if (r.error) {
-						notify(_('重新生成失败'), r.error);
+						notify(wlocI18n.t('Regenerate failed'), r.error);
 						return;
 					}
-					notify(_('描述文件已就绪'),
-						_('在 iPhone 上用 Safari 打开 %s，然后在 设置 > 通用 > 关于本机 > 证书信任设置 中开启完全信任。')
+					notify(wlocI18n.t('Profile ready'),
+						wlocI18n.t('On the iPhone open Safari and visit %s, then enable full trust in Settings > General > About > Certificate Trust Settings.')
 							.format(r.url || PROFILE_URL));
 				});
 			}
-		}, _('重新生成描述文件'));
+		}, wlocI18n.t('Regenerate profile'));
 
 		var certBox = E('div', { 'class': 'cbi-section' }, [
-			E('h3', {}, _('证书（Safari 安装）')),
+			E('h3', {}, wlocI18n.t('Certificate (Safari install)')),
 			certText,
 			E('div', { 'class': 'cbi-row' },
 				E('div', { 'class': 'cbi-value' }, [
-					E('label', { 'class': 'cbi-value-title' }, _('安装步骤')),
+					E('label', { 'class': 'cbi-value-title' }, wlocI18n.t('Install steps')),
 					E('div', { 'class': 'cbi-value-field' },
-						_('1. 在测试 iPhone 的 Safari 中打开描述文件链接。 ') +
-						_('2. 安装配置描述文件。 ') +
-						_('3. 在 设置 > 通用 > 关于本机 > 证书信任设置 中开启完全信任。'))
+						wlocI18n.t('1. Open the profile link in Safari on the test iPhone. ') +
+						wlocI18n.t('2. Install the configuration profile. ') +
+						wlocI18n.t('3. Enable full trust in Settings > General > About > Certificate Trust Settings.'))
 				])),
 			E('div', { 'class': 'cbi-row' },
 				E('div', { 'class': 'cbi-value' }, [

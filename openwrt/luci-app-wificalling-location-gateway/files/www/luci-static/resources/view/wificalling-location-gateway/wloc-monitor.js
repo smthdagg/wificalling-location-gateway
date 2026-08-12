@@ -1,5 +1,6 @@
 'use strict';
 'require view';
+'require wificalling-location-gateway.i18n as wlocI18n';
 'require wificalling-location-gateway.tabs as wlocTabs';
 'require fs';
 'require poll';
@@ -29,13 +30,13 @@ function phaseLabel(phase) {
 }
 
 function sourceLabel(v) {
-	return v === 'manual' ? _('手动') : (v === 'auto' ? _('自动') : (v || '-'));
+	return v === 'manual' ? wlocI18n.t('Manual') : (v === 'auto' ? wlocI18n.t('Auto') : (v || '-'));
 }
 
 function eventLabel(v) {
 	switch (v) {
-		case 'target_updated': return _('定位目标更新');
-		case 'rewritten': return _('WLOC 响应已重写');
+		case 'target_updated': return wlocI18n.t('Target updated');
+		case 'rewritten': return wlocI18n.t('WLOC response rewritten');
 		default: return v || '-';
 	}
 }
@@ -49,6 +50,7 @@ return view.extend({
 	},
 
 	render: function(data) {
+		wlocI18n.localizeTabs();
 		wlocTabs.localize();
 		var status;
 		try { status = JSON.parse(data[0]); } catch (e) { status = {}; }
@@ -60,15 +62,15 @@ return view.extend({
 		function geoRows(s) {
 			var g = s.geo || {};
 			return [
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, _('服务阶段')), E('td', { class: 'td' }, phaseLabel(s.service_phase))]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, _('定位模式')), E('td', { class: 'td' }, sourceLabel(s.geo_source))]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, _('国家/地区')), E('td', { class: 'td' }, g.country_code || '-')]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, _('城市')), E('td', { class: 'td' }, g.city || '-')]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, _('时区')), E('td', { class: 'td' }, g.timezone || '-')]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, _('GPS 坐标（纬度 / 经度）')), E('td', { class: 'td' }, gpsOf(g))]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, _('定位状态')), E('td', { class: 'td' }, g.state || '-')]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, _('观测时间')), E('td', { class: 'td' }, fmtTime(s.observed_at))]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, _('出口 IP')), E('td', { class: 'td' }, (s.exit && s.exit.ip) ? s.exit.ip : '-')])
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Service phase')), E('td', { class: 'td' }, phaseLabel(s.service_phase))]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Location mode')), E('td', { class: 'td' }, sourceLabel(s.geo_source))]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Country')), E('td', { class: 'td' }, g.country_code || '-')]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('City')), E('td', { class: 'td' }, g.city || '-')]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Timezone')), E('td', { class: 'td' }, g.timezone || '-')]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('GPS (lat / lon)')), E('td', { class: 'td' }, gpsOf(g))]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Geo state')), E('td', { class: 'td' }, g.state || '-')]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Observed at')), E('td', { class: 'td' }, fmtTime(s.observed_at))]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Exit IP')), E('td', { class: 'td' }, (s.exit && s.exit.ip) ? s.exit.ip : '-')])
 			];
 		}
 		function renderGeo(s) { dom.content(geoBody, geoRows(s)); }
@@ -105,18 +107,18 @@ return view.extend({
 		renderLog(eventsText);
 
 		var clearLog = E('button', { class: 'btn cbi-button-negative', click: function() {
-			ui.showModal(_('清空 WLOC 使用日志？'), [E('p', {}, _('此操作将清空 WLOC 定位事件的本地历史记录。定位拦截设置不受影响。')),
-				E('div', { class: 'right' }, [E('button', { class: 'btn', click: ui.hideModal }, _('取消')),
+			ui.showModal(wlocI18n.t('Clear WLOC usage log?'), [E('p', {}, wlocI18n.t('This clears the local history of WLOC location events. Location interception settings are not affected.')),
+				E('div', { class: 'right' }, [E('button', { class: 'btn', click: ui.hideModal }, wlocI18n.t('Cancel')),
 				E('button', { class: 'btn cbi-button-negative', click: function() {
 					fs.write(EVENTS_FILE, '').then(function() {
 						renderLog('');
 						ui.hideModal();
-						ui.addNotification(null, E('p', {}, _('WLOC 使用日志已清空。')), 'info');
+						ui.addNotification(null, E('p', {}, wlocI18n.t('WLOC usage log cleared.')), 'info');
 					}).catch(function(err) {
-						ui.addNotification(null, E('p', {}, _('无法清空日志：') + ' ' + err.message), 'error');
+						ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to clear log: ') + ' ' + err.message), 'error');
 					});
-				} }, _('清空日志'))])]);
-		} }, _('清空日志'));
+				} }, wlocI18n.t('Clear log'))])]);
+		} }, wlocI18n.t('Clear log'));
 
 		/* ---------- 轮询刷新 ---------- */
 		poll.add(function() {
@@ -131,18 +133,18 @@ return view.extend({
 		}, 5);
 
 		return E([], [
-			E('h2', {}, _('WLOC 监控与日志')),
+			E('h2', {}, wlocI18n.t('WLOC Monitor & Log')),
 			E('div', { 'class': 'cbi-section' }, [
-				E('h3', {}, _('当前定位')),
-				E('p', {}, _('显示当前生效的定位目标：自动模式跟随节点出口，手动模式使用设置页的坐标。GPS 数值只保留在本路由器上。')),
+				E('h3', {}, wlocI18n.t('Current location')),
+				E('p', {}, wlocI18n.t('Shows the effective location target: auto follows the node exit, manual uses the coordinates from the settings page. GPS values stay on this router.')),
 				E('table', { class: 'table' }, geoBody)
 			]),
 			E('div', { 'class': 'cbi-section' }, [
-				E('h3', {}, _('WLOC 使用日志')),
-				E('p', {}, _('记录每次定位目标更新（时间、目标位置、来源 自动/手动）。不记录原始 WLOC 响应内容。')),
-				E('p', {}, [_('记录数：') + ' ', logCount, ' ', clearLog]),
+				E('h3', {}, wlocI18n.t('WLOC usage log')),
+				E('p', {}, wlocI18n.t('Records each location target update (time, place, source auto/manual). Raw WLOC responses are never recorded.')),
+				E('p', {}, [wlocI18n.t('Records: ') + ' ', logCount, ' ', clearLog]),
 				E('table', { class: 'table' }, [
-					E('tr', { class: 'tr table-titles' }, [_('时间'), _('事件'), _('位置'), _('来源')].map(function(x) { return E('th', { class: 'th' }, x); })),
+					E('tr', { class: 'tr table-titles' }, [wlocI18n.t('Time'), wlocI18n.t('Event'), wlocI18n.t('Location'), wlocI18n.t('Source')].map(function(x) { return E('th', { class: 'th' }, x); })),
 					logBody
 				])
 			])
