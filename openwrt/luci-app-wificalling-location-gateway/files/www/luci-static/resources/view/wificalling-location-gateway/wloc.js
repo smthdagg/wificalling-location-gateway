@@ -396,29 +396,61 @@ return view.extend({
 			E('div', { 'class': 'cbi-value-field' }, certLink)
 		]);
 
-		var regenBtn = E('button', {
+		// Repack the iOS profile with the CURRENT CA - the root certificate
+		// stays unchanged, so devices that already trust it keep working.
+		var repackBtn = E('button', {
 			'class': 'cbi-button cbi-button-apply',
-			'id': 'wloc-regen-btn',
+			'id': 'wloc-repack-btn',
 			'click': function() {
 				this.disabled = true;
-				// regen_ca generates a brand-new root CA (not just a profile
-				// repack): the fingerprint changes and the iPhone must
-				// reinstall + re-trust the profile.
-				regenCa().then(function(r) {
-					regenBtn.disabled = false;
+				regenProfile().then(function(r) {
+					repackBtn.disabled = false;
 					if (r.error) {
 						notify(wlocI18n.t('Regenerate failed'), r.error);
 						return;
 					}
-					renderCertInfo(r);
 					notify(wlocI18n.t('Profile ready'),
-						wlocI18n.t('New CA generated. Reinstall and trust it on the iPhone.'));
+						wlocI18n.t('On the iPhone open Safari and visit %s, then enable full trust in Settings > General > About > Certificate Trust Settings.')
+							.format(r.url || PROFILE_URL));
 				}).catch(function(e) {
-					regenBtn.disabled = false;
+					repackBtn.disabled = false;
 					notify(wlocI18n.t('Regenerate failed'), String(e));
 				});
 			}
 		}, wlocI18n.t('Regenerate profile'));
+
+		// Generate a brand-new root CA: the fingerprint changes and EVERY
+		// device must reinstall and re-trust the profile.
+		var newCaBtn = E('button', {
+			'class': 'cbi-button cbi-button-remove',
+			'id': 'wloc-newca-btn',
+			'click': function() {
+				ui.showModal(wlocI18n.t('Generate a new root certificate?'), [
+					E('p', {}, wlocI18n.t('This replaces the root CA. All devices must reinstall the profile and enable full trust again.')),
+					E('div', { 'class': 'right' }, [
+						E('button', { 'class': 'btn', 'click': ui.hideModal }, wlocI18n.t('Cancel')),
+						' ',
+						E('button', { 'class': 'btn cbi-button-negative', 'click': function() {
+							ui.hideModal();
+							newCaBtn.disabled = true;
+							regenCa().then(function(r) {
+								newCaBtn.disabled = false;
+								if (r.error) {
+									notify(wlocI18n.t('Regenerate failed'), r.error);
+									return;
+								}
+								renderCertInfo(r);
+								notify(wlocI18n.t('Profile ready'),
+									wlocI18n.t('New CA generated. Reinstall and trust it on the iPhone.'));
+							}).catch(function(e) {
+								newCaBtn.disabled = false;
+								notify(wlocI18n.t('Regenerate failed'), String(e));
+							});
+						} }, wlocI18n.t('Generate new CA'))
+					])
+				]);
+			}
+		}, wlocI18n.t('Generate new CA'));
 
 		function fmtHealth(t) {
 			return t ? new Date(t * 1000).toLocaleString() : wlocI18n.t('No handshakes yet.');
@@ -485,7 +517,7 @@ return view.extend({
 			E('div', { 'class': 'cbi-row' },
 				E('div', { 'class': 'cbi-value' }, [
 					E('label', { 'class': 'cbi-value-title' }, ''),
-					E('div', { 'class': 'cbi-value-field' }, regenBtn)
+					E('div', { 'class': 'cbi-value-field' }, [ repackBtn, ' ', newCaBtn ])
 				]))
 		]);
 

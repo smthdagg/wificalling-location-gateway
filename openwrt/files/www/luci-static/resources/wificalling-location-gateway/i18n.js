@@ -95,6 +95,10 @@ var ZH = {
 	'Mismatch - reinstall the profile on the iPhone and enable full trust.': '不匹配——请在 iPhone 上重新安装描述文件并开启完全信任。',
 	'Gateway fingerprint: ': '网关证书指纹：',
 	'No handshakes yet.': '暂无握手记录。',
+	'Generate a new root certificate?': '生成新的根证书？',
+	'This replaces the root CA. All devices must reinstall the profile and enable full trust again.':
+		'这将更换根证书。所有设备都需要重新安装描述文件并再次开启完全信任。',
+	'Generate new CA': '生成新证书',
 
 	/* ---- wloc monitor ---- */
 	'Current location': '当前定位',
