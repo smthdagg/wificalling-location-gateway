@@ -22,7 +22,8 @@ collect() {
     done
 }
 
-ips=$(collect | sort -u | paste -sd, -)
+ips=$(collect | sort -u | tr '
+' ',' | sed 's/,\$$//')
 [ -n "$ips" ] || {
     echo "wloc-refresh-set: no A records resolved (DNS unavailable?)" >&2
     exit 1
