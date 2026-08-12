@@ -5,9 +5,31 @@
 - Source agent ID: zcode-wloc-service
 - Capabilities used: rust,security
 - Branch: codex/issue-17-wloc-service
-- Checkpoint parent: cabd076fd7b6a912ab87e88619fcecfb39261fc5
-- Updated at (UTC): 2026-08-12T07:29:15Z
+- Checkpoint parent: 273b4579d3e51f0fa3028d412581337f2948e170
+- Snapshot tag: snapshot-2026-08-12-ui-integration
+- Updated at (UTC): 2026-08-12T09:53:57Z
 - Credentials included: no
+
+## Quick resume (AX6S, token-safe)
+
+- Daemon: `/usr/sbin/wloc-service`, procd managed, auto-start enabled.
+- Control API over UDS `/var/run/wloc-service/control.sock` (SSH tunnel to test
+  from the Mac: `ssh -N -L /tmp/ax6s-control.sock:...`). Methods: `status.get`,
+  `control.enable/disable/reload`, `geo.set` (query or lat/lon),
+  `geo.clear`.
+- Current mode: auto (follows the .176 bound node, UK). Manual: `geo.set
+  {"query":"Hong Kong"}` then trigger iPhone location.
+- Tests: 160+ passing, coverage 80.26%, gates green. All commits pushed.
+
+## Next (UI integration, design in docs/ui/INTEGRATION_UI.md)
+
+1. Backend data plane: wloc-service status file + geo country/city +
+   events.jsonl.
+2. `wloc-ctl` CLI (UDS bridge for LuCI ucode).
+3. Independent LuCI plugin `luci-app-wificalling-location-gateway` with
+   Wi-Fi Calling and WLOC modules side by side (shared nodes/bindings).
+4. UCI `/etc/config/wloc-service`; daemon startup init.
+5. On-device verification of the 8 UI features.
 
 ## Objective
 
