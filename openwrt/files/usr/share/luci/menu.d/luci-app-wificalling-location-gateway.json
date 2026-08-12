@@ -12,7 +12,7 @@
     }
   },
   "admin/services/wificalling-location-gateway/wfc": {
-    "title": "Wi-Fi 通话设置",
+    "title": "Wi-Fi Calling Settings",
     "order": 10,
     "action": {
       "type": "view",
@@ -20,7 +20,7 @@
     }
   },
   "admin/services/wificalling-location-gateway/wfc-monitor": {
-    "title": "Wi-Fi 通话监控与日志",
+    "title": "Wi-Fi Calling Monitor & Log",
     "order": 20,
     "action": {
       "type": "view",
@@ -28,7 +28,7 @@
     }
   },
   "admin/services/wificalling-location-gateway/wloc": {
-    "title": "WLOC 设置",
+    "title": "WLOC Settings",
     "order": 30,
     "action": {
       "type": "view",
@@ -36,7 +36,7 @@
     }
   },
   "admin/services/wificalling-location-gateway/wloc-monitor": {
-    "title": "WLOC 监控与日志",
+    "title": "WLOC Monitor & Log",
     "order": 40,
     "action": {
       "type": "view",
@@ -44,7 +44,7 @@
     }
   },
   "admin/services/wificalling-location-gateway/faq": {
-    "title": "使用帮助（FAQ）",
+    "title": "Help (FAQ)",
     "order": 50,
     "action": {
       "type": "view",

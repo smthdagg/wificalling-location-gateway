@@ -1,5 +1,6 @@
 'use strict';
 'require view';
+'require wificalling-location-gateway.tabs as wlocTabs';
 'require form';
 'require fs';
 'require poll';
@@ -58,6 +59,7 @@ return view.extend({
 	},
 
 	render: function(data) {
+		wlocTabs.localize();
 		var status;
 		try { status = JSON.parse(data[0]); } catch (e) { status = {}; }
 		var eventsText = data[1] || '';
