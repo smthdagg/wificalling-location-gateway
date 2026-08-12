@@ -497,6 +497,11 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
             "longitude": result.longitude,
         }))
     }
+
+    fn refresh_periodic(&mut self) {
+        self.refresh_evidence_at(current_unix());
+        self.refresh_state_file();
+    }
 }
 
 /// Append one JSON line to an append-only log file (bounded to avoid

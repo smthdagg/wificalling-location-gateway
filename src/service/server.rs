@@ -8,6 +8,8 @@
 //! Socket creation, permissions, and process lifecycle belong to the OpenWrt
 //! procd adapter; this module only drives the accepted stream.
 
+use std::time::Duration;
+
 use tokio::net::UnixListener;
 
 use crate::runtime::uds::FramedIo;
@@ -32,10 +34,23 @@ impl<S: ServiceDispatch> ControlServer<S> {
         Self { handler }
     }
 
-    /// Accept and serve connections until the listener is closed.
-    pub async fn serve(mut self, listener: UnixListener) {
-        while let Ok((stream, _)) = listener.accept().await {
-            self.handle_connection(stream).await;
+    /// Accept and serve connections until the listener is closed, while
+    /// running periodic housekeeping (`refresh_periodic`) every
+    /// `refresh_interval` so the status file stays fresh without API traffic.
+    pub async fn serve(mut self, listener: UnixListener, refresh_interval: Duration) {
+        let mut ticker = tokio::time::interval(refresh_interval);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tokio::select! {
+                _ = ticker.tick() => {
+                    self.handler.refresh_periodic();
+                }
+                accepted = listener.accept() => {
+                    if let Ok((stream, _)) = accepted {
+                        self.handle_connection(stream).await;
+                    }
+                }
+            }
         }
     }
 

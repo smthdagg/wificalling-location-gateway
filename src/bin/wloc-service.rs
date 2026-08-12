@@ -321,7 +321,10 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     eprintln!("wloc-service listening on {socket_path}");
     let server = ControlServer::new(service);
-    runtime.block_on(server.serve(listener));
+    runtime.block_on(server.serve(
+        listener,
+        std::time::Duration::from_secs(uci.probe_interval_secs),
+    ));
     Ok(())
 }
 

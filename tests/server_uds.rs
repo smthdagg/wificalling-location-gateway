@@ -94,7 +94,9 @@ async fn spawn_server(handler: StubDispatch, path: PathBuf) -> tokio::task::Join
     let listener = tokio::net::UnixListener::bind(&path).unwrap();
     let server = ControlServer::new(handler);
     tokio::spawn(async move {
-        server.serve(listener).await;
+        server
+            .serve(listener, std::time::Duration::from_secs(3600))
+            .await;
     })
 }
 
