@@ -171,3 +171,15 @@ msgstr "在 iPhone 上用 Safari 打开 %s，然后在 设置 > 通用 > 关于�
 
 msgid "e.g. London, UK"
 msgstr "例如：伦敦"
+
+msgid "Add saved location"
+msgstr "添加已保存位置"
+
+msgid "Delete"
+msgstr "删除"
+
+msgid "No saved locations yet."
+msgstr "暂无已保存的位置。"
+
+msgid "Preset saved."
+msgstr "预设已保存。"

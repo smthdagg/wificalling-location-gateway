@@ -24,7 +24,7 @@ fn run() -> i32 {
 
 fn run_with_args(args: &[String], socket_path: &str) -> i32 {
     if args.is_empty() {
-        eprintln!("usage: wloc-ctl <method> [--query <q> | --lat <v> --lon <v>]");
+        eprintln!("用法: wloc-ctl <方法> [--query <地名> | --lat <纬度> --lon <经度>]");
         return 2;
     }
 
@@ -32,7 +32,7 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
     let wire_method = match map_wire_method(method) {
         Some(wire) => wire,
         None => {
-            eprintln!("wloc-ctl: unknown method {method}");
+            eprintln!("wloc-ctl: 未知方法 {method}");
             return 2;
         }
     };
@@ -59,7 +59,7 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
     let body = match serde_json::to_vec(&request) {
         Ok(body) => body,
         Err(error) => {
-            eprintln!("wloc-ctl: encode: {error}");
+            eprintln!("wloc-ctl: 编码失败: {error}");
             return 1;
         }
     };
@@ -67,30 +67,30 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
     let mut stream = match UnixStream::connect(socket_path) {
         Ok(stream) => stream,
         Err(error) => {
-            eprintln!("wloc-ctl: connect {socket_path}: {error}");
+            eprintln!("wloc-ctl: 连接 {socket_path} 失败: {error}");
             return 1;
         }
     };
 
     if let Err(error) = stream.write_all(&(body.len() as u32).to_be_bytes()) {
-        eprintln!("wloc-ctl: write: {error}");
+        eprintln!("wloc-ctl: 写入失败: {error}");
         return 1;
     }
     if let Err(error) = stream.write_all(&body) {
-        eprintln!("wloc-ctl: write: {error}");
+        eprintln!("wloc-ctl: 写入失败: {error}");
         return 1;
     }
     let _ = stream.shutdown(Shutdown::Write);
 
     let mut header = [0_u8; 4];
     if stream.read_exact(&mut header).is_err() {
-        eprintln!("wloc-ctl: daemon closed without a response");
+        eprintln!("wloc-ctl: 守护进程未返回响应即关闭连接");
         return 1;
     }
     let length = u32::from_be_bytes(header) as usize;
     let mut response = vec![0_u8; length];
     if stream.read_exact(&mut response).is_err() {
-        eprintln!("wloc-ctl: truncated response");
+        eprintln!("wloc-ctl: 响应不完整");
         return 1;
     }
 
@@ -98,8 +98,8 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
         Ok(value) => {
             if value.get("error").is_some() {
                 eprintln!(
-                    "wloc-ctl: error {}",
-                    value["error"]["code"].as_str().unwrap_or("unknown")
+                    "wloc-ctl: 错误 {}",
+                    value["error"]["code"].as_str().unwrap_or("未知错误")
                 );
                 return 1;
             }
@@ -144,7 +144,7 @@ fn parse_geo_set(args: &[String]) -> Result<serde_json::Value, String> {
             Ok(serde_json::json!({"query": query}))
         }
         (None, Some(lat), Some(lon)) => Ok(serde_json::json!({"latitude": lat, "longitude": lon})),
-        _ => Err("geo-set needs --query \"place\" or --lat <v> --lon <v>".to_owned()),
+        _ => Err("geo-set 需要 --query \"地名\" 或 --lat <纬度> --lon <经度>".to_owned()),
     }
 }
 
