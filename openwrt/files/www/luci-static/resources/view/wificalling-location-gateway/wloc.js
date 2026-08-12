@@ -42,7 +42,7 @@ function fmtTime(unix) {
 }
 
 function notify(title, message) {
-	ui.addNotification(null, E('p', E('strong', title + ': '), message));
+	ui.addNotification(null, E('p', [ E('strong', title + ': '), message ]));
 }
 
 function gpsOf(geo) {
@@ -64,13 +64,12 @@ return view.extend({
 		try { status = JSON.parse(data[0]); } catch (e) { status = {}; }
 		var eventsText = data[1] || '';
 
-		var map = new form.Map('wloc-service', _('Wi-Fi Calling & WLOC Gateway'),
+		var m = new form.Map('wloc-service', _('Wi-Fi Calling & WLOC Gateway'),
 			_('WLOC location interception: spoofs the Apple WLOC response so the test device ' +
 			  'reports the gateway-chosen location. GPS values stay on this router.'));
-		map.render();
 
 		/* ---------- 3. Module on/off switch ---------- */
-		var so = map.section(form.NamedSection, 'main', 'wloc-service');
+		var so = m.section(form.NamedSection, 'main', 'wloc-service');
 		so.anonymous = true;
 		so.title = _('Module');
 
@@ -90,7 +89,9 @@ return view.extend({
 			});
 		};
 
-		so.option(form.DummyValue, '_phase', _('Service phase')).value = status.service_phase || '-';
+		so.option(form.DummyValue, '_phase', _('Service phase')).cfgvalue = function() {
+			return status.service_phase || '-';
+		};
 
 		/* ---------- 2. Location mode: auto / manual ---------- */
 		var mode = so.option(form.ListValue, 'geo_source', _('Location mode'),
@@ -119,26 +120,22 @@ return view.extend({
 		so.option(form.Value, 'manual_lon', _('Manual longitude'));
 
 		/* ---------- 4+5. Current location + GPS (read-only) ---------- */
-		var geoCard = map.section(form.GridSection, 'main', 'wloc-service');
+		var geoCard = m.section(form.NamedSection, 'main', 'wloc-service');
 		geoCard.anonymous = true;
-		geoCard.addremove = false;
 		geoCard.title = _('Current location');
 
 		var geo = status.geo || {};
-		geoCard.option(form.DummyValue, '_country', _('Country')).value = geo.country_code || '-';
-		geoCard.option(form.DummyValue, '_city', _('City')).value = geo.city || '-';
-		geoCard.option(form.DummyValue, '_tz', _('Timezone')).value = geo.timezone || '-';
-		geoCard.option(form.DummyValue, '_gps', _('GPS (lat / lon)')).value = gpsOf(geo);
-		geoCard.option(form.DummyValue, '_geoState', _('Geo state')).value = geo.state || '-';
-		geoCard.option(form.DummyValue, '_observed', _('Observed at')).value = fmtTime(status.observed_at);
-		geoCard.option(form.DummyValue, '_exit', _('Exit IP')).value =
-			(status.exit && status.exit.ip) ? status.exit.ip : '-';
+		geoCard.option(form.DummyValue, '_country', _('Country')).cfgvalue = function() { return geo.country_code || '-'; };
+		geoCard.option(form.DummyValue, '_city', _('City')).cfgvalue = function() { return geo.city || '-'; };
+		geoCard.option(form.DummyValue, '_tz', _('Timezone')).cfgvalue = function() { return geo.timezone || '-'; };
+		geoCard.option(form.DummyValue, '_gps', _('GPS (lat / lon)')).cfgvalue = function() { return gpsOf(geo); };
+		geoCard.option(form.DummyValue, '_geoState', _('Geo state')).cfgvalue = function() { return geo.state || '-'; };
+		geoCard.option(form.DummyValue, '_observed', _('Observed at')).cfgvalue = function() { return fmtTime(status.observed_at); };
+		geoCard.option(form.DummyValue, '_exit', _('Exit IP')).cfgvalue = function() {
+			return (status.exit && status.exit.ip) ? status.exit.ip : '-';
+		};
 
 		/* ---------- 6. Manual search + coordinate apply ---------- */
-		var searchCard = map.section(form.NamedSection, 'main', 'wloc-service');
-		searchCard.anonymous = true;
-		searchCard.title = _('Manual search');
-
 		var queryField = E('input', {
 			'class': 'cbi-input-text',
 			'id': 'wloc-search-query',
@@ -192,19 +189,23 @@ return view.extend({
 			}
 		}, _('Apply coordinates'));
 
-		var searchBox = E('div', { 'class': 'cbi-section' },
+		var searchBox = E('div', { 'class': 'cbi-section' }, [
+			E('h3', {}, _('Manual search')),
 			E('div', { 'class': 'cbi-row' },
-				E('div', { 'class': 'cbi-value' },
+				E('div', { 'class': 'cbi-value' }, [
 					E('label', { 'for': 'wloc-search-query', 'class': 'cbi-value-title' },
-						_('Place name'), ' ', _('(online search)')),
-					E('div', { 'class': 'cbi-value-field' }, queryField, ' ', searchBtn))),
+						[ _('Place name'), ' ', _('(online search)') ]),
+					E('div', { 'class': 'cbi-value-field' }, [ queryField, ' ', searchBtn ])
+				])),
 			E('div', { 'class': 'cbi-row' },
-				E('div', { 'class': 'cbi-value' },
+				E('div', { 'class': 'cbi-value' }, [
 					E('label', { 'class': 'cbi-value-title' }, _('Or enter coordinates')),
-					E('div', { 'class': 'cbi-value-field' }, coordLat, ' ', coordLon, ' ', coordBtn))));
+					E('div', { 'class': 'cbi-value-field' }, [ coordLat, ' ', coordLon, ' ', coordBtn ])
+				]))
+		]);
 
 		/* ---------- 7. Presets ---------- */
-		var presetsCard = map.section(form.GridSection, 'preset');
+		var presetsCard = m.section(form.GridSection, 'preset');
 		presetsCard.title = _('Saved locations');
 		presetsCard.addremove = true;
 		presetsCard.anonymous = true;
@@ -231,14 +232,11 @@ return view.extend({
 		};
 
 		/* ---------- 1. Safari certificate ---------- */
-		var certCard = map.section(form.NamedSection, 'main', 'wloc-service');
-		certCard.anonymous = true;
-		certCard.title = _('Certificate (Safari install)');
-
 		var certLink = E('a', { 'href': PROFILE_URL, 'target': '_blank', 'id': 'wloc-cert-link' }, PROFILE_URL);
-		var certText = E('div', { 'class': 'cbi-value' },
+		var certText = E('div', { 'class': 'cbi-value' }, [
 			E('label', { 'class': 'cbi-value-title' }, _('Profile link')),
-			E('div', { 'class': 'cbi-value-field' }, certLink));
+			E('div', { 'class': 'cbi-value-field' }, certLink)
+		]);
 
 		var regenBtn = E('button', {
 			'class': 'cbi-button cbi-button-apply',
@@ -259,19 +257,23 @@ return view.extend({
 			}
 		}, _('Regenerate profile'));
 
-		var certBox = E('div', { 'class': 'cbi-section' },
+		var certBox = E('div', { 'class': 'cbi-section' }, [
+			E('h3', {}, _('Certificate (Safari install)')),
 			certText,
 			E('div', { 'class': 'cbi-row' },
-				E('div', { 'class': 'cbi-value' },
+				E('div', { 'class': 'cbi-value' }, [
 					E('label', { 'class': 'cbi-value-title' }, _('Install steps')),
 					E('div', { 'class': 'cbi-value-field' },
 						_('1. Open the profile link in Safari on the test iPhone. ') +
 						_('2. Install the configuration profile. ') +
-						_('3. Enable full trust in Settings > General > About > Certificate Trust Settings.')))),
+						_('3. Enable full trust in Settings > General > About > Certificate Trust Settings.'))
+				])),
 			E('div', { 'class': 'cbi-row' },
-				E('div', { 'class': 'cbi-value' },
+				E('div', { 'class': 'cbi-value' }, [
 					E('label', { 'class': 'cbi-value-title' }, ''),
-					E('div', { 'class': 'cbi-value-field' }, regenBtn))));
+					E('div', { 'class': 'cbi-value-field' }, regenBtn)
+				]))
+		]);
 
 		/* ---------- 8. Usage log ---------- */
 		var logRows = [];
@@ -283,19 +285,21 @@ return view.extend({
 		logRows = logRows.slice(-20).reverse();
 
 		var tbody = E('tbody', { 'id': 'wloc-events-body' });
-		var table = E('table', { 'class': 'cbi-section-table' },
+		var table = E('table', { 'class': 'cbi-section-table' }, [
 			E('thead', {},
-				E('tr', {},
+				E('tr', {}, [
 					E('th', {}, _('Time')),
 					E('th', {}, _('Event')),
 					E('th', {}, _('Location')),
-					E('th', {}, _('Source')))),
-			tbody);
+					E('th', {}, _('Source'))
+				])),
+			tbody
+		]);
 
 		function renderEvents() {
 			tbody.innerHTML = '';
 			if (!logRows.length) {
-				tbody.appendChild(E('tr', {}, E('td', { 'colspan': 4 }, _('No events yet.'))));
+				tbody.appendChild(E('tr', {}, [ E('td', { 'colspan': 4 }, _('No events yet.')) ]));
 				return;
 			}
 			logRows.forEach(function(ev) {
@@ -304,22 +308,20 @@ return view.extend({
 					where = (ev.city || '') + (ev.country_code ? ' (' + ev.country_code + ')' : '');
 				else if (ev.latitude != null && ev.longitude != null)
 					where = ev.latitude.toFixed(4) + ', ' + ev.longitude.toFixed(4);
-				tbody.appendChild(E('tr', {},
+				tbody.appendChild(E('tr', {}, [
 					E('td', {}, fmtTime(ev.time)),
 					E('td', {}, ev.type || '-'),
 					E('td', {}, where),
-					E('td', {}, ev.source || '-')));
+					E('td', {}, ev.source || '-')
+				]));
 			});
 		}
 		renderEvents();
 
-		var logBox = E('div', { 'class': 'cbi-section' },
+		var logBox = E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, _('WLOC usage log')),
-			table);
-
-		map.contents.appendChild(searchBox);
-		map.contents.appendChild(certBox);
-		map.contents.appendChild(logBox);
+			table
+		]);
 
 		/* ---------- Live refresh (status + log) ---------- */
 		var ids = {
@@ -368,6 +370,8 @@ return view.extend({
 			}).catch(function() {});
 		}, 5);
 
-		return map;
+		return m.render().then(function(formNode) {
+			return E([], [formNode, searchBox, certBox, logBox]);
+		});
 	}
 });

@@ -242,9 +242,23 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
         let Some(status_file) = &self.status_file else {
             return;
         };
-        let (latitude, longitude) = match &self.geo_resolution {
-            GeoResolution::Fresh(record) => (Some(record.latitude), Some(record.longitude)),
-            _ => (None, None),
+        // The displayed location is the effective patch target: the manual
+        // preset when one is set, otherwise the fresh Geo observation.
+        let (latitude, longitude, country_code, city, timezone) = match &self.geo_source {
+            GeoSource::Manual {
+                latitude,
+                longitude,
+            } => (Some(*latitude), Some(*longitude), None, None, None),
+            GeoSource::Auto => match &self.geo_resolution {
+                GeoResolution::Fresh(record) => (
+                    Some(record.latitude),
+                    Some(record.longitude),
+                    Some(record.country_code.clone()),
+                    Some(record.city.clone()),
+                    Some(record.timezone.clone()),
+                ),
+                _ => (None, None, None, None, None),
+            },
         };
         let exit_ip = self.last_exit_ip().map(|ip| ip.to_string());
         let status = serde_json::json!({
@@ -270,20 +284,11 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             },
             "geo": {
                 "state": serde_json::to_value(inputs.geo_state).ok(),
-                "country_code": match &self.geo_resolution {
-                    GeoResolution::Fresh(record) => Some(record.country_code.clone()),
-                    _ => None,
-                },
-                "city": match &self.geo_resolution {
-                    GeoResolution::Fresh(record) => Some(record.city.clone()),
-                    _ => None,
-                },
+                "country_code": country_code,
+                "city": city,
                 "latitude": latitude,
                 "longitude": longitude,
-                "timezone": match &self.geo_resolution {
-                    GeoResolution::Fresh(record) => Some(record.timezone.clone()),
-                    _ => None,
-                },
+                "timezone": timezone,
                 "expires_at": inputs.geo_expires_at,
             },
             "engine": {

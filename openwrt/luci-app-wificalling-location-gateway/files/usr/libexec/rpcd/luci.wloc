@@ -1,0 +1,90 @@
+#!/bin/sh
+# luci.wloc — rpcd exec plugin bridging LuCI to the wloc-service control plane.
+#
+# Protocol (rpcd exec plugin): `$0 list` prints the method table, `$0 call
+# <method>` receives the JSON params on stdin. Every method is whitelisted
+# below and every value passes as argv to /usr/sbin/wloc-ctl — never through
+# a shell. The root-only daemon socket is never exposed to LuCI.
+
+. /usr/share/libubox/jshn.sh
+
+CTL=/usr/sbin/wloc-ctl
+EXPORT=/usr/sbin/export-mobileconfig.sh
+
+case "$1" in
+list)
+	json_init
+	json_add_object ctl
+	json_close_object
+	json_add_object regen_profile
+	json_close_object
+	json_dump
+	json_cleanup
+	;;
+call)
+	case "$2" in
+	ctl)
+		read -r input
+		json_load "$input"
+		json_get_var method method
+		json_get_var query query
+		json_get_var lat lat
+		json_get_var lon lon
+
+		case "$method" in
+		status|enable|disable|reload|geo-clear)
+			out="$("$CTL" "$method" 2>&1)"
+			;;
+		geo-set)
+			if [ -n "$query" ] && [ "$query" != "null" ]; then
+				out="$("$CTL" geo-set --query "$query" 2>&1)"
+			elif [ -n "$lat" ] && [ "$lat" != "null" ] \
+			     && [ -n "$lon" ] && [ "$lon" != "null" ]; then
+				out="$("$CTL" geo-set --lat "$lat" --lon "$lon" 2>&1)"
+			else
+				echo '{"error":"geo-set needs --query or --lat --lon"}'
+				exit 1
+			fi
+			;;
+		*)
+			echo '{"error":"unknown control method"}'
+			exit 1
+			;;
+		esac
+		rc=$?
+		if [ "$rc" -ne 0 ]; then
+			json_init
+			json_add_string error "$out"
+			json_dump
+			exit 1
+		fi
+		# The daemon reply is a framed JSON envelope; pass the result
+		# object through unchanged.
+		result="$(echo "$out" | jsonfilter -qe '@.result')"
+		[ -n "$result" ] || result="$out"
+		echo "{\"result\":$result}"
+		exit 0
+		;;
+	regen_profile)
+		if [ ! -x "$EXPORT" ]; then
+			json_init
+			json_add_string error "export-mobileconfig.sh not installed"
+			json_dump
+			exit 1
+		fi
+		out="$("$EXPORT" 2>&1)"
+		if [ "$?" -ne 0 ]; then
+			json_init
+			json_add_string error "$out"
+			json_dump
+			exit 1
+		fi
+		json_init
+		json_add_boolean ok 1
+		json_add_string url "http://192.168.31.1/wloc-ca.mobileconfig"
+		json_dump
+		exit 0
+		;;
+	esac
+	;;
+esac
