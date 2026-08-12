@@ -6,7 +6,8 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use http::{Request, Response};
+use http::Request;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
@@ -20,6 +21,31 @@ const SF_LAT: i64 = 3_777_490_000;
 const SF_LON: i64 = -12_241_940_000;
 const LONDON_LAT: f64 = 51.5074;
 const LONDON_LON: f64 = -0.1278;
+
+async fn spawn_http1_upstream(listener: TcpListener, config: rustls::ServerConfig, body: Vec<u8>) {
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let tls = TlsAcceptor::from(Arc::new(config));
+        let mut tls = tls.accept(stream).await.unwrap();
+        // Read the request head (ends at the blank line).
+        let mut buf = [0_u8; 4096];
+        let mut read = 0;
+        loop {
+            let n = tls.read(&mut buf[read..]).await.unwrap();
+            read += n;
+            if buf[..read].windows(4).any(|window| window == b"\r\n\r\n") {
+                break;
+            }
+        }
+        let head = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        tls.write_all(head.as_bytes()).await.unwrap();
+        tls.write_all(&body).await.unwrap();
+        let _ = tls.shutdown().await;
+    });
+}
 
 fn provider() -> Arc<rustls::crypto::CryptoProvider> {
     Arc::new(rustls::crypto::ring::default_provider())
@@ -125,6 +151,7 @@ fn find_length_delimited(bytes: &[u8], want: u32) -> Option<(u32, u8, Vec<u8>)> 
 }
 
 #[tokio::test]
+
 async fn wloc_response_is_patched_through_the_proxy() {
     // --- mock upstream (its own CA so the proxy can verify it) ---
     let upstream_ca = CaBundle::generate().unwrap();
@@ -132,24 +159,7 @@ async fn wloc_response_is_patched_through_the_proxy() {
     let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_port = upstream_listener.local_addr().unwrap().port();
     let upstream_body = synthetic_wloc_body(SF_LAT, SF_LON);
-    tokio::spawn(async move {
-        let (stream, _) = upstream_listener.accept().await.unwrap();
-        let tls = TlsAcceptor::from(Arc::new(upstream_server_config));
-        let tls = tls.accept(stream).await.unwrap();
-        let mut server = h2::server::Builder::new()
-            .handshake::<_, Bytes>(tls)
-            .await
-            .unwrap();
-        while let Some(accepted) = server.accept().await {
-            let (request, mut respond) = accepted.unwrap();
-            let _ = request.into_parts();
-            let mut send = respond
-                .send_response(Response::new(()), upstream_body.is_empty())
-                .unwrap();
-            send.send_data(Bytes::from(upstream_body.clone()), true)
-                .unwrap();
-        }
-    });
+    spawn_http1_upstream(upstream_listener, upstream_server_config, upstream_body).await;
 
     // --- proxy in front of the mock upstream ---
     let mitm_ca = CaBundle::generate().unwrap();
@@ -211,24 +221,12 @@ async fn non_wloc_path_passes_through_unchanged() {
     let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_port = upstream_listener.local_addr().unwrap().port();
     let plain_body = b"plain-response".to_vec();
-    let plain_body_inner = plain_body.clone();
-    tokio::spawn(async move {
-        let (stream, _) = upstream_listener.accept().await.unwrap();
-        let tls = TlsAcceptor::from(Arc::new(upstream_server_config));
-        let tls = tls.accept(stream).await.unwrap();
-        let mut server = h2::server::Builder::new()
-            .handshake::<_, Bytes>(tls)
-            .await
-            .unwrap();
-        while let Some(accepted) = server.accept().await {
-            let (_request, mut respond) = accepted.unwrap();
-            let mut send = respond
-                .send_response(Response::new(()), plain_body_inner.is_empty())
-                .unwrap();
-            send.send_data(Bytes::from(plain_body_inner.clone()), true)
-                .unwrap();
-        }
-    });
+    spawn_http1_upstream(
+        upstream_listener,
+        upstream_server_config,
+        plain_body.clone(),
+    )
+    .await;
 
     let mitm_ca = CaBundle::generate().unwrap();
     let proxy = MitmProxy::new(&mitm_ca, upstream_ca.root_store().unwrap())

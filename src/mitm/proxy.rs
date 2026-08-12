@@ -55,7 +55,9 @@ impl MitmProxy {
             .map_err(|error| MitmError::Certificate(error.to_string()))?
             .with_root_certificates(upstream_roots)
             .with_no_client_auth();
-        client.alpn_protocols = vec![b"h2".to_vec()];
+        // The Apple WLOC endpoint serves HTTP/1.1, so the upstream client
+        // offers it (and h2 as a fallback) via ALPN.
+        client.alpn_protocols = vec![b"http/1.1".to_vec(), b"h2".to_vec()];
 
         Ok(Self {
             tls_config: Arc::new(server),
@@ -107,7 +109,10 @@ impl MitmProxy {
                         let _ = send.send_data(Bytes::from(patched_body), true);
                     }
                 }
-                Err(_) => break,
+                Err(error) => {
+                    eprintln!("wloc proxy: upstream failure: {error}");
+                    break;
+                }
             }
         }
         Ok(())
@@ -125,6 +130,11 @@ impl MitmProxy {
         let hostname = approved_host(&request)?;
         let is_wloc =
             request.uri().path() == WLOC_PATH || request.uri().path().ends_with("/clls/wloc");
+        eprintln!(
+            "wloc proxy: request host={hostname} method={} uri={} is_wloc={is_wloc}",
+            request.method(),
+            request.uri()
+        );
 
         // Read the bounded client request body.
         let mut request_body = Vec::new();
@@ -154,43 +164,22 @@ impl MitmProxy {
             .await
             .map_err(|error| MitmProxyError::Upstream(error.to_string()))?;
 
-        let (mut send_request, connection) = h2::client::Builder::new()
-            .initial_window_size(32 * 1024)
-            .max_frame_size(16 * 1024)
-            .handshake::<_, Bytes>(upstream_tls)
-            .await
-            .map_err(|error| MitmProxyError::H2(error.to_string()))?;
-        let driver = tokio::spawn(async move {
-            let _ = connection.await;
-        });
-
+        // The real Apple /clls/wloc endpoint serves HTTP/1.1; an h2 upstream
+        // fails with "frame with invalid size". Forward over HTTP/1.1 and
+        // decode Content-Length / chunked bodies.
         let upstream_request = sanitized_forward_request(parts, &hostname)?;
-        let (response_future, mut send_stream) = send_request
-            .send_request(upstream_request, request_body.is_empty())
-            .map_err(|error| MitmProxyError::H2(error.to_string()))?;
-        if !request_body.is_empty() {
-            send_stream
-                .send_data(Bytes::from(request_body), true)
-                .map_err(|error| MitmProxyError::H2(error.to_string()))?;
-        }
-        let mut response = response_future
-            .await
-            .map_err(|error| MitmProxyError::Upstream(error.to_string()))?;
+        let (_, _, body) =
+            crate::mitm::http1::forward_http1(upstream_tls, &upstream_request, &request_body)
+                .await?;
 
-        let mut body = Vec::new();
-        while let Some(chunk) = response.body_mut().data().await {
-            let chunk = chunk.map_err(|error| MitmProxyError::Upstream(error.to_string()))?;
-            body.extend_from_slice(&chunk);
-            if body.len() > MAX_FORWARD_BODY_BYTES {
-                driver.abort();
-                return Err(MitmProxyError::Upstream(
-                    "response body exceeds bound".into(),
-                ));
-            }
-        }
-        driver.abort();
-        let _ = driver.await;
-        Ok(maybe_patch_body(&body, is_wloc, patch))
+        let patched = maybe_patch_body(&body, is_wloc, patch);
+        eprintln!(
+            "wloc proxy: response body {} -> {} bytes (is_wloc={is_wloc}, patch={})",
+            body.len(),
+            patched.len(),
+            patch.is_some()
+        );
+        Ok(patched)
     }
 }
 
