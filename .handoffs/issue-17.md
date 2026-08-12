@@ -5,19 +5,30 @@
 - Source agent ID: zcode-wloc-service
 - Capabilities used: rust,security
 - Branch: codex/issue-17-wloc-service
-- Checkpoint parent: 22c7f71f174aa0b95fb30b83c5ad7a16009f7e41
-- Updated at (UTC): 2026-08-12T01:48:44Z
+- Checkpoint parent: cabd076fd7b6a912ab87e88619fcecfb39261fc5
+- Updated at (UTC): 2026-08-12T07:29:15Z
 - Credentials included: no
 
 ## Objective
 
-Deliver the offline WLOC service control plane, Phase 3 patch core, and the
-Phase 4 MITM foundation, wired into a runnable daemon, so the system is ready
-for router deployment and iPhone validation once the real sing-box probe,
-nftables redirect, and hardware are available.
+Deliver the router-side WLOC location spoofing on the AX6S. **Verified
+end-to-end on the real device**: an iPhone behind the redirect receives
+patched Apple network-location coordinates (agent log `response body 508 ->
+553 bytes, is_wloc=true, patch=true`) and shows the target location (US
+Broadlands from the stub exit) instead of the real one.
 
 ## Completed
 
+- **Real-device WLOC rewrite works**: following the Home-Location-Endpoint
+  reference, three protocol fixes made Apple accept the proxied request and
+  the rewrite land:
+  1. Forward a single Content-Length (duplicate Content-Length made Apple
+     return 400 "Bad Request").
+  2. Force `Accept-Encoding: identity` so the BlockBSSIDApple protobuf comes
+     back uncompressed (gzip bodies cannot be rewritten).
+  3. Recognize the real 10-byte opaque header framing
+     (`[0:2]=0x0001`, `[6:10]=u32 BE block length`) and recompute the block
+     length after the rewrite so locationd never reads a truncated body.
 - **Phase 3 WLOC patch core** (`src/wloc/`): clean-room protocol notes
   (`docs/protocol/WLOC_PROTOCOL_NOTES.md`) derived from the owner's existing
   implementation. A bounded protobuf parser, the Location sub-message
@@ -25,8 +36,8 @@ nftables redirect, and hardware are available.
   two's-complement varint for negatives), byte-for-byte preservation of every
   other field, recursive WifiDevice (field 2) / CellResponse (fields 22/24)
   patching with missing-location append, root drop fields 3/4/33, and
-  synthetic/marker envelope re-wrapping. Fail-open: any error or invalid
-  coordinate leaves the response unchanged.
+  10-byte/synthetic/marker envelope re-wrapping. Fail-open: any error or
+  invalid coordinate leaves the response unchanged.
 - **Phase 4 MITM foundation**: `src/mitm/` with an in-memory root CA
   (`CaBundle`) and per-host leaf issuance for the approved hosts (keys never
   persisted), a fail-closed `MitmCertResolver` (only the two approved SNIs get
@@ -114,32 +125,30 @@ nftables redirect, and hardware are available.
 
 ## Unresolved decisions and blockers
 
-- **Router adapters**: real sing-box exit probe (through the node outbound)
-  and the nftables/procd redirect that points the test device's
-  gs-loc.apple.com traffic at `WLOC_PROXY_PORT` are not yet implemented; the
-  daemon uses the env-configurable stub probe and the real Geo HTTP provider.
-- **Real-device validation**: requires the AX6S router and an iPhone. Sequence:
-  install the exported root CA, bind the test device IP, run the daemon with
-  the real probe, and follow DEVELOPMENT_TEST_PLAN.md Phase 6 (fixed device
-  IP, CA fingerprint check, no Shadowrocket, UK/US/HK node switching, Safari
-  cert check, UDP 500/4500 untouched).
-- The CA is regenerated per daemon run; for stable trust across restarts the
-  root CA should be persisted on the router storage (private key stays on the
-  device, never in the repo).
+- **Real sing-box exit probe**: the daemon still uses the env-configurable
+  stub probe, so the patched location follows the stub exit (default 8.8.8.8
+  -> US). Wiring the real probe through the node outbound will make the
+  location follow the selected UK/US/HK node. The redirect uses a static
+  nftables set refreshed by cron (`wloc-refresh-set.sh`); a dnsmasq
+  nftset/address hijack was attempted but the ImmortalWrt dnsmasq address
+  override did not take effect (stop-dns-rebind left enabled was ruled out;
+  left as an enhancement).
+- **Full Phase 6 validation**: iPhone showed the patched US location; the
+  remaining sequence (UK/US/HK node switching, Safari cert check, UDP
+  500/4500 untouched, rollback) still needs to be exercised.
+- The root CA is persisted on-device (`/etc/wloc-service/ca.{pem,key}`, key
+  mode 0600); iPhone trust survives restarts.
 - `main` branch protection still requires GitHub Pro; squash-merge +
   CODEOWNERS + CI + Agent rules remain the compensating controls.
 
 ## Next executable steps
 
-1. Implement the real sing-box exit probe (temporary outbound config) and the
-   nftables redirect + watchdog behind the existing traits; the daemon then
-   uses real exit data to drive the Geo provider and the patch target.
-2. Persist the root CA on the router (private key on-device only) and add a
-   `wloc-service` procd integration with the proxy port.
-3. Re-run the pinned AArch64 cross-build and produce an installable `.ipk`
-   (OpenWrt scaffolding already in place).
-4. Deploy on the AX6S and follow the Phase 6 iPhone validation sequence.
-4. Deploy on the AX6S and follow the Phase 6 iPhone validation sequence.
+1. Implement the real sing-box exit probe (temporary outbound config) behind
+   the existing `ExitProbeRuntime` trait so the Geo provider and patch target
+   follow the selected node's country.
+2. Exercise the full Phase 6 sequence on the AX6S (UK/US/HK switching, Safari
+   cert check, UDP 500/4500 untouched, rollback).
+3. Build the installable `.ipk` from the OpenWrt scaffolding.
 
 ## Capabilities required for the next Agent
 
