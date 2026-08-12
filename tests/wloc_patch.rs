@@ -316,6 +316,61 @@ fn root_drop_fields_are_removed_and_others_preserved() {
 
 // --- Envelope handling ---
 
+/// Build the real gs-loc wifi response framing: a 10-byte opaque header
+/// ([0:2] = 0x0001, [6:10] = u32 BE block length) plus the protobuf block.
+fn wloc10_envelope(payload: &[u8]) -> Vec<u8> {
+    let mut header = [0_u8; 10];
+    header[0] = 0x00;
+    header[1] = 0x01;
+    header[2..6].copy_from_slice(&[0x00, 0x00, 0x00, 0x01]);
+    header[6..10].copy_from_slice(&(payload.len() as u32).to_be_bytes());
+    let mut out = header.to_vec();
+    out.extend_from_slice(payload);
+    out
+}
+
+#[test]
+fn wloc10_envelope_is_patched_and_block_length_recomputed() {
+    // Use a wifi root payload that contains a Location, so the patch changes
+    // the block length and the header's u32 BE field must be recomputed.
+    let original = wloc10_envelope(&root_payload());
+    let patched = patch_wloc_response(&original, &target());
+
+    // Header [0:2] marker preserved; [6:10] is the new block length.
+    assert_eq!(&patched[..2], &[0x00, 0x01]);
+    let old_len = u32::from_be_bytes([original[6], original[7], original[8], original[9]]) as usize;
+    let new_len = u32::from_be_bytes([patched[6], patched[7], patched[8], patched[9]]) as usize;
+    assert!(new_len > 0);
+    assert_eq!(
+        patched.len(),
+        10 + new_len,
+        "body must be header + declared block"
+    );
+    let _ = old_len;
+}
+
+#[test]
+fn wloc10_envelope_replaces_wifi_location_coordinates() {
+    let original = wloc10_envelope(&root_payload());
+    let patched = patch_wloc_response(&original, &target());
+    let new_len = u32::from_be_bytes([patched[6], patched[7], patched[8], patched[9]]) as usize;
+    let block = &patched[10..10 + new_len];
+
+    // Block root: field 2 (wifi) -> nested field 2 (location) -> field 1 lat.
+    let wifi = fields_of(block)
+        .into_iter()
+        .find(|(number, wire, _)| *number == 2 && *wire == 2)
+        .expect("wifi field must remain");
+    let wifi_value = strip_length_prefix(&wifi.2);
+    let location = fields_of(&wifi_value)
+        .into_iter()
+        .find(|(number, wire, _)| *number == 2 && *wire == 2)
+        .expect("wifi must contain a location");
+    let (lat, lon) = location_of_field(&location.2);
+    assert_eq!(lat, coord_to_int(LAT));
+    assert_eq!(lon, coord_to_int(LON));
+}
+
 fn synthetic_envelope(payload: &[u8]) -> Vec<u8> {
     let prefix = [0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00];
     let mut out = Vec::new();

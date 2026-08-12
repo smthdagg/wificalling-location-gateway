@@ -47,6 +47,12 @@ pub async fn forward_http1(
         if HOP_BY_HOP.contains(&lower.as_str()) {
             continue;
         }
+        if lower == "accept-encoding" {
+            // Force identity: Apple returns the WLOC protobuf uncompressed,
+            // otherwise the response is gzip and the rewrite cannot see it.
+            wire.extend_from_slice(b"accept-encoding: identity\r\n");
+            continue;
+        }
         if let Ok(value) = value.to_str() {
             wire.extend_from_slice(format!("{lower}: {value}\r\n").as_bytes());
         }
@@ -60,6 +66,33 @@ pub async fn forward_http1(
     }
     wire.extend_from_slice(b"Connection: close\r\n\r\n");
 
+    let wire_preview: String = wire
+        .iter()
+        .take(600)
+        .map(|b| {
+            if b.is_ascii_graphic() || *b == b' ' {
+                *b as char
+            } else {
+                '.'
+            }
+        })
+        .collect();
+    eprintln!("wloc proxy: forwarding HTTP/1.1 request: {wire_preview}");
+    #[cfg(not(test))]
+    if let Ok(mut dump) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/wloc-forward.dump")
+    {
+        use std::io::Write as _;
+        let _ = dump.write_all(&wire);
+        let _ = dump.write_all(request_body);
+        let _ = dump.write_all(
+            b"
+====
+",
+        );
+    }
     stream
         .write_all(&wire)
         .await

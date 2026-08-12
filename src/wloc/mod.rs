@@ -332,9 +332,34 @@ enum Envelope<'a> {
         payload: &'a [u8],
         suffix: &'a [u8],
     },
+    /// The real Apple gs-loc wifi response framing (confirmed against the live
+    /// server): a 10-byte opaque header where `[0:2]` is `0x0001`, `[2:6]` an
+    /// opaque marker, and `[6:10]` a big-endian uint32 block length, followed
+    /// by the BlockBSSIDApple protobuf. The block length must be recomputed
+    /// after a rewrite because the coordinate varints change size.
+    Wloc10 {
+        header: &'a [u8],
+        payload: &'a [u8],
+        suffix: &'a [u8],
+    },
 }
 
 fn extract_envelope(response: &[u8]) -> Option<Envelope<'_>> {
+    // Real gs-loc wifi response: 10-byte header, [6:10] = u32 BE block length.
+    if response.len() >= 10 && response[0] == 0 && response[1] == 1 {
+        let block_len =
+            u32::from_be_bytes([response[6], response[7], response[8], response[9]]) as usize;
+        if block_len > 0 && 10 + block_len <= response.len() {
+            let payload = &response[10..10 + block_len];
+            if parse_fields(payload).is_ok() {
+                return Some(Envelope::Wloc10 {
+                    header: &response[..10],
+                    payload,
+                    suffix: &response[10 + block_len..],
+                });
+            }
+        }
+    }
     // Synthetic shape: 8-byte prefix (bytes 6/7 zero), u16 BE length at 8.
     if response.len() >= 10 && response[6] == 0 && response[7] == 0 {
         if let Ok(length) = read_u16_be(response, 8) {
@@ -423,6 +448,22 @@ fn try_patch_wloc_response(response: &[u8], target: &PatchTarget) -> Result<Vec<
             out.extend_from_slice(pre);
             out.extend_from_slice(&WLOC_MARKER);
             out.extend(u16_be(length));
+            out.extend_from_slice(&patched_payload);
+            out.extend_from_slice(suffix);
+            out
+        }
+        Envelope::Wloc10 {
+            header,
+            payload,
+            suffix,
+        } => {
+            let patched_payload = patch_payload(payload, &target)?;
+            let length = u32::try_from(patched_payload.len()).map_err(|_| WlocError::Oversized)?;
+            let mut out_header = [0_u8; 10];
+            out_header.copy_from_slice(header);
+            out_header[6..10].copy_from_slice(&length.to_be_bytes());
+            let mut out = Vec::with_capacity(10 + patched_payload.len() + suffix.len());
+            out.extend_from_slice(&out_header);
             out.extend_from_slice(&patched_payload);
             out.extend_from_slice(suffix);
             out
