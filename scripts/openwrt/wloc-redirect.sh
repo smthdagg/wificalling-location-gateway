@@ -10,7 +10,6 @@ set -eu
 
 TABLE=wloc_service
 CHAIN_PREROUTING=prerouting
-CHAIN_OUTPUT=output
 PROXY_PORT="${WLOC_PROXY_PORT:-8443}"
 DEVICE_IP="${WLOC_DEVICE_IP:-}"
 
@@ -30,11 +29,9 @@ case "${1:-install}" in
         nft 'add chain inet '"$TABLE"' '"$CHAIN_PREROUTING"' { type nat hook prerouting priority -100; }' 2>/dev/null || true
         nft "add rule inet $TABLE $CHAIN_PREROUTING ip saddr $DEVICE_IP tcp dport 443 ip daddr gs-loc.apple.com redirect to :$PROXY_PORT" 2>/dev/null || true
         nft "add rule inet $TABLE $CHAIN_PREROUTING ip saddr $DEVICE_IP tcp dport 443 ip daddr gs-loc-cn.apple.com redirect to :$PROXY_PORT" 2>/dev/null || true
-        # Router-local traffic to the same hosts is redirected too so a
-        # control-plane probe behaves like the device.
-        nft 'add chain inet '"$TABLE"' '"$CHAIN_OUTPUT"' { type nat hook output priority -100; }' 2>/dev/null || true
-        nft "add rule inet $TABLE $CHAIN_OUTPUT ip daddr gs-loc.apple.com tcp dport 443 redirect to :$PROXY_PORT" 2>/dev/null || true
-        nft "add rule inet $TABLE $CHAIN_OUTPUT ip daddr gs-loc-cn.apple.com tcp dport 443 redirect to :$PROXY_PORT" 2>/dev/null || true
+        # Note: no output chain. A router-local output redirect would also
+        # capture the proxy's own upstream connection to the Apple host and
+        # loop it back into the proxy.
         echo "wloc-redirect: installed (device $DEVICE_IP -> :$PROXY_PORT)"
         ;;
     remove)
