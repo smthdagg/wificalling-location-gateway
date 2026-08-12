@@ -91,6 +91,32 @@ impl ExitProbeRuntime for StubProbe {
     }
 }
 
+/// Build the exit probe: the real sing-box probe by default (follows the
+/// device's bound node), or the deterministic stub when `WLOC_PROBE=stub`.
+fn build_probe() -> Box<dyn ExitProbeRuntime> {
+    if std::env::var("WLOC_PROBE").as_deref() == Ok("stub") {
+        return Box::new(StubProbe {
+            exit_ip: env_or("WLOC_STUB_EXIT_IP", IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))),
+            wan_ip: env_or("WLOC_STUB_WAN_IP", IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))),
+        });
+    }
+    let device_ip: IpAddr = env_or(
+        "WLOC_DEVICE_IP",
+        IpAddr::V4(Ipv4Addr::new(192, 168, 31, 176)),
+    );
+    Box::new(
+        wificalling_location_gateway::exitprobe::singbox::SingBoxProbe::new(
+            std::path::PathBuf::from(
+                std::env::var("WLOC_SINGBOX_CONFIG")
+                    .unwrap_or_else(|_| "/var/run/wificalling-gateway/sing-box.json".into()),
+            ),
+            device_ip,
+            env_or("WLOC_PROBE_PORT", 18080_u16),
+            std::path::PathBuf::from("/tmp/wloc-probe"),
+        ),
+    )
+}
+
 /// Stub Geo provider: returns a fixed, valid record for the queried exit.
 struct StubGeo {
     country_code: String,
@@ -136,10 +162,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let service = WlocService::new(
         StubRuntime,
-        StubProbe {
-            exit_ip: env_or("WLOC_STUB_EXIT_IP", IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))),
-            wan_ip: env_or("WLOC_STUB_WAN_IP", IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))),
-        },
+        build_probe(),
         geo,
         WlocServiceConfig {
             node_ref: NodeRef::new("default").expect("static node ref is valid"),

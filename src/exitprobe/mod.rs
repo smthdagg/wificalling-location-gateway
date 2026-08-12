@@ -5,6 +5,7 @@
 //! address that differs from the router WAN address.
 
 pub mod runtime;
+pub mod singbox;
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;

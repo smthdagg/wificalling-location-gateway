@@ -132,3 +132,13 @@ fn opposite_family_wan_cannot_validate_the_exit() {
         Err(ExitProbeError::RouterWanUnknown)
     );
 }
+
+#[test]
+fn boxed_probe_forwards_to_the_inner_implementation() {
+    let mut probe: Box<dyn ExitProbeRuntime> = Box::new(StubProbe {
+        probe_result: Ok(PUBLIC_V4),
+        wan_result: Ok(vec![OTHER_V4]),
+    });
+    assert_eq!(probe.probe_exit_ip(), Ok(PUBLIC_V4));
+    assert_eq!(probe.router_wan_ips(), Ok(vec![OTHER_V4]));
+}

@@ -19,6 +19,8 @@ pub enum ProbeFailure {
     Unreachable,
     /// The probe exceeded its bounded deadline.
     Timeout,
+    /// The probe returned unusable or malformed data.
+    InvalidData,
 }
 
 /// Network execution boundary for exit probing.
@@ -31,6 +33,15 @@ pub trait ExitProbeRuntime {
     fn probe_exit_ip(&mut self) -> Result<IpAddr, ProbeFailure>;
     /// Report the router's verified WAN addresses (all known families).
     fn router_wan_ips(&mut self) -> Result<Vec<IpAddr>, ProbeFailure>;
+}
+
+impl ExitProbeRuntime for Box<dyn ExitProbeRuntime> {
+    fn probe_exit_ip(&mut self) -> Result<IpAddr, ProbeFailure> {
+        (**self).probe_exit_ip()
+    }
+    fn router_wan_ips(&mut self) -> Result<Vec<IpAddr>, ProbeFailure> {
+        (**self).router_wan_ips()
+    }
 }
 
 /// Probe the node exit and validate it against the router WAN set.
