@@ -42,5 +42,13 @@
       "type": "view",
       "path": "wificalling-location-gateway/wloc-monitor"
     }
+  },
+  "admin/services/wificalling-location-gateway/faq": {
+    "title": "使用帮助（FAQ）",
+    "order": 50,
+    "action": {
+      "type": "view",
+      "path": "wificalling-location-gateway/faq"
+    }
   }
 }
