@@ -1,6 +1,5 @@
 'use strict';
 'require view';
-'require dom';
 
 // FAQ：Wi-Fi Calling 与 WLOC 定位的使用步骤和注意事项（中英双语）。
 
@@ -101,37 +100,18 @@ function notesCard(title, notes) {
 
 return view.extend({
 	render: function() {
-		// Default to the LuCI interface language when available.
-		var lang = (document.body.className.indexOf('lang-en') >= 0) ? 'en' : 'zh';
-		var root = E('div', { 'id': 'wloc-faq-root' });
-
-		var zhBtn = E('button', { 'class': 'cbi-button cbi-button-action' }, '中文');
-		var enBtn = E('button', { 'class': 'cbi-button cbi-button-action' }, 'English');
-
-		function build(c) {
-			return E([], [
-				E('h2', {}, c.title),
-				E('p', {}, c.intro),
-				stepsCard(c.wfcStepsTitle, c.wfcSteps),
-				notesCard(c.wfcNotesTitle, c.wfcNotes),
-				stepsCard(c.wlocStepsTitle, c.wlocSteps),
-				notesCard(c.wlocNotesTitle, c.wlocNotes)
-			]);
-		}
-
-		function renderFaq() {
-			dom.content(root, build(CONTENT[lang]));
-			zhBtn.classList.toggle('cbi-button-positive', lang === 'zh');
-			enBtn.classList.toggle('cbi-button-positive', lang === 'en');
-		}
-
-		zhBtn.addEventListener('click', function() { lang = 'zh'; renderFaq(); });
-		enBtn.addEventListener('click', function() { lang = 'en'; renderFaq(); });
-		renderFaq();
-
+		// Follow the LuCI interface language automatically (the body class
+		// is `lang_en` on this firmware, `lang-en` on others).
+		var cls = document.body.className;
+		var lang = (cls.indexOf('lang-en') >= 0 || cls.indexOf('lang_en') >= 0) ? 'en' : 'zh';
+		var c = CONTENT[lang];
 		return E([], [
-			E('div', { 'class': 'right', 'style': 'margin-bottom:8px' }, [ zhBtn, ' ', enBtn ]),
-			root
+			E('h2', {}, c.title),
+			E('p', {}, c.intro),
+			stepsCard(c.wfcStepsTitle, c.wfcSteps),
+			notesCard(c.wfcNotesTitle, c.wfcNotes),
+			stepsCard(c.wlocStepsTitle, c.wlocSteps),
+			notesCard(c.wlocNotesTitle, c.wlocNotes)
 		]);
 	}
 });
