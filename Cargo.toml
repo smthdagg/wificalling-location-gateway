@@ -17,6 +17,10 @@ path = "src/main.rs"
 name = "wloc-service"
 path = "src/bin/wloc-service.rs"
 
+[[bin]]
+name = "wloc-ctl"
+path = "src/bin/wloc-ctl.rs"
+
 [dependencies]
 base64 = "=0.22.1"
 bytes = "=1.12.1"
