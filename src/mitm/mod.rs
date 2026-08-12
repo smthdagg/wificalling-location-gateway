@@ -5,6 +5,8 @@
 //! The rustls resolver serves a leaf only for the two approved Apple hostnames
 //! (fail-closed), so no other domain can ever be impersonated.
 
+pub mod proxy;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
