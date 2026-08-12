@@ -19,6 +19,12 @@ Broadlands from the stub exit) instead of the real one.
 
 ## Completed
 
+- **Manual/auto location switching verified on the device**: `geo.set`
+  accepts a place query (geocoded online via Nominatim) or explicit
+  coordinates and publishes the preset to the proxy patch target; `geo.clear`
+  returns to automatic node-following. Both verified live: the iPhone shows
+  the manual preset (Hong Kong) and, in auto mode, the node-exit location
+  (US Broadlands from the stub exit).
 - **Real-device WLOC rewrite works**: following the Home-Location-Endpoint
   reference, three protocol fixes made Apple accept the proxied request and
   the rewrite land:
