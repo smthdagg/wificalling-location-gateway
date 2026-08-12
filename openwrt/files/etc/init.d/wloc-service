@@ -13,12 +13,15 @@ SOCKET_DIR=/var/run/wloc-service
 SOCKET="$SOCKET_DIR/control.sock"
 
 start_service() {
-	mkdir -p "$SOCKET_DIR"
+	mkdir -p "$SOCKET_DIR" /etc/wloc-service
 	chmod 0700 "$SOCKET_DIR"
 
 	procd_open_instance
 	procd_set_param command /usr/sbin/wloc-service
-	procd_set_param env "WLOC_SOCKET=$SOCKET"
+	procd_set_param env "WLOC_SOCKET=$SOCKET" \
+		"WLOC_CA_CERT=/etc/wloc-service/ca.pem" \
+		"WLOC_CA_KEY=/etc/wloc-service/ca.key" \
+		"WLOC_PROXY_PORT=8443"
 	procd_set_param respawn
 	procd_set_param stdout 1
 	procd_set_param stderr 1
