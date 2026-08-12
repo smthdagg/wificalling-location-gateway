@@ -76,7 +76,7 @@ return view.extend({
 		var enabled = so.option(form.Flag, 'enabled', _('Enable WLOC interception'),
 			_('Turns the WLOC rewrite on/off. The nftables redirect stays in place; ' +
 			  'while off, Apple WLOC traffic passes through untouched.'));
-		enabled.onchange = function(section_id, value) {
+		enabled.onchange = function(ev, section_id, value) {
 			var on = (value === true || value === 1 || value === '1');
 			callCtl(on ? 'enable' : 'disable', null, null, null).then(function(r) {
 				if (r.error) {
@@ -85,7 +85,7 @@ return view.extend({
 				}
 				uci.set('wloc-service', 'main', 'enabled', on ? '1' : '0');
 				uci.save('wloc-service');
-				uci.commit('wloc-service');
+				ui.changes.apply(true);
 			});
 		};
 
@@ -99,11 +99,11 @@ return view.extend({
 			  'search result or coordinates below.'));
 		mode.value('auto', _('Auto (follow node)'));
 		mode.value('manual', _('Manual location'));
-		mode.onchange = function(section_id, value) {
+		mode.onchange = function(ev, section_id, value) {
 			var main = uci.get('wloc-service', 'main');
 			uci.set('wloc-service', 'main', 'geo_source', value);
 			uci.save('wloc-service');
-			uci.commit('wloc-service');
+			ui.changes.apply(true);
 			if (value === 'auto') {
 				callCtl('geo-clear', null, null, null).then(function(r) {
 					if (r.error) notify(_('Mode switch failed'), r.error);
@@ -157,7 +157,7 @@ return view.extend({
 					}
 					uci.set('wloc-service', 'main', 'geo_source', 'manual');
 					uci.save('wloc-service');
-					uci.commit('wloc-service');
+					ui.changes.apply(true);
 					notify(_('Applied'), _('Search result is now the active location. Verify on the iPhone.'));
 				});
 			}
@@ -183,7 +183,7 @@ return view.extend({
 					uci.set('wloc-service', 'main', 'manual_lon', lon);
 					uci.set('wloc-service', 'main', 'geo_source', 'manual');
 					uci.save('wloc-service');
-					uci.commit('wloc-service');
+					ui.changes.apply(true);
 					notify(_('Applied'), _('Coordinates are now the active location.'));
 				});
 			}
@@ -204,18 +204,21 @@ return view.extend({
 				]))
 		]);
 
-		/* ---------- 7. Presets ---------- */
-		var presetsCard = m.section(form.GridSection, 'preset');
-		presetsCard.title = _('Saved locations');
-		presetsCard.addremove = true;
-		presetsCard.anonymous = true;
+		/* ---------- 7. Presets (self-drawn table) ---------- */
+		var presetBody = E('tbody', { 'id': 'wloc-preset-body' });
+		var presetTable = E('table', { 'class': 'cbi-section-table' }, [
+			E('thead', {},
+				E('tr', {}, [
+					E('th', {}, _('Label')),
+					E('th', {}, _('Latitude')),
+					E('th', {}, _('Longitude')),
+					E('th', {}, '')
+				])),
+			presetBody
+		]);
 
-		presetsCard.option(form.Value, 'label', _('Label'));
-		presetsCard.option(form.Value, 'latitude', _('Latitude'));
-		presetsCard.option(form.Value, 'longitude', _('Longitude'));
-
-		presetsCard.option(form.Button, '_apply', _('Apply')).onclick = function(section_id) {
-			var s = uci.get('wloc-service', section_id);
+		function applyPreset(sid) {
+			var s = uci.get('wloc-service', sid);
 			if (!s || !s.latitude || !s.longitude) {
 				notify(_('Apply failed'), _('Preset has no coordinates.'));
 				return;
@@ -223,13 +226,100 @@ return view.extend({
 			uci.set('wloc-service', 'main', 'manual_lat', s.latitude);
 			uci.set('wloc-service', 'main', 'manual_lon', s.longitude);
 			uci.set('wloc-service', 'main', 'geo_source', 'manual');
-			uci.save('wloc-service');
-			uci.commit('wloc-service');
-			callCtl('geo-set', null, s.latitude, s.longitude).then(function(r) {
-				if (r.error) notify(_('Apply failed'), r.error);
+			uci.save('wloc-service').then(function() {
+				return ui.changes.apply(true);
+			}).then(function() {
+				return callCtl('geo-set', null, s.latitude, s.longitude);
+			}).then(function(r) {
+				if (r && r.error) notify(_('Apply failed'), r.error);
 				else notify(_('Applied'), _('Preset is now the active location.'));
+			}).catch(function(e) {
+				notify(_('Apply failed'), String(e));
 			});
-		};
+		}
+
+		function removePreset(sid) {
+			uci.delete('wloc-service', sid);
+			uci.save('wloc-service').then(function() {
+				return ui.changes.apply(true);
+			}).then(function() {
+				renderPresets();
+			}).catch(function(e) {
+				notify(_('Apply failed'), String(e));
+			});
+		}
+
+		function renderPresets() {
+			presetBody.innerHTML = '';
+			var presets = uci.sections('wloc-service', 'preset');
+			if (!presets.length) {
+				presetBody.appendChild(E('tr', {}, [ E('td', { 'colspan': 4 }, _('No saved locations yet.')) ]));
+				return;
+			}
+			presets.forEach(function(s) {
+				var sid = s['.name'];
+				presetBody.appendChild(E('tr', {}, [
+					E('td', {}, s.label || sid),
+					E('td', {}, s.latitude || '-'),
+					E('td', {}, s.longitude || '-'),
+					E('td', {}, [
+						E('button', {
+							'class': 'cbi-button cbi-button-apply',
+							'click': function() { applyPreset(sid); }
+						}, _('Apply')),
+						' ',
+						E('button', {
+							'class': 'cbi-button cbi-button-remove',
+							'click': function() { removePreset(sid); }
+						}, _('Delete'))
+					])
+				]));
+			});
+		}
+		renderPresets();
+
+		var addPresetBtn = E('button', {
+			'class': 'cbi-button cbi-button-add',
+			'click': function() {
+				var labelInput = E('input', { 'class': 'cbi-input-text', 'placeholder': _('Label') });
+				var latInput = E('input', { 'class': 'cbi-input-text', 'placeholder': '51.5074' });
+				var lonInput = E('input', { 'class': 'cbi-input-text', 'placeholder': '-0.1278' });
+				ui.showModal(_('Add saved location'), [
+					E('p', {}, [
+						labelInput, ' ', latInput, ' ', lonInput
+					]),
+					E('div', { 'class': 'right' }, [
+						E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
+						' ',
+						E('button', { 'class': 'btn cbi-button-positive', 'click': function() {
+							var label = labelInput.value.trim();
+							var lat = latInput.value.trim();
+							var lon = lonInput.value.trim();
+							if (!label || !lat || !lon) return;
+							var sid = uci.add('wloc-service', 'preset');
+							uci.set('wloc-service', sid, 'label', label);
+							uci.set('wloc-service', sid, 'latitude', lat);
+							uci.set('wloc-service', sid, 'longitude', lon);
+							uci.save('wloc-service').then(function() {
+								return ui.changes.apply(true);
+							}).then(function() {
+								ui.hideModal();
+								renderPresets();
+								notify(_('Applied'), _('Preset saved.'));
+							}).catch(function(e) {
+								notify(_('Apply failed'), String(e));
+							});
+						} }, _('Save'))
+					])
+				]);
+			}
+		}, _('Add saved location'));
+
+		var presetsBox = E('div', { 'class': 'cbi-section' }, [
+			E('h3', {}, _('Saved locations')),
+			presetTable,
+			E('p', {}, addPresetBtn)
+		]);
 
 		/* ---------- 1. Safari certificate ---------- */
 		var certLink = E('a', { 'href': PROFILE_URL, 'target': '_blank', 'id': 'wloc-cert-link' }, PROFILE_URL);
@@ -371,7 +461,7 @@ return view.extend({
 		}, 5);
 
 		return m.render().then(function(formNode) {
-			return E([], [formNode, searchBox, certBox, logBox]);
+			return E([], [formNode, presetsBox, searchBox, certBox, logBox]);
 		});
 	}
 });
