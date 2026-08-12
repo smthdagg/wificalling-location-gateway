@@ -78,6 +78,18 @@ pub fn resolve_geo(
                 })
         })
         .collect();
+    eprintln!(
+        "wloc resolve_geo: expected={expected_exit_ip} candidates={}",
+        candidates.len()
+    );
+    for candidate in &candidates {
+        if candidate.record.validate_at(now_unix).is_err() {
+            eprintln!(
+                "wloc resolve_geo: candidate rejected country={}",
+                candidate.record.country_code
+            );
+        }
+    }
 
     resolve_candidates(expected_exit_ip, &candidates, now_unix)
         .unwrap_or(GeoResolution::Unavailable)

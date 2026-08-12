@@ -10,8 +10,7 @@
 //! [`REQUEST_TIMEOUT`]. A production adapter may switch to an async client.
 
 use std::io::{Read, Write};
-use std::net::IpAddr;
-use std::net::TcpStream;
+use std::net::{IpAddr, TcpStream, ToSocketAddrs};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
@@ -82,7 +81,34 @@ pub fn parse_geo_response(
 /// Perform a bounded HTTP/1.1 GET and return the response body.
 fn http_get(host: &str, port: u16, path: &str) -> Result<Vec<u8>, ProviderFailure> {
     let started = SystemTime::now();
-    let mut stream = TcpStream::connect((host, port)).map_err(|_| ProviderFailure::Unreachable)?;
+    // Resolve every address and prefer IPv4: some networks (notably behind a
+    // NAT where IPv6 has no working path) resolve the provider to IPv6 first
+    // and stall, burning the whole request deadline. Trying addresses in
+    // order with a per-connect timeout reaches the first reachable one.
+    let mut addresses: Vec<std::net::SocketAddr> = (host, port)
+        .to_socket_addrs()
+        .map_err(|_| ProviderFailure::Unreachable)?
+        .collect();
+    if addresses.is_empty() {
+        return Err(ProviderFailure::Unreachable);
+    }
+    addresses.sort_by_key(|address| !address.is_ipv4());
+
+    let mut stream = None;
+    for address in addresses {
+        if SystemTime::now()
+            .duration_since(started)
+            .map(|elapsed| elapsed > REQUEST_TIMEOUT)
+            .unwrap_or(true)
+        {
+            return Err(ProviderFailure::Timeout);
+        }
+        if let Ok(candidate) = TcpStream::connect_timeout(&address, REQUEST_TIMEOUT) {
+            stream = Some(candidate);
+            break;
+        }
+    }
+    let mut stream = stream.ok_or(ProviderFailure::Unreachable)?;
     stream
         .set_read_timeout(Some(REQUEST_TIMEOUT))
         .and_then(|()| stream.set_write_timeout(Some(REQUEST_TIMEOUT)))
@@ -190,7 +216,21 @@ impl GeoProviderRuntime for GeoHttpClient {
         ip: IpAddr,
     ) -> Result<Option<(IpAddr, GeoRecord)>, ProviderFailure> {
         let path = format!("/json/{ip}?fields=status,countryCode,lat,lon,timezone");
-        let body = http_get(&self.host, self.port, &path)?;
-        parse_geo_response(ip, current_unix(), &body)
+        // The TTL starts at the query's start time, not when the response
+        // arrives: a slow connect/read must not push `expires_at` past the
+        // consumer's MAX_GEO_TTL_SECONDS check.
+        let queried_at_unix = current_unix();
+        let body = http_get(&self.host, self.port, &path)
+            .inspect_err(|error| eprintln!("wloc geo lookup {ip}: transport {error:?}"))?;
+        let result = parse_geo_response(ip, queried_at_unix, &body);
+        match &result {
+            Ok(Some((_, record))) => eprintln!(
+                "wloc geo lookup {ip}: ok country={} expires={}",
+                record.country_code, record.expires_at_unix
+            ),
+            Ok(None) => eprintln!("wloc geo lookup {ip}: no data"),
+            Err(error) => eprintln!("wloc geo lookup {ip}: parse {error:?}"),
+        }
+        result
     }
 }

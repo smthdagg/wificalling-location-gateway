@@ -138,8 +138,13 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                 let exit_ip = self
                     .last_exit_ip()
                     .expect("fresh observation always carries an exit IP");
+                eprintln!(
+                    "wloc refresh: probing exit {exit_ip} with {} provider(s)",
+                    self.providers.len()
+                );
                 self.geo_resolution =
                     resolve_geo(&mut self.geo, exit_ip, &self.providers, now_unix);
+                eprintln!("wloc refresh: geo result {:?}", self.geo_resolution);
                 self.publish_patch_target();
             }
             Err(_) => {
