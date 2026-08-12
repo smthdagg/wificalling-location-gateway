@@ -32,6 +32,8 @@ pub struct MitmProxy {
     /// Test hook: override the TCP connect target while keeping the approved
     /// hostname for SNI and the Host header. Production uses hostname:443.
     upstream_override: Option<(String, u16)>,
+    /// Append-only rewrite log (one JSON line per patched response).
+    events_file: Option<std::path::PathBuf>,
 }
 
 impl MitmProxy {
@@ -63,7 +65,14 @@ impl MitmProxy {
             tls_config: Arc::new(server),
             upstream_connector: TlsConnector::from(Arc::new(client)),
             upstream_override: None,
+            events_file: None,
         })
+    }
+
+    /// Record patched WLOC responses to `events_file` (one JSON line each).
+    pub fn with_events_file(mut self, events_file: std::path::PathBuf) -> Self {
+        self.events_file = Some(events_file);
+        self
     }
 
     /// Point the upstream TCP connection at `host:port` instead of the
@@ -101,7 +110,8 @@ impl MitmProxy {
             };
             let (request, mut respond) = request;
             match self.forward_upstream(request, patch).await {
-                Ok(patched_body) => {
+                Ok((original_len, patched_body)) => {
+                    self.append_rewrite_event(patch, original_len, patched_body.len());
                     let mut send = respond
                         .send_response(Response::new(()), patched_body.is_empty())
                         .map_err(|error| MitmProxyError::H2(error.to_string()))?;
@@ -126,7 +136,7 @@ impl MitmProxy {
         &self,
         request: Request<h2::RecvStream>,
         patch: Option<&PatchTarget>,
-    ) -> Result<Vec<u8>, MitmProxyError> {
+    ) -> Result<(usize, Vec<u8>), MitmProxyError> {
         let hostname = approved_host(&request)?;
         let is_wloc =
             request.uri().path() == WLOC_PATH || request.uri().path().ends_with("/clls/wloc");
@@ -180,7 +190,41 @@ impl MitmProxy {
             patched.len(),
             patch.is_some()
         );
-        Ok(patched)
+        Ok((body.len(), patched))
+    }
+
+    /// Append one rewrite event per patched WLOC response.
+    fn append_rewrite_event(&self, patch: Option<&PatchTarget>, before: usize, after: usize) {
+        let Some(events_file) = &self.events_file else {
+            return;
+        };
+        if before == after {
+            return;
+        }
+        let event = serde_json::json!({
+            "type": "rewritten",
+            "time": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+            "latitude": patch.map(|t| t.latitude),
+            "longitude": patch.map(|t| t.longitude),
+            "bytes_before": before,
+            "bytes_after": after,
+        });
+        use std::io::Write as _;
+        let mut line = serde_json::to_string(&event).unwrap_or_default();
+        line.push('\n');
+        if let Some(parent) = events_file.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(events_file)
+        {
+            let _ = file.write_all(line.as_bytes());
+        }
     }
 }
 

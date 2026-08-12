@@ -31,6 +31,7 @@ fn approved_traffic() -> TrafficMeta {
 fn fresh_geo() -> GeoRecord {
     GeoRecord {
         country_code: "GB".to_owned(),
+        city: "London".to_owned(),
         latitude: 51.5074,
         longitude: -0.1278,
         timezone: "Europe/London".to_owned(),

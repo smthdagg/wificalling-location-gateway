@@ -18,6 +18,7 @@ const OTHER_V4: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
 fn valid_record(now_unix: u64, latitude: f64, longitude: f64) -> GeoRecord {
     GeoRecord {
         country_code: "US".to_owned(),
+        city: "Ashburn".to_owned(),
         latitude,
         longitude,
         timezone: "America/Los_Angeles".to_owned(),

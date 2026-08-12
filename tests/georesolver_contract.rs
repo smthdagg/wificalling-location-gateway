@@ -13,6 +13,7 @@ fn exit_ip() -> IpAddr {
 fn london() -> GeoRecord {
     GeoRecord {
         country_code: "GB".to_owned(),
+        city: "London".to_owned(),
         latitude: 51.5074,
         longitude: -0.1278,
         timezone: "Europe/London".to_owned(),
@@ -68,6 +69,7 @@ fn invalid_or_wrong_exit_results_are_ignored_and_never_become_default_geo() {
 fn conflicting_valid_providers_are_marked_uncertain() {
     let conflict = GeoRecord {
         country_code: "US".to_owned(),
+        city: "Ashburn".to_owned(),
         latitude: 37.7749,
         longitude: -122.4194,
         timezone: "America/Los_Angeles".to_owned(),
@@ -124,6 +126,7 @@ fn semantic_placeholders_and_excessive_ttl_are_unavailable() {
     for record in [
         GeoRecord {
             country_code: "ZZ".to_owned(),
+            city: "Nowhere".to_owned(),
             ..london()
         },
         GeoRecord {

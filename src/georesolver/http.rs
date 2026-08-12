@@ -52,6 +52,11 @@ pub fn parse_geo_response(
         .get("countryCode")
         .and_then(Value::as_str)
         .ok_or(ProviderFailure::InvalidData)?;
+    let city = value
+        .get("city")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
     let latitude = value
         .get("lat")
         .and_then(Value::as_f64)
@@ -67,6 +72,7 @@ pub fn parse_geo_response(
 
     let record = GeoRecord {
         country_code: country_code.to_owned(),
+        city,
         latitude,
         longitude,
         timezone: timezone.to_owned(),
@@ -215,7 +221,7 @@ impl GeoProviderRuntime for GeoHttpClient {
         _provider: ProviderRef,
         ip: IpAddr,
     ) -> Result<Option<(IpAddr, GeoRecord)>, ProviderFailure> {
-        let path = format!("/json/{ip}?fields=status,countryCode,lat,lon,timezone");
+        let path = format!("/json/{ip}?fields=status,countryCode,regionName,city,lat,lon,timezone");
         // The TTL starts at the query's start time, not when the response
         // arrives: a slow connect/read must not push `expires_at` past the
         // consumer's MAX_GEO_TTL_SECONDS check.

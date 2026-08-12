@@ -8,6 +8,7 @@
 //! is implemented here.
 
 use std::net::IpAddr;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
@@ -86,6 +87,11 @@ pub struct WlocService<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRun
     patch_sink: Option<Arc<Mutex<Option<PatchTarget>>>>,
     /// Location source: follow the node exit (`Auto`) or a manual preset.
     geo_source: GeoSource,
+    /// Root-local status JSON written on every status snapshot (includes GPS
+    /// for the LuCI admin UI; never exposed through the control API).
+    status_file: Option<PathBuf>,
+    /// Append-only usage log (target updates and rewrites).
+    events_file: Option<PathBuf>,
 }
 
 /// How the proxy patch target is chosen.
@@ -116,6 +122,8 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             geo_resolution: GeoResolution::Unavailable,
             patch_sink: None,
             geo_source: GeoSource::Auto,
+            status_file: None,
+            events_file: None,
         }
     }
 
@@ -124,6 +132,14 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     /// decide the coordinates for `/clls/wloc` responses.
     pub fn with_patch_sink(mut self, sink: Arc<Mutex<Option<PatchTarget>>>) -> Self {
         self.patch_sink = Some(sink);
+        self
+    }
+
+    /// Persist a root-local status JSON (with GPS for the admin UI) after
+    /// every status snapshot, and append usage events to `events_file`.
+    pub fn with_state_files(mut self, status_file: PathBuf, events_file: PathBuf) -> Self {
+        self.status_file = Some(status_file);
+        self.events_file = Some(events_file);
         self
     }
 
@@ -170,9 +186,6 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     /// Publish the current patch target: a manual preset when set, otherwise
     /// the freshest Geo record (in Auto mode).
     fn publish_patch_target(&self) {
-        let Some(sink) = &self.patch_sink else {
-            return;
-        };
         let target = match self.geo_source {
             GeoSource::Manual {
                 latitude,
@@ -185,8 +198,104 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                 _ => None,
             },
         };
-        if let Ok(mut guard) = sink.lock() {
-            *guard = target;
+        if let Some(sink) = &self.patch_sink {
+            if let Ok(mut guard) = sink.lock() {
+                *guard = target;
+            }
+        }
+        self.append_target_event(target);
+    }
+
+    /// Append a target-change event to the usage log.
+    fn append_target_event(&self, target: Option<PatchTarget>) {
+        let Some(events_file) = &self.events_file else {
+            return;
+        };
+        let (source, country, city) = match self.geo_source {
+            GeoSource::Manual { .. } => ("manual", None::<&str>, None::<&str>),
+            GeoSource::Auto => (
+                "auto",
+                match &self.geo_resolution {
+                    GeoResolution::Fresh(record) => Some(record.country_code.as_str()),
+                    _ => None,
+                },
+                match &self.geo_resolution {
+                    GeoResolution::Fresh(record) => Some(record.city.as_str()),
+                    _ => None,
+                },
+            ),
+        };
+        let event = serde_json::json!({
+            "type": "target_updated",
+            "time": current_unix(),
+            "source": source,
+            "country_code": country,
+            "city": city,
+            "latitude": target.map(|t| t.latitude),
+            "longitude": target.map(|t| t.longitude),
+        });
+        append_line(events_file, &event);
+    }
+
+    /// Write the root-local status JSON (includes GPS for the admin UI).
+    pub fn write_status_file(&self, inputs: &StatusInputs) {
+        let Some(status_file) = &self.status_file else {
+            return;
+        };
+        let (latitude, longitude) = match &self.geo_resolution {
+            GeoResolution::Fresh(record) => (Some(record.latitude), Some(record.longitude)),
+            _ => (None, None),
+        };
+        let exit_ip = self.last_exit_ip().map(|ip| ip.to_string());
+        let status = serde_json::json!({
+            "generation": inputs.generation,
+            "observed_at": inputs.observed_at_unix,
+            "service_phase": match inputs.service_state.phase() {
+                ServicePhase::Disabled => "disabled",
+                ServicePhase::Starting => "starting",
+                ServicePhase::ReadyPassThrough => "ready_passthrough",
+                ServicePhase::Intercepting => "intercepting",
+                ServicePhase::DegradedPassThrough => "degraded_passthrough",
+                ServicePhase::Draining => "draining",
+            },
+            "geo_source": match self.geo_source {
+                GeoSource::Auto => "auto",
+                GeoSource::Manual { .. } => "manual",
+            },
+            "desired_state": serde_json::to_value(inputs.desired_state).ok(),
+            "exit": {
+                "state": serde_json::to_value(inputs.exit_state).ok(),
+                "ip": exit_ip,
+                "checked_at": inputs.exit_checked_at,
+            },
+            "geo": {
+                "state": serde_json::to_value(inputs.geo_state).ok(),
+                "country_code": match &self.geo_resolution {
+                    GeoResolution::Fresh(record) => Some(record.country_code.clone()),
+                    _ => None,
+                },
+                "city": match &self.geo_resolution {
+                    GeoResolution::Fresh(record) => Some(record.city.clone()),
+                    _ => None,
+                },
+                "latitude": latitude,
+                "longitude": longitude,
+                "timezone": match &self.geo_resolution {
+                    GeoResolution::Fresh(record) => Some(record.timezone.clone()),
+                    _ => None,
+                },
+                "expires_at": inputs.geo_expires_at,
+            },
+            "engine": {
+                "health": serde_json::to_value(inputs.engine_health).ok(),
+            },
+            "assigned_device_configured": inputs.assigned_device_configured,
+        });
+        if let Some(parent) = status_file.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(text) = serde_json::to_string_pretty(&status) {
+            let _ = std::fs::write(status_file, text);
         }
     }
 
@@ -217,6 +326,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             longitude,
         };
         self.publish_patch_target();
+        self.refresh_state_file();
         Ok(())
     }
 
@@ -224,7 +334,15 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     pub fn clear_manual_location(&mut self) -> Result<(), crate::service::dispatch::DispatchError> {
         self.geo_source = GeoSource::Auto;
         self.publish_patch_target();
+        self.refresh_state_file();
         Ok(())
+    }
+
+    /// Refresh the root-local status file immediately so the LuCI UI sees a
+    /// control change without waiting for the next status poll.
+    fn refresh_state_file(&self) {
+        let inputs = self.status_inputs_at(current_unix());
+        self.write_status_file(&inputs);
     }
 
     fn last_exit_ip(&self) -> Option<IpAddr> {
@@ -276,6 +394,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     pub fn status_at(&mut self, now_unix: u64) -> Result<Value, DispatchError> {
         self.refresh_evidence_at(now_unix);
         let inputs = self.status_inputs_at(now_unix);
+        self.write_status_file(&inputs);
         let bytes = encode_status(&inputs).map_err(|_| DispatchError::Unavailable)?;
         serde_json::from_slice(&bytes).map_err(|_| DispatchError::Unavailable)
     }
@@ -344,5 +463,23 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
 
     fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
         self.clear_manual_location()
+    }
+}
+
+/// Append one JSON line to an append-only log file (bounded to avoid
+/// unbounded growth).
+fn append_line(path: &std::path::Path, value: &serde_json::Value) {
+    use std::io::Write as _;
+    let mut line = serde_json::to_string(value).unwrap_or_default();
+    line.push('\n');
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = file.write_all(line.as_bytes());
     }
 }

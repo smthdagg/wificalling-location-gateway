@@ -134,6 +134,7 @@ impl GeoProviderRuntime for StubGeo {
             ip,
             GeoRecord {
                 country_code: self.country_code.clone(),
+                city: "Stub City".to_owned(),
                 latitude: self.latitude,
                 longitude: self.longitude,
                 timezone: "UTC".to_owned(),
@@ -207,11 +208,26 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let mut upstream_roots = rustls::RootCertStore::empty();
     upstream_roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let proxy = MitmProxy::new(&mitm_ca, upstream_roots)?;
+    let proxy =
+        MitmProxy::new(&mitm_ca, upstream_roots)?.with_events_file(std::path::PathBuf::from(
+            std::env::var("WLOC_EVENTS_FILE")
+                .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into()),
+        ));
     let proxy_port: u16 = env_or("WLOC_PROXY_PORT", 8443_u16);
 
     let patch_state = std::sync::Arc::new(std::sync::Mutex::new(None::<PatchTarget>));
-    let service = service.with_patch_sink(std::sync::Arc::clone(&patch_state));
+    let service = service
+        .with_patch_sink(std::sync::Arc::clone(&patch_state))
+        .with_state_files(
+            std::path::PathBuf::from(
+                std::env::var("WLOC_STATUS_FILE")
+                    .unwrap_or_else(|_| "/var/run/wloc-service/status.json".into()),
+            ),
+            std::path::PathBuf::from(
+                std::env::var("WLOC_EVENTS_FILE")
+                    .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into()),
+            ),
+        );
 
     if let Some(parent) = Path::new(&socket_path).parent() {
         std::fs::create_dir_all(parent)?;

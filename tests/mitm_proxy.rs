@@ -163,9 +163,13 @@ async fn wloc_response_is_patched_through_the_proxy() {
 
     // --- proxy in front of the mock upstream ---
     let mitm_ca = CaBundle::generate().unwrap();
+    let events_path =
+        std::env::temp_dir().join(format!("wloc-mitm-events-{}.jsonl", std::process::id()));
+    let _ = std::fs::remove_file(&events_path);
     let proxy = MitmProxy::new(&mitm_ca, upstream_ca.root_store().unwrap())
         .unwrap()
-        .with_upstream_override("127.0.0.1", upstream_port);
+        .with_upstream_override("127.0.0.1", upstream_port)
+        .with_events_file(events_path.clone());
     let proxy_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let proxy_port = proxy_listener.local_addr().unwrap().port();
     let target = PatchTarget::new(LONDON_LAT, LONDON_LON);
@@ -211,6 +215,14 @@ async fn wloc_response_is_patched_through_the_proxy() {
     let lat = extract_wifi_latitude(&body).expect("patched body must parse");
     assert_eq!(lat, coord_to_int(LONDON_LAT));
     assert_ne!(lat, SF_LAT, "original coordinates must be replaced");
+
+    // The rewrite event must be appended to the events file.
+    let events_text = std::fs::read_to_string(&events_path).unwrap_or_default();
+    assert!(
+        events_text.contains("\"type\":\"rewritten\""),
+        "rewrite must be logged"
+    );
+    let _ = std::fs::remove_file(&events_path);
 }
 
 #[tokio::test]

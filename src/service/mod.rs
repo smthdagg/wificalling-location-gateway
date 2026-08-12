@@ -81,6 +81,8 @@ pub struct TrafficMeta {
 #[derive(Clone, Debug, PartialEq)]
 pub struct GeoRecord {
     pub country_code: String,
+    /// City/region name from the provider (UI display only; never in status).
+    pub city: String,
     pub latitude: f64,
     pub longitude: f64,
     pub timezone: String,

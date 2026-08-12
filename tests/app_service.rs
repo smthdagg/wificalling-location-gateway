@@ -32,6 +32,7 @@ fn limits() -> ProbeLimits {
 fn record(now_unix: u64, latitude: f64, longitude: f64) -> GeoRecord {
     GeoRecord {
         country_code: "US".to_owned(),
+        city: "Ashburn".to_owned(),
         latitude,
         longitude,
         timezone: "America/Los_Angeles".to_owned(),
@@ -418,4 +419,50 @@ fn invalid_manual_location_is_rejected() {
         service.set_manual_location(&empty),
         Err(DispatchError::InvalidLocation)
     );
+}
+
+#[test]
+fn status_file_and_target_events_are_written() {
+    let now = 1_000_000;
+    let dir = std::env::temp_dir();
+    let status_path = dir.join("wloc-test-status.json");
+    let events_path = dir.join("wloc-test-events.jsonl");
+    let _ = std::fs::remove_file(&status_path);
+    let _ = std::fs::remove_file(&events_path);
+
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        fresh_probe(),
+        fresh_geo(now),
+    )
+    .with_state_files(status_path.clone(), events_path.clone());
+
+    service.status_at(now).unwrap();
+    // Manual location publishes a target_updated event.
+    let params = RequestParams {
+        query: None,
+        latitude: Some(51.5074),
+        longitude: Some(-0.1278),
+    };
+    service.set_manual_location(&params).unwrap();
+
+    let status_text = std::fs::read_to_string(&status_path).unwrap();
+    let status: serde_json::Value = serde_json::from_str(&status_text).unwrap();
+    assert_eq!(status["geo_source"], "manual");
+    assert!(
+        status["geo"]["latitude"].is_number(),
+        "status file must carry GPS"
+    );
+
+    let events_text = std::fs::read_to_string(&events_path).unwrap();
+    assert!(
+        events_text.contains("target_updated"),
+        "events must record target updates"
+    );
+
+    let _ = std::fs::remove_file(&status_path);
+    let _ = std::fs::remove_file(&events_path);
 }
