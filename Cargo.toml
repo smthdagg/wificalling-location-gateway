@@ -31,6 +31,7 @@ ring = { version = "0.17", features = ["std"] }
 rcgen = { version = "=0.14.9", default-features = false, features = ["ring"] }
 rustls = { version = "=0.23.43", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "=1.0.228", default-features = false, features = ["derive", "std"] }
+socket2 = { version = "0.5", features = ["all"] }
 serde_json = { version = "=1.0.145", default-features = false, features = ["std"] }
 time = { version = "0.3", features = ["std"] }
 tokio = { version = "=1.48.0", default-features = false, features = ["io-util", "macros", "net", "rt", "rt-multi-thread", "time"] }

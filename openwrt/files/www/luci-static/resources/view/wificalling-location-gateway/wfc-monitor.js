@@ -1,7 +1,6 @@
 'use strict';
 'require view';
 'require wificalling-location-gateway.i18n as wlocI18n';
-'require wificalling-location-gateway.tabs as wlocTabs';
 'require fs';
 'require poll';
 'require dom';
@@ -21,7 +20,6 @@ return view.extend({
 
 	render: function(data) {
 		wlocI18n.localizeTabs();
-		wlocTabs.localize();
 		var raw = data[0];
 		var eventsRaw = data[1];
 		var logEnabled = uci.get('wificalling-gateway', 'main', 'log_enabled');

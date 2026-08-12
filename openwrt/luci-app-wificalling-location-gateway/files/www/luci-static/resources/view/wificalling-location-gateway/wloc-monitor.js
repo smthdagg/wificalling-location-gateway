@@ -1,7 +1,6 @@
 'use strict';
 'require view';
 'require wificalling-location-gateway.i18n as wlocI18n';
-'require wificalling-location-gateway.tabs as wlocTabs';
 'require fs';
 'require poll';
 'require dom';
@@ -53,7 +52,6 @@ return view.extend({
 
 	render: function(data) {
 		wlocI18n.localizeTabs();
-		wlocTabs.localize();
 		var status;
 		try { status = JSON.parse(data[0]); } catch (e) { status = {}; }
 		var eventsText = data[1] || '';

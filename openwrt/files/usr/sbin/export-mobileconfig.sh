@@ -71,8 +71,21 @@ uuid2=$(cat /proc/sys/kernel/random/uuid)
     printf '%s\n' '  <integer>1</integer>'
     printf '%s\n' '</dict>'
     printf '%s\n' '</plist>'
-} >"$OUT"
+} >"$OUT.unsigned"
 
-rm -f /tmp/wloc-ca.b64
-echo "export-mobileconfig: profile written to $OUT"
+# CMS-sign the profile with the wloc-service CA itself. iOS trusts the CA
+# from a signed profile in its system trust store, so background processes
+# like locationd accept the MITM leaf certificates too (an unsigned profile
+# works for Safari but locationd rejects the CA with CertificateUnknown).
+if command -v openssl >/dev/null 2>&1 && [ -s "$CA_PEM" ] && [ -s "${CA_PEM%.pem}.key" ]; then
+    openssl cms -sign -binary -nosmimecap -nodetach \
+        -signer "$CA_PEM" -inkey "${CA_PEM%.pem}.key" \
+        -in "$OUT.unsigned" -outform DER -out "$OUT" -md sha256 2>/dev/null \
+        && SIGNED=1
+fi
+if [ "${SIGNED:-0}" != "1" ]; then
+    mv "$OUT.unsigned" "$OUT"
+fi
+rm -f "$OUT.unsigned" /tmp/wloc-ca.b64
+echo "export-mobileconfig: profile written to $OUT (signed=${SIGNED:-0})"
 echo "export-mobileconfig: open on the test iPhone: $CERT_URL"

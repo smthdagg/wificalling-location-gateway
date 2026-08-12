@@ -185,6 +185,21 @@ fn record_proxy_health(health: &std::sync::Mutex<ProxyHealth>, path: &std::path:
     let _ = std::fs::write(path, serde_json::to_string(&snapshot).unwrap_or_default());
 }
 
+/// Bind the MITM proxy listener with the TPROXY transparent flag (Linux).
+/// On non-Linux platforms (dev/test builds) it falls back to a plain bind.
+fn bind_tproxy_listener(port: u16) -> std::io::Result<tokio::net::TcpListener> {
+    let domain = socket2::Domain::IPV4;
+    let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))?;
+    socket.set_reuse_address(true)?;
+    #[cfg(target_os = "linux")]
+    socket.set_ip_transparent(true)?;
+    let addr: std::net::SocketAddr = ([0, 0, 0, 0], port).into();
+    socket.bind(&addr.into())?;
+    socket.listen(1024)?;
+    let std_listener: std::net::TcpListener = socket.into();
+    tokio::net::TcpListener::from_std(std_listener)
+}
+
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let socket_path = std::env::var("WLOC_SOCKET")
         .unwrap_or_else(|_| "/var/run/wloc-service/control.sock".into());
@@ -373,8 +388,12 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let health_path = std::env::var("WLOC_HEALTH_FILE")
         .unwrap_or_else(|_| "/var/run/wloc-service/proxy-health.json".into());
 
-    let proxy_listener =
-        runtime.block_on(tokio::net::TcpListener::bind(("0.0.0.0", proxy_port)))?;
+    // TPROXY listener: IP_TRANSPARENT lets the kernel deliver connections
+    // whose original destination is a remote host (the Apple WLOC IP), so
+    // iOS sees a perfectly normal connection to the Apple server - unlike
+    // REDIRECT, which rewrites the destination to this router and newer iOS
+    // versions answer with RST.
+    let proxy_listener = runtime.block_on(async { bind_tproxy_listener(proxy_port) })?;
     runtime.spawn(async move {
         loop {
             if let Ok((stream, _)) = proxy_listener.accept().await {
