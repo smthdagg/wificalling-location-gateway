@@ -116,22 +116,6 @@ return view.extend({
 		so.option(form.Value, 'manual_lat', _('手动纬度'));
 		so.option(form.Value, 'manual_lon', _('手动经度'));
 
-		/* ---------- 4+5. Current location + GPS (read-only) ---------- */
-		var geoCard = m.section(form.NamedSection, 'main', 'wloc-service');
-		geoCard.anonymous = true;
-		geoCard.title = _('当前定位');
-
-		var geo = status.geo || {};
-		geoCard.option(form.DummyValue, '_country', _('国家/地区')).cfgvalue = function() { return geo.country_code || '-'; };
-		geoCard.option(form.DummyValue, '_city', _('城市')).cfgvalue = function() { return geo.city || '-'; };
-		geoCard.option(form.DummyValue, '_tz', _('时区')).cfgvalue = function() { return geo.timezone || '-'; };
-		geoCard.option(form.DummyValue, '_gps', _('GPS 坐标（纬度 / 经度）')).cfgvalue = function() { return gpsOf(geo); };
-		geoCard.option(form.DummyValue, '_geoState', _('定位状态')).cfgvalue = function() { return geo.state || '-'; };
-		geoCard.option(form.DummyValue, '_observed', _('观测时间')).cfgvalue = function() { return fmtTime(status.observed_at); };
-		geoCard.option(form.DummyValue, '_exit', _('出口 IP')).cfgvalue = function() {
-			return (status.exit && status.exit.ip) ? status.exit.ip : '-';
-		};
-
 		/* ---------- 6. Manual search + coordinate apply ---------- */
 		var queryField = E('input', {
 			'class': 'cbi-input-text',
@@ -361,103 +345,8 @@ return view.extend({
 				]))
 		]);
 
-		/* ---------- 8. Usage log ---------- */
-		var logRows = [];
-		eventsText.split('\n').forEach(function(line) {
-			line = line.trim();
-			if (!line) return;
-			try { logRows.push(JSON.parse(line)); } catch (e) {}
-		});
-		logRows = logRows.slice(-20).reverse();
-
-		var tbody = E('tbody', { 'id': 'wloc-events-body' });
-		var table = E('table', { 'class': 'cbi-section-table' }, [
-			E('thead', {},
-				E('tr', {}, [
-					E('th', {}, _('时间')),
-					E('th', {}, _('事件')),
-					E('th', {}, _('位置')),
-					E('th', {}, _('来源'))
-				])),
-			tbody
-		]);
-
-		function renderEvents() {
-			tbody.innerHTML = '';
-			if (!logRows.length) {
-				tbody.appendChild(E('tr', {}, [ E('td', { 'colspan': 4 }, _('暂无事件。')) ]));
-				return;
-			}
-			logRows.forEach(function(ev) {
-				var where = '-';
-				if (ev.city || ev.country_code)
-					where = (ev.city || '') + (ev.country_code ? ' (' + ev.country_code + ')' : '');
-				else if (ev.latitude != null && ev.longitude != null)
-					where = ev.latitude.toFixed(4) + ', ' + ev.longitude.toFixed(4);
-				tbody.appendChild(E('tr', {}, [
-					E('td', {}, fmtTime(ev.time)),
-					E('td', {}, ev.type || '-'),
-					E('td', {}, where),
-					E('td', {}, ev.source || '-')
-				]));
-			});
-		}
-		renderEvents();
-
-		var logBox = E('div', { 'class': 'cbi-section' }, [
-			E('h3', {}, _('WLOC 使用日志')),
-			table
-		]);
-
-		/* ---------- Live refresh (status + log) ---------- */
-		var ids = {
-			'_phase': 'cbid.wloc-service.main._phase',
-			'_country': 'cbid.wloc-service.main._country',
-			'_city': 'cbid.wloc-service.main._city',
-			'_tz': 'cbid.wloc-service.main._tz',
-			'_gps': 'cbid.wloc-service.main._gps',
-			'_geoState': 'cbid.wloc-service.main._geoState',
-			'_observed': 'cbid.wloc-service.main._observed',
-			'_exit': 'cbid.wloc-service.main._exit'
-		};
-
-		poll.add(function() {
-			return fs.read(STATUS_FILE).then(function(text) {
-				var s;
-				try { s = JSON.parse(text); } catch (e) { return; }
-				var g = s.geo || {};
-				var values = {
-					'_phase': s.service_phase || '-',
-					'_country': g.country_code || '-',
-					'_city': g.city || '-',
-					'_tz': g.timezone || '-',
-					'_gps': gpsOf(g),
-					'_geoState': g.state || '-',
-					'_observed': fmtTime(s.observed_at),
-					'_exit': (s.exit && s.exit.ip) ? s.exit.ip : '-'
-				};
-				for (var key in values) {
-					var el = document.getElementById(ids[key]);
-					if (el) el.value = values[key];
-				}
-			}).catch(function() {});
-		}, 5);
-
-		poll.add(function() {
-			return fs.read(EVENTS_FILE).then(function(text) {
-				var rows = [];
-				text.split('\n').forEach(function(line) {
-					line = line.trim();
-					if (!line) return;
-					try { rows.push(JSON.parse(line)); } catch (e) {}
-				});
-				logRows = rows.slice(-20).reverse();
-				renderEvents();
-			}).catch(function() {});
-		}, 5);
-
 		return m.render().then(function(formNode) {
-			return E([], [formNode, presetsBox, searchBox, certBox, logBox]);
+			return E([], [formNode, searchBox, presetsBox, certBox]);
 		});
 	}
 });

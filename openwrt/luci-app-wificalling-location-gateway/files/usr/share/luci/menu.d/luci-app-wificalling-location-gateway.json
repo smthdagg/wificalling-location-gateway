@@ -12,19 +12,35 @@
     }
   },
   "admin/services/wificalling-location-gateway/wfc": {
-    "title": "Wi-Fi 通话",
+    "title": "Wi-Fi 通话设置",
     "order": 10,
     "action": {
       "type": "view",
       "path": "wificalling-gateway/overview"
     }
   },
-  "admin/services/wificalling-location-gateway/wloc": {
-    "title": "WLOC 定位",
+  "admin/services/wificalling-location-gateway/wfc-monitor": {
+    "title": "Wi-Fi 通话监控与日志",
     "order": 20,
     "action": {
       "type": "view",
+      "path": "wificalling-location-gateway/wfc-monitor"
+    }
+  },
+  "admin/services/wificalling-location-gateway/wloc": {
+    "title": "WLOC 设置",
+    "order": 30,
+    "action": {
+      "type": "view",
       "path": "wificalling-location-gateway/wloc"
+    }
+  },
+  "admin/services/wificalling-location-gateway/wloc-monitor": {
+    "title": "WLOC 监控与日志",
+    "order": 40,
+    "action": {
+      "type": "view",
+      "path": "wificalling-location-gateway/wloc-monitor"
     }
   }
 }
