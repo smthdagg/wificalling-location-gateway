@@ -11,6 +11,7 @@ pub mod georesolver;
 pub mod runtime;
 pub mod service;
 pub mod tls_h2;
+pub mod wloc;
 
 pub const APPROVED_WLOC_HOSTS: [&str; 2] = ["gs-loc.apple.com", "gs-loc-cn.apple.com"];
 pub const MAX_WLOC_BODY_BYTES: u64 = 512 * 1024;
