@@ -60,9 +60,26 @@ pub fn geocode(query: &str) -> Result<(f64, f64), GeocodeError> {
     geocode_at(NOMINATIM_HOST, 443, query)
 }
 
-/// Geocode `query` against `host:port`. Port 443 uses TLS; port 80 uses a
-/// plain HTTP/1.1 GET (used by local mock tests).
-pub fn geocode_at(host: &str, port: u16, query: &str) -> Result<(f64, f64), GeocodeError> {
+/// A geocoding result with the display name of the matched place.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GeoSearchResult {
+    pub city: String,
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+/// Geocode `query` and also return the matched place name (Nominatim
+/// `display_name`), for the "search first, apply later" manual flow.
+pub fn geocode_with_name(query: &str) -> Result<GeoSearchResult, GeocodeError> {
+    geocode_with_name_at(NOMINATIM_HOST, 443, query)
+}
+
+/// Geocode `query` against `host:port`, returning name and coordinates.
+pub fn geocode_with_name_at(
+    host: &str,
+    port: u16,
+    query: &str,
+) -> Result<GeoSearchResult, GeocodeError> {
     let path = format!(
         "/search?q={}&format=json&limit=1&accept-language=en",
         urlencode(query)
@@ -72,7 +89,7 @@ pub fn geocode_at(host: &str, port: u16, query: &str) -> Result<(f64, f64), Geoc
     } else {
         http_get(host, port, &path)?
     };
-    parse_geocode_response(&body)
+    parse_geocode_response_with_name(&body)
 }
 
 /// Parse a Nominatim `format=json` response: an array whose first object
@@ -83,6 +100,31 @@ pub fn parse_geocode_response(body: &[u8]) -> Result<(f64, f64), GeocodeError> {
         .as_array()
         .and_then(|items| items.first())
         .ok_or(GeocodeError::NotFound)?;
+    let (latitude, longitude) = parse_lat_lon(first)?;
+    Ok((latitude, longitude))
+}
+
+/// Like [`parse_geocode_response`], but also extracts the `display_name`.
+pub fn parse_geocode_response_with_name(body: &[u8]) -> Result<GeoSearchResult, GeocodeError> {
+    let value: Value = serde_json::from_slice(body).map_err(|_| GeocodeError::InvalidData)?;
+    let first = value
+        .as_array()
+        .and_then(|items| items.first())
+        .ok_or(GeocodeError::NotFound)?;
+    let (latitude, longitude) = parse_lat_lon(first)?;
+    let city = first
+        .get("display_name")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
+    Ok(GeoSearchResult {
+        city,
+        latitude,
+        longitude,
+    })
+}
+
+fn parse_lat_lon(first: &Value) -> Result<(f64, f64), GeocodeError> {
     let lat = first
         .get("lat")
         .and_then(Value::as_str)
@@ -97,6 +139,21 @@ pub fn parse_geocode_response(body: &[u8]) -> Result<(f64, f64), GeocodeError> {
         return Err(GeocodeError::InvalidData);
     }
     Ok((lat, lon))
+}
+
+/// Geocode `query` against `host:port`. Port 443 uses TLS; port 80 uses a
+/// plain HTTP/1.1 GET (used by local mock tests).
+pub fn geocode_at(host: &str, port: u16, query: &str) -> Result<(f64, f64), GeocodeError> {
+    let path = format!(
+        "/search?q={}&format=json&limit=1&accept-language=en",
+        urlencode(query)
+    );
+    let body = if port == 443 {
+        https_get(host, &path)?
+    } else {
+        http_get(host, port, &path)?
+    };
+    parse_geocode_response(&body)
 }
 
 fn http_get(host: &str, port: u16, path: &str) -> Result<Vec<u8>, GeocodeError> {
@@ -181,6 +238,15 @@ mod tests {
         let body = br#"[{"place_id":1,"lat":"51.5074","lon":"-0.1278","display_name":"London"}]"#;
         let (lat, lon) = parse_geocode_response(body).unwrap();
         assert_eq!((lat, lon), (51.5074, -0.1278));
+    }
+
+    #[test]
+    fn parse_response_with_name_extracts_display_name() {
+        let body = br#"[{"lat":"35.6768601","lon":"139.7638947","display_name":"Tokyo, Japan"}]"#;
+        let result = parse_geocode_response_with_name(body).unwrap();
+        assert_eq!(result.city, "Tokyo, Japan");
+        assert_eq!(result.latitude, 35.6768601);
+        assert_eq!(result.longitude, 139.7638947);
     }
 
     #[test]

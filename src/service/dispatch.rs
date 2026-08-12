@@ -80,6 +80,9 @@ pub trait ServiceDispatch {
     fn set_manual_location(&mut self, params: &RequestParams) -> Result<(), DispatchError>;
     /// Return to automatic node-following location.
     fn clear_manual_location(&mut self) -> Result<(), DispatchError>;
+    /// Geocode a place query and return the city name and coordinates
+    /// without applying them.
+    fn search_location(&mut self, query: &str) -> Result<Value, DispatchError>;
 }
 
 /// Route a decoded request to its handler and return an encoded response frame.
@@ -118,6 +121,15 @@ pub fn dispatch(
         ApiMethod::GeoClear => match service.clear_manual_location() {
             Ok(()) => empty(),
             Err(error) => encode_dispatch_error(request_id, error),
+        },
+        ApiMethod::GeoSearch => match request.params().query.as_deref() {
+            Some(query) if !query.trim().is_empty() => {
+                match service.search_location(query.trim()) {
+                    Ok(value) => encode_result_response(request_id, &value),
+                    Err(error) => encode_dispatch_error(request_id, error),
+                }
+            }
+            _ => encode_dispatch_error(request_id, DispatchError::InvalidLocation),
         },
     }
 }

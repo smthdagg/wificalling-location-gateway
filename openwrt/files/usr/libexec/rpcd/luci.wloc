@@ -35,6 +35,14 @@ call)
 		status|enable|disable|reload|geo-clear)
 			out="$("$CTL" "$method" 2>&1)"
 			;;
+		geo-search)
+			if [ -n "$query" ] && [ "$query" != "null" ]; then
+				out="$("$CTL" geo-search --query "$query" 2>&1)"
+			else
+				echo '{"error":"geo-search 需要 --query 地名"}'
+				exit 1
+			fi
+			;;
 		geo-set)
 			if [ -n "$query" ] && [ "$query" != "null" ]; then
 				out="$("$CTL" geo-set --query "$query" 2>&1)"

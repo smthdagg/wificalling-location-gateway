@@ -44,6 +44,10 @@ impl ServiceDispatch for StubDispatch {
     fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
         Ok(())
     }
+
+    fn search_location(&mut self, _query: &str) -> Result<Value, DispatchError> {
+        Ok(serde_json::json!({ "city": "stub", "latitude": 1.0, "longitude": 2.0 }))
+    }
 }
 
 fn encoded(payload: &[u8]) -> Vec<u8> {

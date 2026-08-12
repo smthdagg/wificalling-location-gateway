@@ -40,6 +40,13 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
         "status" | "enable" | "disable" | "geo-clear" | "reload" => {
             serde_json::json!({})
         }
+        "geo-search" => match parse_geo_set(&args[1..]) {
+            Ok(params) => params,
+            Err(message) => {
+                eprintln!("wloc-ctl: {message}");
+                return 2;
+            }
+        },
         "geo-set" => match parse_geo_set(&args[1..]) {
             Ok(params) => params,
             Err(message) => {
@@ -157,6 +164,7 @@ fn map_wire_method(method: &str) -> Option<&'static str> {
         "reload" => Some("control.reload"),
         "geo-set" => Some("geo.set"),
         "geo-clear" => Some("geo.clear"),
+        "geo-search" => Some("geo.search"),
         _ => None,
     }
 }
@@ -309,6 +317,7 @@ mod tests {
             ("reload", "control.reload"),
             ("geo-set", "geo.set"),
             ("geo-clear", "geo.clear"),
+            ("geo-search", "geo.search"),
         ];
         for (cli, wire) in cases {
             assert_eq!(map_wire_method(cli), Some(wire), "mapping for {cli}");

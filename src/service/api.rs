@@ -23,6 +23,9 @@ pub enum ApiMethod {
     GeoSet,
     /// Return to automatic node-following location.
     GeoClear,
+    /// Geocode a place query and return the city name and coordinates
+    /// without changing the active location ("search first, apply later").
+    GeoSearch,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -144,6 +147,7 @@ pub fn decode_request(frame: &[u8]) -> Result<ApiRequest, ApiErrorCode> {
         "control.reload" => ApiMethod::ControlReload,
         "geo.set" => ApiMethod::GeoSet,
         "geo.clear" => ApiMethod::GeoClear,
+        "geo.search" => ApiMethod::GeoSearch,
         _ => return Err(ApiErrorCode::UnknownMethod),
     };
 

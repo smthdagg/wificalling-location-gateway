@@ -469,6 +469,16 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
     fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
         self.clear_manual_location()
     }
+
+    fn search_location(&mut self, query: &str) -> Result<Value, DispatchError> {
+        let result = crate::georesolver::geocode::geocode_with_name(query)
+            .map_err(|_| DispatchError::InvalidLocation)?;
+        Ok(serde_json::json!({
+            "city": result.city,
+            "latitude": result.latitude,
+            "longitude": result.longitude,
+        }))
+    }
 }
 
 /// Append one JSON line to an append-only log file (bounded to avoid

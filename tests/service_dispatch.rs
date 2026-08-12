@@ -53,6 +53,11 @@ impl ServiceDispatch for RecordedDispatch {
         self.calls.push("geo.clear");
         Ok(())
     }
+
+    fn search_location(&mut self, query: &str) -> Result<Value, DispatchError> {
+        self.calls.push("geo.search");
+        Ok(serde_json::json!({ "city": query, "latitude": 1.0, "longitude": 2.0 }))
+    }
 }
 
 fn decoded(method: &str) -> wificalling_location_gateway::service::api::ApiRequest {
@@ -218,6 +223,43 @@ fn geo_set_and_geo_clear_route_to_their_handlers() {
     let response = dispatch(&request, &mut service).unwrap();
     assert_eq!(service.calls, vec!["geo.set", "geo.clear"]);
     assert!(parse(&response).get("result").is_some());
+}
+
+#[test]
+fn geo_search_returns_the_place_without_applying() {
+    let mut service = RecordedDispatch::ok_status();
+    let frame = serde_json::to_vec(&json!({
+        "api_version": SERVICE_API_ID,
+        "request_id": "search-1",
+        "method": "geo.search",
+        "params": {"query": "Tokyo"}
+    }))
+    .unwrap();
+    let request = decode_request(&frame).unwrap();
+    let response = dispatch(&request, &mut service).unwrap();
+    assert_eq!(service.calls, vec!["geo.search"]);
+    let payload = parse(&response);
+    assert_eq!(payload["result"]["city"], "Tokyo");
+    assert!(payload["result"]["latitude"].is_number());
+}
+
+#[test]
+fn geo_search_without_query_is_rejected() {
+    let mut service = RecordedDispatch::ok_status();
+    let frame = serde_json::to_vec(&json!({
+        "api_version": SERVICE_API_ID,
+        "request_id": "search-2",
+        "method": "geo.search",
+        "params": {}
+    }))
+    .unwrap();
+    let request = decode_request(&frame).unwrap();
+    let response = dispatch(&request, &mut service).unwrap();
+    assert!(
+        service.calls.is_empty(),
+        "handler must not run without a query"
+    );
+    assert_eq!(parse(&response)["error"]["code"], "invalid_location");
 }
 
 #[test]

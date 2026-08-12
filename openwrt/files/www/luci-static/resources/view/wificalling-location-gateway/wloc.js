@@ -22,14 +22,12 @@
 var callCtl = rpc.declare({
 	object: 'luci.wloc',
 	method: 'ctl',
-	params: [ 'method', 'query', 'lat', 'lon' ],
-	expect: { result: true }
+	params: [ 'method', 'query', 'lat', 'lon' ]
 });
 
 var regenProfile = rpc.declare({
 	object: 'luci.wloc',
-	method: 'regen_profile',
-	expect: { result: true }
+	method: 'regen_profile'
 });
 
 var STATUS_FILE = '/var/run/wloc-service/status.json';
@@ -117,6 +115,7 @@ return view.extend({
 		so.option(form.Value, 'manual_lon', _('手动经度'));
 
 		/* ---------- 6. Manual search + coordinate apply ---------- */
+		var searchResult = E('div', { 'class': 'cbi-row', 'id': 'wloc-search-result' });
 		var queryField = E('input', {
 			'class': 'cbi-input-text',
 			'id': 'wloc-search-query',
@@ -130,19 +129,26 @@ return view.extend({
 				var q = document.getElementById('wloc-search-query').value.trim();
 				if (!q) return;
 				this.disabled = true;
-				callCtl('geo-set', q, null, null).then(function(r) {
+				// 先搜索：只返回城市与坐标，不改变当前定位。
+				callCtl('geo-search', q, null, null).then(function(r) {
 					searchBtn.disabled = false;
-					if (r.error) {
-						notify(_('搜索失败'), r.error);
+					var found = r && r.result;
+					if (r.error || !found || found.latitude == null || found.longitude == null) {
+						notify(_('搜索失败'), r.error || _('未找到该地名'));
 						return;
 					}
-					uci.set('wloc-service', 'main', 'geo_source', 'manual');
-					uci.save('wloc-service');
-					ui.changes.apply(true);
-					notify(_('已应用'), _('搜索结果已成为当前生效位置。请在 iPhone 上验证。'));
+					var city = found.city || q;
+					var lat = String(Number(found.latitude).toFixed(6));
+					var lon = String(Number(found.longitude).toFixed(6));
+					document.getElementById('wloc-coord-lat').value = lat;
+					document.getElementById('wloc-coord-lon').value = lon;
+					searchResult.innerHTML = '';
+					searchResult.appendChild(E('p', {}, _('搜索结果：') + city +
+						_('（纬度 ') + lat + _('，经度 ') + lon + _('）') +
+						_('，确认后点击「应用坐标」。')));
 				});
 			}
-		}, _('搜索并应用'));
+		}, _('搜索'));
 
 		var coordLat = E('input', { 'class': 'cbi-input-text', 'id': 'wloc-coord-lat', 'type': 'text', 'placeholder': '51.5074' });
 		var coordLon = E('input', { 'class': 'cbi-input-text', 'id': 'wloc-coord-lon', 'type': 'text', 'placeholder': '-0.1278' });
@@ -178,6 +184,7 @@ return view.extend({
 						[ _('地名'), ' ', _('（在线搜索）') ]),
 					E('div', { 'class': 'cbi-value-field' }, [ queryField, ' ', searchBtn ])
 				])),
+			searchResult,
 			E('div', { 'class': 'cbi-row' },
 				E('div', { 'class': 'cbi-value' }, [
 					E('label', { 'class': 'cbi-value-title' }, _('或直接输入坐标')),
