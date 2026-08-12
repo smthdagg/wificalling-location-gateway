@@ -1,14 +1,36 @@
 # WLOC service configuration
 #
 # The control daemon serves the frozen wloc.service/v1 API on a root-only
-# Unix socket. The runtime adapters (exit probe, Geo provider, nftables
-# redirect) are wired from these options as they land; the redirect path
-# remains explicitly disabled until the Phase 0 gates are closed.
+# Unix socket. Options here are read once at daemon startup:
+#   enabled          module on/off (also runtime control.enable/disable)
+#   geo_source       auto (follow the bound node exit) | manual (fixed preset)
+#   manual_lat/lon   coordinates used when geo_source=manual
+#   node_ref         sing-box node tag to follow (auto mode)
+#   assigned_device  LAN IP of the test device whose node binding is probed
+#   probe_interval   max age of a probe observation before re-probing (seconds)
+#   geo_provider     http (ip-api.com) | stub (deterministic, for staging)
+#   probe_port       local HTTP proxy port used to observe the exit IP
+#
+# Presets below are saved manual locations managed from LuCI; selecting one
+# copies its coordinates into manual_lat/manual_lon and sets geo_source.
 
 config wloc-service 'main'
 	option enabled '1'
+	option geo_source 'auto'
+	option manual_lat '51.5074'
+	option manual_lon '-0.1278'
 	option node_ref 'default'
-	option assigned_device ''
+	option assigned_device '192.168.31.176'
 	option probe_interval '300'
-	option geo_provider 'stub'
-	option country_override ''
+	option geo_provider 'http'
+	option probe_port '18080'
+
+config preset 'london'
+	option label 'London'
+	option latitude '51.5074'
+	option longitude '-0.1278'
+
+config preset 'hong_kong'
+	option label 'Hong Kong'
+	option latitude '22.3193'
+	option longitude '114.1694'

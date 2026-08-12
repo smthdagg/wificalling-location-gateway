@@ -13,6 +13,7 @@ use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use wificalling_location_gateway::app::{WlocService, WlocServiceConfig};
+use wificalling_location_gateway::config::{LocationMode, WlocUciConfig};
 use wificalling_location_gateway::exitprobe::runtime::{ExitProbeRuntime, ProbeFailure};
 use wificalling_location_gateway::exitprobe::{NodeRef, ProbeLimits};
 use wificalling_location_gateway::georesolver::http::GeoHttpClient;
@@ -20,7 +21,9 @@ use wificalling_location_gateway::georesolver::runtime::{GeoProviderRuntime, Pro
 use wificalling_location_gateway::georesolver::ProviderRef;
 use wificalling_location_gateway::mitm::proxy::MitmProxy;
 use wificalling_location_gateway::mitm::CaBundle;
+use wificalling_location_gateway::service::api::RequestParams;
 use wificalling_location_gateway::service::control::{RuntimeControl, RuntimeFailure};
+use wificalling_location_gateway::service::dispatch::ServiceDispatch;
 use wificalling_location_gateway::service::server::ControlServer;
 use wificalling_location_gateway::service::GeoRecord;
 use wificalling_location_gateway::wloc::PatchTarget;
@@ -93,7 +96,9 @@ impl ExitProbeRuntime for StubProbe {
 
 /// Build the exit probe: the real sing-box probe by default (follows the
 /// device's bound node), or the deterministic stub when `WLOC_PROBE=stub`.
-fn build_probe() -> Box<dyn ExitProbeRuntime> {
+/// The probe wiring (assigned device, probe port, node) comes from the UCI
+/// configuration; `WLOC_*` environment variables override it for staging.
+fn build_probe(uci: &WlocUciConfig) -> Box<dyn ExitProbeRuntime> {
     if std::env::var("WLOC_PROBE").as_deref() == Ok("stub") {
         return Box::new(StubProbe {
             exit_ip: env_or("WLOC_STUB_EXIT_IP", IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))),
@@ -102,8 +107,11 @@ fn build_probe() -> Box<dyn ExitProbeRuntime> {
     }
     let device_ip: IpAddr = env_or(
         "WLOC_DEVICE_IP",
-        IpAddr::V4(Ipv4Addr::new(192, 168, 31, 176)),
+        uci.assigned_device
+            .parse()
+            .unwrap_or(IpAddr::V4(Ipv4Addr::new(192, 168, 31, 176))),
     );
+    let probe_port: u16 = env_or("WLOC_PROBE_PORT", uci.probe_port);
     Box::new(
         wificalling_location_gateway::exitprobe::singbox::SingBoxProbe::new(
             std::path::PathBuf::from(
@@ -111,7 +119,7 @@ fn build_probe() -> Box<dyn ExitProbeRuntime> {
                     .unwrap_or_else(|_| "/var/run/wificalling-gateway/sing-box.json".into()),
             ),
             device_ip,
-            env_or("WLOC_PROBE_PORT", 18080_u16),
+            probe_port,
             std::path::PathBuf::from("/tmp/wloc-probe"),
         ),
     )
@@ -148,9 +156,33 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let socket_path = std::env::var("WLOC_SOCKET")
         .unwrap_or_else(|_| "/var/run/wloc-service/control.sock".into());
 
-    // Default to the real Geo HTTP provider; WLOC_GEO_PROVIDER=stub forces
-    // the deterministic stub for offline development.
-    let geo_provider: String = std::env::var("WLOC_GEO_PROVIDER").unwrap_or_else(|_| "http".into());
+    // Persisted configuration from /etc/config/wloc-service (UCI). A missing
+    // file falls back to the defaults so the daemon still runs unconfigured.
+    let uci_path = std::env::var("WLOC_UCI_CONFIG")
+        .unwrap_or_else(|_| wificalling_location_gateway::config::uci::DEFAULT_UCI_PATH.into());
+    let uci = match WlocUciConfig::load(Path::new(&uci_path)) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("wloc-service: {error}; using defaults");
+            WlocUciConfig::default()
+        }
+    };
+    eprintln!(
+        "wloc-service: uci enabled={} geo_source={:?} node={} device={}",
+        uci.enabled,
+        uci.location_mode,
+        uci.node_ref,
+        if uci.assigned_device.is_empty() {
+            "(none)".to_owned()
+        } else {
+            uci.assigned_device.clone()
+        }
+    );
+
+    // Default to the real Geo HTTP provider; geo_provider=stub (UCI or
+    // WLOC_GEO_PROVIDER) forces the deterministic stub for offline work.
+    let geo_provider: String =
+        std::env::var("WLOC_GEO_PROVIDER").unwrap_or_else(|_| uci.geo_provider.clone());
     let geo: Box<dyn GeoProviderRuntime> = if geo_provider == "stub" {
         Box::new(StubGeo {
             country_code: env_or("WLOC_STUB_COUNTRY", "US".to_owned()),
@@ -163,17 +195,18 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let service = WlocService::new(
         StubRuntime,
-        build_probe(),
+        build_probe(&uci),
         geo,
         WlocServiceConfig {
-            node_ref: NodeRef::new("default").expect("static node ref is valid"),
-            providers: vec![ProviderRef::new("stub").expect("static provider ref is valid")],
+            node_ref: NodeRef::new(&uci.node_ref)
+                .unwrap_or_else(|_| NodeRef::new("default").expect("static node ref is valid")),
+            providers: vec![ProviderRef::new("http").expect("static provider ref is valid")],
             probe_limits: ProbeLimits {
-                max_observation_age: Duration::from_secs(300),
+                max_observation_age: Duration::from_secs(uci.probe_interval_secs),
             },
             scope_valid: true,
             ipv6_ready: true,
-            assigned_device_configured: true,
+            assigned_device_configured: !uci.assigned_device.is_empty(),
         },
     );
 
@@ -216,7 +249,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let proxy_port: u16 = env_or("WLOC_PROXY_PORT", 8443_u16);
 
     let patch_state = std::sync::Arc::new(std::sync::Mutex::new(None::<PatchTarget>));
-    let service = service
+    let mut service = service
         .with_patch_sink(std::sync::Arc::clone(&patch_state))
         .with_state_files(
             std::path::PathBuf::from(
@@ -228,6 +261,32 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into()),
             ),
         );
+
+    // Apply the persisted configuration to the control plane before serving:
+    // manual location preset first (so a manual target is already fresh), then
+    // the desired enabled state. Failures are logged, not fatal: the daemon
+    // still serves status and can be steered through the control API.
+    if uci.location_mode == LocationMode::Manual {
+        if let (Some(latitude), Some(longitude)) = (uci.manual_latitude, uci.manual_longitude) {
+            let params = RequestParams {
+                query: None,
+                latitude: Some(latitude),
+                longitude: Some(longitude),
+            };
+            if let Err(error) = service.set_manual_location(&params) {
+                eprintln!("wloc-service: applying manual location failed: {error:?}");
+            }
+        } else {
+            eprintln!(
+                "wloc-service: geo_source=manual but manual_lat/manual_lon unset; keeping auto"
+            );
+        }
+    }
+    if uci.enabled {
+        if let Err(error) = service.enable() {
+            eprintln!("wloc-service: enable failed: {error:?}");
+        }
+    }
 
     if let Some(parent) = Path::new(&socket_path).parent() {
         std::fs::create_dir_all(parent)?;
