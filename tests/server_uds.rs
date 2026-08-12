@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 
+use wificalling_location_gateway::service::api::RequestParams;
 use wificalling_location_gateway::service::api::SERVICE_API_ID;
 use wificalling_location_gateway::service::dispatch::{DispatchError, ServiceDispatch};
 use wificalling_location_gateway::service::server::ControlServer;
@@ -35,6 +36,12 @@ impl ServiceDispatch for StubDispatch {
         Ok(())
     }
     fn reload(&mut self) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn set_manual_location(&mut self, _params: &RequestParams) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
         Ok(())
     }
 }

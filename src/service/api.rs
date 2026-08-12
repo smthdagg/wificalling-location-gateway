@@ -19,6 +19,10 @@ pub enum ApiMethod {
     ControlEnable,
     ControlDisable,
     ControlReload,
+    /// Set a manual location preset (by place query or explicit coordinates).
+    GeoSet,
+    /// Return to automatic node-following location.
+    GeoClear,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -50,11 +54,12 @@ impl ApiErrorCode {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ApiRequest {
     api_version: String,
     request_id: String,
     method: ApiMethod,
+    params: RequestParams,
 }
 
 impl ApiRequest {
@@ -69,6 +74,20 @@ impl ApiRequest {
     pub const fn method(&self) -> ApiMethod {
         self.method
     }
+
+    pub fn params(&self) -> &RequestParams {
+        &self.params
+    }
+}
+
+/// Parameters for a control-API request. Only `geo.set` consumes them.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RequestParams {
+    /// A place query to geocode (e.g. `London, UK`).
+    pub query: Option<String>,
+    /// Explicit WGS84 coordinates for a manual preset.
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -77,12 +96,30 @@ struct WireRequest {
     api_version: String,
     request_id: String,
     method: String,
-    params: EmptyParams,
+    #[serde(default)]
+    params: WireParams,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-struct EmptyParams {}
+struct WireParams {
+    #[serde(default)]
+    query: Option<String>,
+    #[serde(default)]
+    latitude: Option<f64>,
+    #[serde(default)]
+    longitude: Option<f64>,
+}
+
+impl From<WireParams> for RequestParams {
+    fn from(wire: WireParams) -> Self {
+        Self {
+            query: wire.query,
+            latitude: wire.latitude,
+            longitude: wire.longitude,
+        }
+    }
+}
 
 pub fn decode_request(frame: &[u8]) -> Result<ApiRequest, ApiErrorCode> {
     if frame.is_empty() {
@@ -105,14 +142,16 @@ pub fn decode_request(frame: &[u8]) -> Result<ApiRequest, ApiErrorCode> {
         "control.enable" => ApiMethod::ControlEnable,
         "control.disable" => ApiMethod::ControlDisable,
         "control.reload" => ApiMethod::ControlReload,
+        "geo.set" => ApiMethod::GeoSet,
+        "geo.clear" => ApiMethod::GeoClear,
         _ => return Err(ApiErrorCode::UnknownMethod),
     };
-    let EmptyParams {} = wire.params;
 
     Ok(ApiRequest {
         api_version: wire.api_version,
         request_id: wire.request_id,
         method,
+        params: wire.params.into(),
     })
 }
 

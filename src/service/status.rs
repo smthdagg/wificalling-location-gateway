@@ -44,6 +44,15 @@ pub enum GeoState {
     Uncertain,
 }
 
+/// How the proxy patch target is chosen: follow the node exit () or a
+/// fixed manual preset ().
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeoSourceState {
+    Auto,
+    Manual,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StatusInputs {
     pub generation: u64,
@@ -57,6 +66,7 @@ pub struct StatusInputs {
     pub exit_checked_at: Option<u64>,
     pub geo_state: GeoState,
     pub geo_expires_at: Option<u64>,
+    pub geo_source: GeoSourceState,
 }
 
 #[derive(Serialize)]
@@ -70,6 +80,7 @@ struct StatusSnapshot {
     engine: EngineSnapshot,
     exit: ExitSnapshot,
     geo: GeoSnapshot,
+    geo_source: GeoSourceState,
     assigned_device_configured: bool,
     last_error: Option<StatusError>,
 }
@@ -136,6 +147,7 @@ pub fn encode_status(inputs: &StatusInputs) -> Result<Vec<u8>, serde_json::Error
             state: inputs.geo_state,
             expires_at: inputs.geo_expires_at,
         },
+        geo_source: inputs.geo_source,
         assigned_device_configured: inputs.assigned_device_configured,
         last_error: None,
     };

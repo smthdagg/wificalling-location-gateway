@@ -6,6 +6,7 @@
 //! the transactional control path and keep the state machine in sync.
 
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use wificalling_location_gateway::app::{WlocService, WlocServiceConfig};
@@ -13,6 +14,7 @@ use wificalling_location_gateway::exitprobe::runtime::{ExitProbeRuntime, ProbeFa
 use wificalling_location_gateway::exitprobe::{NodeRef, ProbeLimits};
 use wificalling_location_gateway::georesolver::runtime::{GeoProviderRuntime, ProviderFailure};
 use wificalling_location_gateway::georesolver::ProviderRef;
+use wificalling_location_gateway::service::api::RequestParams;
 use wificalling_location_gateway::service::control::{RuntimeControl, RuntimeFailure};
 use wificalling_location_gateway::service::dispatch::{DispatchError, ServiceDispatch};
 use wificalling_location_gateway::service::GeoRecord;
@@ -344,4 +346,76 @@ fn status_never_exposes_coordinates_or_device_material() {
     for forbidden in ["latitude", "longitude", "device_ip", "node-1", "credential"] {
         assert!(!text.contains(forbidden), "leaked field: {forbidden}");
     }
+}
+
+#[test]
+fn manual_location_overrides_auto_patch_target() {
+    let now = 1_000_000;
+    let sink = Arc::new(Mutex::new(None));
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        fresh_probe(),
+        fresh_geo(now),
+    )
+    .with_patch_sink(Arc::clone(&sink));
+
+    // Auto mode publishes the Geo record for the stub exit.
+    service.status_at(now).unwrap();
+    assert!(
+        sink.lock().unwrap().is_some(),
+        "auto mode must publish a target"
+    );
+    assert_eq!(service.status_at(now).unwrap()["geo_source"], "auto");
+
+    // Set a manual preset by explicit coordinates; the sink now publishes it.
+    let params = RequestParams {
+        query: None,
+        latitude: Some(51.5074),
+        longitude: Some(-0.1278),
+    };
+    service.set_manual_location(&params).unwrap();
+    let published = *sink.lock().unwrap();
+    let (lat, lon) = published.map(|t| (t.latitude, t.longitude)).unwrap();
+    assert_eq!((lat, lon), (51.5074, -0.1278));
+    assert_eq!(service.status_at(now).unwrap()["geo_source"], "manual");
+
+    // Clear returns to automatic node-following.
+    service.clear_manual_location().unwrap();
+    assert_eq!(service.status_at(now).unwrap()["geo_source"], "auto");
+}
+
+#[test]
+fn invalid_manual_location_is_rejected() {
+    let now = 1_000_000;
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        fresh_probe(),
+        fresh_geo(now),
+    );
+    // Latitude out of range must be rejected.
+    let bad = RequestParams {
+        query: None,
+        latitude: Some(95.0),
+        longitude: Some(0.0),
+    };
+    assert_eq!(
+        service.set_manual_location(&bad),
+        Err(DispatchError::InvalidLocation)
+    );
+    // Neither a query nor coordinates is invalid.
+    let empty = RequestParams {
+        query: None,
+        latitude: None,
+        longitude: None,
+    };
+    assert_eq!(
+        service.set_manual_location(&empty),
+        Err(DispatchError::InvalidLocation)
+    );
 }

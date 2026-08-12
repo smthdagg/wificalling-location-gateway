@@ -9,7 +9,8 @@
 use serde_json::Value;
 
 use super::api::{
-    encode_error_parts, encode_result_response, ApiMethod, ApiRequest, ResponseEncodeError,
+    encode_error_parts, encode_result_response, ApiMethod, ApiRequest, RequestParams,
+    ResponseEncodeError,
 };
 
 /// Runtime failures surfaced by service handlers. Each variant maps to a
@@ -28,6 +29,8 @@ pub enum DispatchError {
     RuntimeFailure,
     /// The requested information is not currently available.
     Unavailable,
+    /// A manual location could not be resolved or is out of range.
+    InvalidLocation,
 }
 
 impl DispatchError {
@@ -39,6 +42,7 @@ impl DispatchError {
             Self::CleanupUnsafe => "cleanup_unsafe",
             Self::RuntimeFailure => "runtime_failure",
             Self::Unavailable => "unavailable",
+            Self::InvalidLocation => "invalid_location",
         }
     }
 
@@ -46,7 +50,10 @@ impl DispatchError {
         match self {
             Self::EngineUnhealthy | Self::RuntimeFailure => "engine",
             Self::RedirectPresent => "network",
-            Self::InvalidConfig | Self::CleanupUnsafe | Self::Unavailable => "service",
+            Self::InvalidConfig
+            | Self::CleanupUnsafe
+            | Self::Unavailable
+            | Self::InvalidLocation => "service",
         }
     }
 
@@ -58,8 +65,8 @@ impl DispatchError {
     }
 }
 
-/// Abstract service handlers behind the four v1 control methods. Production
-/// adapters implement this against the real OpenWrt runtime; tests use mocks.
+/// Abstract service handlers behind the control methods. Production adapters
+/// implement this against the real OpenWrt runtime; tests use mocks.
 pub trait ServiceDispatch {
     /// Return a coordinate-free status snapshot as a JSON value.
     fn status(&mut self) -> Result<Value, DispatchError>;
@@ -69,6 +76,10 @@ pub trait ServiceDispatch {
     fn disable(&mut self) -> Result<(), DispatchError>;
     /// Reload configuration without changing the redirect state.
     fn reload(&mut self) -> Result<(), DispatchError>;
+    /// Apply a manual location preset (by place query or explicit coordinates).
+    fn set_manual_location(&mut self, params: &RequestParams) -> Result<(), DispatchError>;
+    /// Return to automatic node-following location.
+    fn clear_manual_location(&mut self) -> Result<(), DispatchError>;
 }
 
 /// Route a decoded request to its handler and return an encoded response frame.
@@ -81,27 +92,31 @@ pub fn dispatch(
     service: &mut impl ServiceDispatch,
 ) -> Result<Vec<u8>, ResponseEncodeError> {
     let request_id = request.request_id();
+    let empty =
+        || encode_result_response(request_id, &serde_json::Value::Object(Default::default()));
     match request.method() {
         ApiMethod::StatusGet => match service.status() {
             Ok(value) => encode_result_response(request_id, &value),
             Err(error) => encode_dispatch_error(request_id, error),
         },
         ApiMethod::ControlEnable => match service.enable() {
-            Ok(()) => {
-                encode_result_response(request_id, &serde_json::Value::Object(Default::default()))
-            }
+            Ok(()) => empty(),
             Err(error) => encode_dispatch_error(request_id, error),
         },
         ApiMethod::ControlDisable => match service.disable() {
-            Ok(()) => {
-                encode_result_response(request_id, &serde_json::Value::Object(Default::default()))
-            }
+            Ok(()) => empty(),
             Err(error) => encode_dispatch_error(request_id, error),
         },
         ApiMethod::ControlReload => match service.reload() {
-            Ok(()) => {
-                encode_result_response(request_id, &serde_json::Value::Object(Default::default()))
-            }
+            Ok(()) => empty(),
+            Err(error) => encode_dispatch_error(request_id, error),
+        },
+        ApiMethod::GeoSet => match service.set_manual_location(request.params()) {
+            Ok(()) => empty(),
+            Err(error) => encode_dispatch_error(request_id, error),
+        },
+        ApiMethod::GeoClear => match service.clear_manual_location() {
+            Ok(()) => empty(),
             Err(error) => encode_dispatch_error(request_id, error),
         },
     }

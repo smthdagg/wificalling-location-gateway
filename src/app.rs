@@ -16,6 +16,7 @@ use crate::exitprobe::runtime::{observe_exit, ExitProbeRuntime};
 use crate::exitprobe::{NodeRef, ProbeLimits};
 use crate::georesolver::runtime::{resolve_geo, GeoProviderRuntime};
 use crate::georesolver::{GeoResolution, ProviderRef};
+use crate::service::api::RequestParams;
 use crate::service::control::{
     disable as control_disable, enable as control_enable, ControlError, RuntimeControl,
 };
@@ -83,6 +84,17 @@ pub struct WlocService<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRun
     geo_resolution: GeoResolution,
     /// Shared proxy patch target, updated whenever fresh Geo evidence lands.
     patch_sink: Option<Arc<Mutex<Option<PatchTarget>>>>,
+    /// Location source: follow the node exit (`Auto`) or a manual preset.
+    geo_source: GeoSource,
+}
+
+/// How the proxy patch target is chosen.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GeoSource {
+    /// Follow the node exit: resolve Geo for the observed exit IP.
+    Auto,
+    /// Use a fixed manual preset.
+    Manual { latitude: f64, longitude: f64 },
 }
 
 impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<R, P, G> {
@@ -103,6 +115,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             exit_evidence: ExitEvidence::None,
             geo_resolution: GeoResolution::Unavailable,
             patch_sink: None,
+            geo_source: GeoSource::Auto,
         }
     }
 
@@ -154,18 +167,64 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
         }
     }
 
-    /// Publish the freshest Geo record as the proxy patch target, if a sink
-    /// was attached and a Fresh record is available.
+    /// Publish the current patch target: a manual preset when set, otherwise
+    /// the freshest Geo record (in Auto mode).
     fn publish_patch_target(&self) {
         let Some(sink) = &self.patch_sink else {
             return;
         };
-        let GeoResolution::Fresh(record) = &self.geo_resolution else {
-            return;
+        let target = match self.geo_source {
+            GeoSource::Manual {
+                latitude,
+                longitude,
+            } => Some(PatchTarget::new(latitude, longitude)),
+            GeoSource::Auto => match &self.geo_resolution {
+                GeoResolution::Fresh(record) => {
+                    Some(PatchTarget::new(record.latitude, record.longitude))
+                }
+                _ => None,
+            },
         };
         if let Ok(mut guard) = sink.lock() {
-            *guard = Some(PatchTarget::new(record.latitude, record.longitude));
+            *guard = target;
         }
+    }
+
+    /// The current location source, for the status snapshot.
+    pub fn geo_source(&self) -> GeoSource {
+        self.geo_source
+    }
+
+    /// Apply a manual location preset: a place query is geocoded online, or an
+    /// explicit WGS84 coordinate pair is accepted directly.
+    pub fn set_manual_location(
+        &mut self,
+        params: &crate::service::api::RequestParams,
+    ) -> Result<(), crate::service::dispatch::DispatchError> {
+        let (latitude, longitude) = match (&params.query, params.latitude, params.longitude) {
+            (Some(query), None, None) if !query.trim().is_empty() => {
+                crate::georesolver::geocode::geocode(query.trim())
+                    .map_err(|_| crate::service::dispatch::DispatchError::InvalidLocation)?
+            }
+            (None, Some(latitude), Some(longitude)) => (latitude, longitude),
+            _ => return Err(crate::service::dispatch::DispatchError::InvalidLocation),
+        };
+        if !(-90.0..=90.0).contains(&latitude) || !(-180.0..=180.0).contains(&longitude) {
+            return Err(crate::service::dispatch::DispatchError::InvalidLocation);
+        }
+        self.geo_source = GeoSource::Manual {
+            latitude,
+            longitude,
+        };
+        self.publish_patch_target();
+        Ok(())
+    }
+
+    /// Return to automatic node-following location.
+    pub fn clear_manual_location(&mut self) -> Result<(), crate::service::dispatch::DispatchError> {
+        self.geo_source = GeoSource::Auto;
+        self.publish_patch_target();
+        Ok(())
     }
 
     fn last_exit_ip(&self) -> Option<IpAddr> {
@@ -206,6 +265,10 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             exit_checked_at,
             geo_state,
             geo_expires_at,
+            geo_source: match self.geo_source {
+                GeoSource::Auto => crate::service::status::GeoSourceState::Auto,
+                GeoSource::Manual { .. } => crate::service::status::GeoSourceState::Manual,
+            },
         }
     }
 
@@ -273,5 +336,13 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
         // Configuration reload is a later concern; the redirect state is
         // intentionally untouched here.
         Ok(())
+    }
+
+    fn set_manual_location(&mut self, params: &RequestParams) -> Result<(), DispatchError> {
+        self.set_manual_location(params)
+    }
+
+    fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
+        self.clear_manual_location()
     }
 }

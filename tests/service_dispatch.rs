@@ -5,7 +5,7 @@
 //! stable error envelopes; success wraps the result payload.
 
 use serde_json::{json, Value};
-use wificalling_location_gateway::service::api::{decode_request, SERVICE_API_ID};
+use wificalling_location_gateway::service::api::{decode_request, RequestParams, SERVICE_API_ID};
 use wificalling_location_gateway::service::dispatch::{dispatch, DispatchError, ServiceDispatch};
 
 struct RecordedDispatch {
@@ -44,6 +44,14 @@ impl ServiceDispatch for RecordedDispatch {
     fn reload(&mut self) -> Result<(), DispatchError> {
         self.calls.push("reload");
         self.reload_result
+    }
+    fn set_manual_location(&mut self, _params: &RequestParams) -> Result<(), DispatchError> {
+        self.calls.push("geo.set");
+        Ok(())
+    }
+    fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
+        self.calls.push("geo.clear");
+        Ok(())
     }
 }
 
@@ -182,4 +190,63 @@ fn status_handler_error_returns_an_error_envelope_not_a_result() {
     let value = parse(&response);
     assert_eq!(value["error"]["code"], "unavailable");
     assert!(value.get("result").is_none());
+}
+
+#[test]
+fn geo_set_and_geo_clear_route_to_their_handlers() {
+    let mut service = RecordedDispatch::ok_status();
+    let frame = serde_json::to_vec(&json!({
+        "api_version": SERVICE_API_ID,
+        "request_id": "geo-1",
+        "method": "geo.set",
+        "params": {"query": "London, UK"}
+    }))
+    .unwrap();
+    let request = decode_request(&frame).unwrap();
+    let response = dispatch(&request, &mut service).unwrap();
+    assert_eq!(service.calls, vec!["geo.set"]);
+    assert!(parse(&response).get("result").is_some());
+
+    let frame = serde_json::to_vec(&json!({
+        "api_version": SERVICE_API_ID,
+        "request_id": "geo-2",
+        "method": "geo.clear",
+        "params": {}
+    }))
+    .unwrap();
+    let request = decode_request(&frame).unwrap();
+    let response = dispatch(&request, &mut service).unwrap();
+    assert_eq!(service.calls, vec!["geo.set", "geo.clear"]);
+    assert!(parse(&response).get("result").is_some());
+}
+
+#[test]
+fn geo_set_with_coordinates_decodes_params() {
+    let frame = serde_json::to_vec(&json!({
+        "api_version": SERVICE_API_ID,
+        "request_id": "geo-3",
+        "method": "geo.set",
+        "params": {"latitude": 51.5074, "longitude": -0.1278}
+    }))
+    .unwrap();
+    let request = decode_request(&frame).unwrap();
+    let params = request.params();
+    assert_eq!(params.latitude, Some(51.5074));
+    assert_eq!(params.longitude, Some(-0.1278));
+    assert_eq!(params.query, None);
+}
+
+#[test]
+fn geo_set_unknown_params_are_rejected() {
+    let frame = serde_json::to_vec(&json!({
+        "api_version": SERVICE_API_ID,
+        "request_id": "geo-4",
+        "method": "geo.set",
+        "params": {"unexpected": true}
+    }))
+    .unwrap();
+    assert_eq!(
+        decode_request(&frame),
+        Err(wificalling_location_gateway::service::api::ApiErrorCode::MalformedRequest)
+    );
 }

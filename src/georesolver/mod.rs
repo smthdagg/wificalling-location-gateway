@@ -3,6 +3,7 @@
 //! Provider network adapters are intentionally separate. Invalid, conflicting,
 //! expired, or wrong-exit data never creates a fallback coordinate.
 
+pub mod geocode;
 pub mod http;
 pub mod runtime;
 

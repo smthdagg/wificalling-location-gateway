@@ -1,6 +1,6 @@
 use wificalling_location_gateway::service::state::ServiceState;
 use wificalling_location_gateway::service::status::{
-    encode_status, DesiredState, EngineHealth, ExitState, GeoState, StatusInputs,
+    encode_status, DesiredState, EngineHealth, ExitState, GeoSourceState, GeoState, StatusInputs,
 };
 
 fn disabled_inputs() -> StatusInputs {
@@ -16,6 +16,7 @@ fn disabled_inputs() -> StatusInputs {
         exit_checked_at: None,
         geo_state: GeoState::Unavailable,
         geo_expires_at: None,
+        geo_source: GeoSourceState::Auto,
     }
 }
 
@@ -25,7 +26,7 @@ fn disabled_status_matches_the_frozen_coordinate_free_contract() {
 
     assert_eq!(
         String::from_utf8(encoded).expect("status is UTF-8 JSON"),
-        r#"{"api_version":"wloc.service/v1","generation":7,"observed_at":123,"desired_state":"disabled","service_phase":"disabled","safety":{"redirect_present":false,"watchdog_armed":false,"scope_valid":false,"ipv6_ready":false,"response_mode":"forward_original"},"engine":{"health":"stopped","uptime_seconds":0},"exit":{"state":"unknown","checked_at":null},"geo":{"state":"unavailable","expires_at":null},"assigned_device_configured":false,"last_error":null}"#
+        r#"{"api_version":"wloc.service/v1","generation":7,"observed_at":123,"desired_state":"disabled","service_phase":"disabled","safety":{"redirect_present":false,"watchdog_armed":false,"scope_valid":false,"ipv6_ready":false,"response_mode":"forward_original"},"engine":{"health":"stopped","uptime_seconds":0},"exit":{"state":"unknown","checked_at":null},"geo":{"state":"unavailable","expires_at":null},"geo_source":"auto","assigned_device_configured":false,"last_error":null}"#
     );
 }
 
@@ -43,6 +44,7 @@ fn default_status_cannot_expose_device_or_location_material() {
         exit_checked_at: Some(u64::MAX),
         geo_state: GeoState::Fresh,
         geo_expires_at: Some(u64::MAX),
+        geo_source: GeoSourceState::Manual,
     })
     .expect("bounded status must encode");
     let status = String::from_utf8(encoded).expect("status is UTF-8 JSON");
