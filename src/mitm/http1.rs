@@ -14,7 +14,7 @@ use tokio_rustls::client::TlsStream;
 use crate::mitm::proxy::MitmProxyError;
 
 /// Hop-by-hop headers stripped from the forwarded request.
-const HOP_BY_HOP: [&str; 7] = [
+const HOP_BY_HOP: [&str; 8] = [
     "connection",
     "proxy-connection",
     "keep-alive",
@@ -22,6 +22,7 @@ const HOP_BY_HOP: [&str; 7] = [
     "upgrade",
     "te",
     "host",
+    "content-length",
 ];
 
 /// Upper bound for the whole HTTP/1.1 response (headers + body).

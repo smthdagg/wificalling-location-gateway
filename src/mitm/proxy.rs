@@ -148,6 +148,7 @@ impl MitmProxy {
                 ));
             }
         }
+        eprintln!("wloc proxy: request body {} bytes", request_body.len());
 
         let (connect_host, connect_port) = match &self.upstream_override {
             Some((host, port)) => (host.clone(), *port),
