@@ -3,6 +3,7 @@
 'require fs';
 'require poll';
 'require dom';
+'require ui';
 
 // WLOC 监控与日志：当前生效定位信息（含 GPS）+ 定位替换事件日志。
 // 定位拦截设置见 "WLOC 设置" 页。
@@ -86,7 +87,7 @@ return view.extend({
 				if (!line) return;
 				try { rows.push(JSON.parse(line)); } catch (e) {}
 			});
-			return rows.slice(-50).reverse();
+			return rows.slice(-20).reverse();
 		}
 		function logRows(events) {
 			return events.map(function(ev) {
@@ -103,8 +104,23 @@ return view.extend({
 				]);
 			});
 		}
-		function renderLog(text) { dom.content(logBody, logRows(parseEvents(text))); }
+		var logCount = E('span', {}, String(parseEvents(eventsText).length));
+		function renderLog(text) { dom.content(logBody, logRows(parseEvents(text))); dom.content(logCount, String(parseEvents(text).length)); }
 		renderLog(eventsText);
+
+		var clearLog = E('button', { class: 'btn cbi-button-negative', click: function() {
+			ui.showModal(_('清空 WLOC 使用日志？'), [E('p', {}, _('此操作将清空 WLOC 定位事件的本地历史记录。定位拦截设置不受影响。')),
+				E('div', { class: 'right' }, [E('button', { class: 'btn', click: ui.hideModal }, _('取消')),
+				E('button', { class: 'btn cbi-button-negative', click: function() {
+					fs.write(EVENTS_FILE, '').then(function() {
+						renderLog('');
+						ui.hideModal();
+						ui.addNotification(null, E('p', {}, _('WLOC 使用日志已清空。')), 'info');
+					}).catch(function(err) {
+						ui.addNotification(null, E('p', {}, _('无法清空日志：') + ' ' + err.message), 'error');
+					});
+				} }, _('清空日志'))])]);
+		} }, _('清空日志'));
 
 		/* ---------- 轮询刷新 ---------- */
 		poll.add(function() {
@@ -128,6 +144,7 @@ return view.extend({
 			E('div', { 'class': 'cbi-section' }, [
 				E('h3', {}, _('WLOC 使用日志')),
 				E('p', {}, _('记录每次定位目标更新（时间、目标位置、来源 自动/手动）。不记录原始 WLOC 响应内容。')),
+				E('p', {}, [_('记录数：') + ' ', logCount, ' ', clearLog]),
 				E('table', { class: 'table' }, [
 					E('tr', { class: 'tr table-titles' }, [_('时间'), _('事件'), _('位置'), _('来源')].map(function(x) { return E('th', { class: 'th' }, x); })),
 					logBody

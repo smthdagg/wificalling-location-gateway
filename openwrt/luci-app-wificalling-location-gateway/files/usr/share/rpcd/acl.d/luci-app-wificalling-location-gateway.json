@@ -4,7 +4,8 @@
     "read": {
       "ubus": {
         "luci.wloc": [
-          "*"
+          "ctl",
+          "regen_profile"
         ],
         "file": [
           "read"
@@ -19,13 +20,20 @@
         ],
         "/var/run/wloc-service/events.jsonl": [
           "read"
+        ],
+        "/tmp/run/wloc-service/status.json": [
+          "read"
+        ],
+        "/tmp/run/wloc-service/events.jsonl": [
+          "read"
         ]
       }
     },
     "write": {
       "ubus": {
         "luci.wloc": [
-          "*"
+          "ctl",
+          "regen_profile"
         ],
         "file": [
           "write"
@@ -33,7 +41,15 @@
       },
       "uci": [
         "wloc-service"
-      ]
+      ],
+      "file": {
+        "/var/run/wloc-service/events.jsonl": [
+          "write"
+        ],
+        "/tmp/run/wloc-service/events.jsonl": [
+          "write"
+        ]
+      }
     }
   }
 }
