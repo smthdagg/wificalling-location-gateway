@@ -8,6 +8,7 @@
 //! is implemented here.
 
 use std::net::IpAddr;
+use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
 
@@ -23,6 +24,7 @@ use crate::service::state::{reduce, ServiceEvent, ServicePhase, ServiceState};
 use crate::service::status::{
     encode_status, DesiredState, EngineHealth, ExitState, GeoState, StatusInputs,
 };
+use crate::wloc::PatchTarget;
 
 fn current_unix() -> u64 {
     std::time::SystemTime::now()
@@ -79,6 +81,8 @@ pub struct WlocService<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRun
     generation: u64,
     exit_evidence: ExitEvidence,
     geo_resolution: GeoResolution,
+    /// Shared proxy patch target, updated whenever fresh Geo evidence lands.
+    patch_sink: Option<Arc<Mutex<Option<PatchTarget>>>>,
 }
 
 impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<R, P, G> {
@@ -98,7 +102,16 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             generation: 0,
             exit_evidence: ExitEvidence::None,
             geo_resolution: GeoResolution::Unavailable,
+            patch_sink: None,
         }
+    }
+
+    /// Attach a shared sink that receives the freshest `PatchTarget` whenever
+    /// the service refreshes its Geo evidence. The MITM proxy reads this to
+    /// decide the coordinates for `/clls/wloc` responses.
+    pub fn with_patch_sink(mut self, sink: Arc<Mutex<Option<PatchTarget>>>) -> Self {
+        self.patch_sink = Some(sink);
+        self
     }
 
     /// Probe and resolve evidence when the cached observation is missing,
@@ -127,11 +140,26 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                     .expect("fresh observation always carries an exit IP");
                 self.geo_resolution =
                     resolve_geo(&mut self.geo, exit_ip, &self.providers, now_unix);
+                self.publish_patch_target();
             }
             Err(_) => {
                 self.exit_evidence = ExitEvidence::Unavailable;
                 self.geo_resolution = GeoResolution::Unavailable;
             }
+        }
+    }
+
+    /// Publish the freshest Geo record as the proxy patch target, if a sink
+    /// was attached and a Fresh record is available.
+    fn publish_patch_target(&self) {
+        let Some(sink) = &self.patch_sink else {
+            return;
+        };
+        let GeoResolution::Fresh(record) = &self.geo_resolution else {
+            return;
+        };
+        if let Ok(mut guard) = sink.lock() {
+            *guard = Some(PatchTarget::new(record.latitude, record.longitude));
         }
     }
 

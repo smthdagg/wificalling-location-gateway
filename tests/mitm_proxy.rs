@@ -165,7 +165,7 @@ async fn wloc_response_is_patched_through_the_proxy() {
                 let proxy = proxy.clone();
                 let target = target;
                 tokio::spawn(async move {
-                    let _ = proxy.handle_connection(stream, &target).await;
+                    let _ = proxy.handle_connection(stream, Some(&target)).await;
                 });
             }
         }
@@ -243,7 +243,7 @@ async fn non_wloc_path_passes_through_unchanged() {
                 let proxy = proxy.clone();
                 let target = target;
                 tokio::spawn(async move {
-                    let _ = proxy.handle_connection(stream, &target).await;
+                    let _ = proxy.handle_connection(stream, Some(&target)).await;
                 });
             }
         }

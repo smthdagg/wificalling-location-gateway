@@ -18,9 +18,12 @@ use wificalling_location_gateway::exitprobe::{NodeRef, ProbeLimits};
 use wificalling_location_gateway::georesolver::http::GeoHttpClient;
 use wificalling_location_gateway::georesolver::runtime::{GeoProviderRuntime, ProviderFailure};
 use wificalling_location_gateway::georesolver::ProviderRef;
+use wificalling_location_gateway::mitm::proxy::MitmProxy;
+use wificalling_location_gateway::mitm::CaBundle;
 use wificalling_location_gateway::service::control::{RuntimeControl, RuntimeFailure};
 use wificalling_location_gateway::service::server::ControlServer;
 use wificalling_location_gateway::service::GeoRecord;
+use wificalling_location_gateway::wloc::PatchTarget;
 
 fn env_or<T>(name: &str, default: T) -> T
 where
@@ -150,12 +153,33 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         },
     );
 
+    // MITM proxy: generate an in-memory CA (keys never persisted), export the
+    // root certificate for installation on the test device, and share the
+    // freshest Geo patch target with the service.
+    let mitm_ca = CaBundle::generate()?;
+    let ca_path =
+        std::env::var("WLOC_CA_CERT").unwrap_or_else(|_| "/var/run/wloc-service/ca.pem".into());
+    if let Some(parent) = Path::new(&ca_path).parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let ca_der = mitm_ca.root_cert_der();
+    std::fs::write(&ca_path, pem_encode(&ca_der))?;
+    eprintln!("MITM root CA exported to {ca_path} (install on the test device)");
+
+    let mut upstream_roots = rustls::RootCertStore::empty();
+    upstream_roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let proxy = MitmProxy::new(&mitm_ca, upstream_roots)?;
+    let proxy_port: u16 = env_or("WLOC_PROXY_PORT", 8443_u16);
+
+    let patch_state = std::sync::Arc::new(std::sync::Mutex::new(None::<PatchTarget>));
+    let service = service.with_patch_sink(std::sync::Arc::clone(&patch_state));
+
     if let Some(parent) = Path::new(&socket_path).parent() {
         std::fs::create_dir_all(parent)?;
     }
     let _ = std::fs::remove_file(&socket_path);
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
     let listener = runtime.block_on(async { tokio::net::UnixListener::bind(&socket_path) })?;
@@ -165,8 +189,37 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))?;
     }
 
+    let proxy_listener =
+        runtime.block_on(tokio::net::TcpListener::bind(("0.0.0.0", proxy_port)))?;
+    runtime.spawn(async move {
+        loop {
+            if let Ok((stream, _)) = proxy_listener.accept().await {
+                let proxy = proxy.clone();
+                let patch_state = std::sync::Arc::clone(&patch_state);
+                tokio::spawn(async move {
+                    let patch = patch_state.lock().ok().and_then(|guard| *guard);
+                    let _ = proxy.handle_connection(stream, patch.as_ref()).await;
+                });
+            }
+        }
+    });
+    eprintln!("wloc-service MITM proxy listening on 0.0.0.0:{proxy_port}");
+
     eprintln!("wloc-service listening on {socket_path}");
     let server = ControlServer::new(service);
     runtime.block_on(server.serve(listener));
     Ok(())
+}
+
+/// PEM-encode a DER certificate for installation on an iOS device.
+fn pem_encode(der: &rustls::pki_types::CertificateDer<'_>) -> String {
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(der.as_ref());
+    let mut pem = String::from("-----BEGIN CERTIFICATE-----\n");
+    for chunk in b64.as_bytes().chunks(64) {
+        pem.push_str(std::str::from_utf8(chunk).expect("base64 is UTF-8"));
+        pem.push('\n');
+    }
+    pem.push_str("-----END CERTIFICATE-----\n");
+    pem
 }

@@ -77,7 +77,7 @@ impl MitmProxy {
     pub async fn handle_connection(
         &self,
         client_tcp: TcpStream,
-        patch: &PatchTarget,
+        patch: Option<&PatchTarget>,
     ) -> Result<(), MitmProxyError> {
         let client_tls = TlsAcceptor::from(Arc::clone(&self.tls_config))
             .accept(client_tcp)
@@ -120,7 +120,7 @@ impl MitmProxy {
     async fn forward_upstream(
         &self,
         request: Request<h2::RecvStream>,
-        patch: &PatchTarget,
+        patch: Option<&PatchTarget>,
     ) -> Result<Vec<u8>, MitmProxyError> {
         let hostname = approved_host(&request)?;
         let is_wloc =
@@ -242,11 +242,11 @@ fn sanitized_forward_request(
 
 /// Patch the response body if this is a `/clls/wloc` response; otherwise, or
 /// on any patch failure, forward the original body unchanged (fail-open).
-fn maybe_patch_body(body: &[u8], is_wloc: bool, patch: &PatchTarget) -> Vec<u8> {
-    if !is_wloc {
-        return body.to_vec();
+fn maybe_patch_body(body: &[u8], is_wloc: bool, patch: Option<&PatchTarget>) -> Vec<u8> {
+    match patch {
+        Some(patch) if is_wloc => patch_wloc_response(body, patch),
+        _ => body.to_vec(),
     }
-    patch_wloc_response(body, patch)
 }
 
 /// Proxy-level failure; the caller treats any error as "close this
