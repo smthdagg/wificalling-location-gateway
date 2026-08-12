@@ -1,7 +1,10 @@
 # WLOC 定位服务与 Wi-Fi Calling Gateway UI 集成方案
 
 Status: design draft (2026-08-12)
-Target: ImmortalWrt 24.10 / LuCI JS, 与 `wificalling-gateway` 1.7 并存。
+Target: ImmortalWrt 24.10 / LuCI JS。
+> 修正：**合并后的整体是一个独立项目**（独立 APK/IPK 插件），不是 WLOC 集成进
+> Wi-Fi Calling。两个模块（Wi-Fi Calling + WLOC 定位）**并列**，共享节点池与
+> 路由方法。插件名用项目名 `wificalling-location-gateway`。
 
 ## 1. 目标与范围
 
@@ -15,7 +18,8 @@ Target: ImmortalWrt 24.10 / LuCI JS, 与 `wificalling-gateway` 1.7 并存。
 5. **完整 GPS 数值**：管理员可见的当前坐标（lat/lon），隐私边界仅限本地管理员。
 6. **手动定位搜索与保存**：搜索地名（Nominatim 在线 geocode）或直接输入坐标，
    保存为手动预设（持久化，重启不丢）。
-7. **与 Wificalling 的 UI 集成**：作为 `wificalling-gateway` 菜单下的子页。
+7. **与 Wificalling 的 UI 集成**：两个模块并列在同一个独立项目的 LuCI 插件里，
+   共享节点选择与设备绑定。
 8. **WLOC 使用日志**：最近的坐标替换事件（时间、目标位置、来源 auto/manual）。
 
 ## 2. 架构总览
@@ -85,11 +89,19 @@ ucode（以 root 运行）调用，权限由 LuCI ACL 控制。
   写 `manual_lat`/`manual_lon`），重启后仍生效。
 - 保存的预设列表：可保存多个（`wloc-service.@preset[n]`），一键选择应用。
 
-### 3.7 与 Wificalling 的 UI 集成
-- 菜单：在 `luci-app-wificalling-gateway` 菜单下新增子页
-  `admin/services/wificalling-gateway/wloc`（title "WLOC Location"，order 40）。
-- 与现有 Settings/Status/Activity Log 并列，风格一致（同 view/form/poll 库）。
-- 可复用 Gateway 的设备/节点选择（选当前测试设备，展示其状态）。
+### 3.7 独立项目与两模块并列
+- **独立插件**：`luci-app-wificalling-location-gateway`（独立 IPK），菜单
+  `admin/services/wificalling-location-gateway`，顶层为合并项目。
+- **两模块并列**（不是子菜单关系）：
+  ```
+  admin/services/wificalling-location-gateway/
+    ├── Wi-Fi Calling     (Settings/Status/Activity Log 现有 1.7 页)
+    ├── WLOC Location     (本方案 8 项功能)
+    └── ...               (未来模块可继续并列)
+  ```
+- **共享层**：同一个 sing-box 节点池、设备绑定列表、路由方法（nftables
+  TPROXY）。WLOC 模块读取现有 `sing-box.json` 的节点/绑定（SingBoxProbe 已
+  复用），UI 显示当前测试设备绑定的节点。
 
 ### 3.8 WLOC 使用日志
 - 新日志：`wloc-service` 追加事件到 `/var/run/wloc-service/events.jsonl`
@@ -136,11 +148,11 @@ config preset 'hong_kong'       # 手动预设（可多个）
 ```
 openwrt/files/etc/config/wloc-service              # UCI 配置
 openwrt/files/usr/sbin/wloc-ctl                    # 控制 CLI (Rust)
-openwrt/files/usr/share/luci/menu.d/luci-app-wloc.json   # 菜单
+openwrt/files/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json  # 菜单(独立插件)
 openwrt/files/usr/share/ucode/luci/controller/wloc.uc    # ucode 后端
 openwrt/files/usr/share/ucode/luci/model/cbi/wloc/*.uc   # CBI model
 openwrt/files/usr/share/rpcd/ucode/luci.wloc.uc    # 运行/控制 RPC
-openwrt/files/www/luci-static/resources/view/wificalling-gateway/wloc.js   # 页面
+openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc.js  # 页面(独立插件目录)
 openwrt/files/www/luci-static/resources/view/wificalling-gateway/wloc-log.js
 openwrt/files/usr/lib/lua/luci/i18n/wloc.zh-cn.po  # 中文
 src/bin/wloc-ctl.rs                                # CLI 源码
