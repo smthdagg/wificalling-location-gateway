@@ -5,7 +5,10 @@
       "ubus": {
         "luci.wloc": [
           "ctl",
-          "regen_profile"
+          "regen_profile",
+          "cert_info",
+          "regen_ca",
+          "restart_service"
         ],
         "file": [
           "read"
@@ -33,7 +36,10 @@
       "ubus": {
         "luci.wloc": [
           "ctl",
-          "regen_profile"
+          "regen_profile",
+          "cert_info",
+          "regen_ca",
+          "restart_service"
         ],
         "file": [
           "write"

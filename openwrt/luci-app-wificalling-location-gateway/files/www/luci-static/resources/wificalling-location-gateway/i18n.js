@@ -72,6 +72,17 @@ var ZH = {
 	'Save failed': '保存失败',
 	'Cancel': '取消',
 	'Save': '保存',
+	'Follow device': '定位跟随设备',
+	'The device whose bound node the WLOC location follows (its exit IP drives auto mode).':
+		'WLOC 定位跟随的设备：自动模式按其绑定节点的出口 IP 定位。',
+	'Device saved. WLOC now follows its node.': '已保存。WLOC 定位将跟随该设备的节点。',
+	'CA info': '证书信息',
+	'Fingerprint': '证书指纹',
+	'Issued at': '签发时间',
+	'Expires at': '到期时间',
+	'Unknown': '未知',
+	'New CA generated. Reinstall and trust it on the iPhone.': '新证书已生成。请在 iPhone 上重新安装描述文件并开启完全信任。',
+	'CA info missing - start the service first.': '证书信息不可用，请先启动 wloc-service。',
 
 	/* ---- wloc monitor ---- */
 	'Current location': '当前定位',

@@ -101,7 +101,28 @@ impl CaBundle {
         let mut distinguished_name = DistinguishedName::new();
         distinguished_name.push(DnType::CommonName, "wloc-service root CA");
         params.distinguished_name = distinguished_name;
+        // A fixed, explicit lifetime (10 years) so the admin UI can show the
+        // expiry date; rcgen's default spans centuries.
+        let now = time::OffsetDateTime::now_utc();
+        params.not_before = now - time::Duration::days(1);
+        params.not_after = now + time::Duration::days(3650);
         Ok(params)
+    }
+
+    /// SHA-256 fingerprint of the root certificate, colon-separated hex.
+    pub fn fingerprint_sha256(&self) -> String {
+        let digest = ring::digest::digest(&ring::digest::SHA256, &self.root_cert_der);
+        digest
+            .as_ref()
+            .iter()
+            .map(|b| format!("{b:02X}"))
+            .collect::<Vec<_>>()
+            .join(":")
+    }
+
+    /// Expiry of the root certificate as a unix timestamp.
+    pub fn not_after_unix(&self) -> i64 {
+        self.root_params.not_after.unix_timestamp()
     }
 
     /// Export the root private key (PKCS#8 DER) and certificate (DER) for

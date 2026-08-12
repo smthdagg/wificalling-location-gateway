@@ -128,6 +128,7 @@ fn build(
             scope_valid: true,
             ipv6_ready: true,
             assigned_device_configured: true,
+            assigned_device: Some("192.168.31.176".to_owned()),
         },
     )
 }
@@ -213,6 +214,7 @@ fn status_reports_uncertain_when_geo_conflicts() {
             scope_valid: true,
             ipv6_ready: true,
             assigned_device_configured: true,
+            assigned_device: Some("192.168.31.176".to_owned()),
         },
     );
 

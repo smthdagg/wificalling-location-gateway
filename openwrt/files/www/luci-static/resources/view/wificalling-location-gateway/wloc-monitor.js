@@ -6,6 +6,7 @@
 'require poll';
 'require dom';
 'require ui';
+'require uci';
 
 // WLOC 监控与日志：当前生效定位信息（含 GPS）+ 定位替换事件日志。
 // 定位拦截设置见 "WLOC 设置" 页。
@@ -45,7 +46,8 @@ return view.extend({
 	load: function() {
 		return Promise.all([
 			L.resolveDefault(fs.read(STATUS_FILE), '{}'),
-			L.resolveDefault(fs.read(EVENTS_FILE), '')
+			L.resolveDefault(fs.read(EVENTS_FILE), ''),
+			uci.load('wificalling-gateway')
 		]);
 	},
 
@@ -61,8 +63,17 @@ return view.extend({
 		var geoBody = E('tbody', {}, []);
 		function geoRows(s) {
 			var g = s.geo || {};
+			var deviceLabel = '-';
+			if (s.assigned_device) {
+				// source_ip is a DynamicList value (array) on the device policy.
+				var dev = uci.sections('wificalling-gateway', 'device').find(function(d) {
+					return (d.source_ip || []).indexOf(s.assigned_device) >= 0;
+				});
+				deviceLabel = (dev && dev.label ? dev.label : s.assigned_device) + ' (' + s.assigned_device + ')';
+			}
 			return [
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Service phase')), E('td', { class: 'td' }, phaseLabel(s.service_phase))]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Follow device')), E('td', { class: 'td' }, deviceLabel)]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Location mode')), E('td', { class: 'td' }, sourceLabel(s.geo_source))]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Country')), E('td', { class: 'td' }, g.country_code || '-')]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('City')), E('td', { class: 'td' }, g.city || '-')]),

@@ -207,6 +207,11 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             scope_valid: true,
             ipv6_ready: true,
             assigned_device_configured: !uci.assigned_device.is_empty(),
+            assigned_device: if uci.assigned_device.is_empty() {
+                None
+            } else {
+                Some(uci.assigned_device.clone())
+            },
         },
     );
 
@@ -220,9 +225,23 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     if let Some(parent) = Path::new(&ca_path).parent() {
         std::fs::create_dir_all(parent)?;
     }
+    let ca_info_path = Path::new(&ca_path).with_extension("info.json");
+    let ca_issued_at_unix;
     let mitm_ca = if Path::new(&ca_key_path).exists() && Path::new(&ca_path).exists() {
         let key_der = std::fs::read(&ca_key_path)?;
         let cert_der = pem_decode(&std::fs::read(&ca_path)?)?;
+        ca_issued_at_unix = read_ca_info(&ca_info_path)
+            .ok()
+            .and_then(|info| info.get("issued_at").and_then(|v| v.as_i64()))
+            .or_else(|| {
+                // Legacy CA without an info file: approximate from the file
+                // modification time.
+                std::fs::metadata(&ca_path)
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+            });
         CaBundle::load(&key_der, &cert_der)?
     } else {
         let ca = CaBundle::generate()?;
@@ -234,10 +253,21 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
         let ca_der = ca.root_cert_der();
         std::fs::write(&ca_path, pem_encode(&ca_der))?;
+        ca_issued_at_unix = Some(now_unix() as i64);
         eprintln!("MITM root CA generated; export at {ca_path} (install on the test device)");
         ca
     };
     eprintln!("MITM root CA ready (private key: {ca_key_path})");
+    // Expose the CA basics (fingerprint, issue/expiry) for the admin UI.
+    let ca_info = serde_json::json!({
+        "fingerprint": mitm_ca.fingerprint_sha256(),
+        "issued_at": ca_issued_at_unix.unwrap_or(now_unix() as i64),
+        "expires_at": mitm_ca.not_after_unix(),
+    });
+    if let Some(parent) = ca_info_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&ca_info_path, serde_json::to_string_pretty(&ca_info)?)?;
 
     let mut upstream_roots = rustls::RootCertStore::empty();
     upstream_roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -326,6 +356,12 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         std::time::Duration::from_secs(uci.probe_interval_secs),
     ));
     Ok(())
+}
+
+/// Read the persisted CA info JSON (fingerprint/issued_at/expires_at).
+fn read_ca_info(path: &Path) -> Result<serde_json::Value, Box<dyn Error + Send + Sync>> {
+    let text = std::fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&text)?)
 }
 
 /// PEM-encode a DER certificate for installation on an iOS device.

@@ -18,6 +18,12 @@ list)
 	json_close_object
 	json_add_object regen_profile
 	json_close_object
+	json_add_object cert_info
+	json_close_object
+	json_add_object regen_ca
+	json_close_object
+	json_add_object restart_service
+	json_close_object
 	json_dump
 	json_cleanup
 	;;
@@ -76,7 +82,7 @@ call)
 	regen_profile)
 		if [ ! -x "$EXPORT" ]; then
 			json_init
-			json_add_string error "export-mobileconfig.sh not installed"
+			json_add_string error "export-mobileconfig.sh 未安装"
 			json_dump
 			exit 1
 		fi
@@ -91,6 +97,39 @@ call)
 		json_add_boolean ok 1
 		json_add_string url "http://192.168.31.1/wloc-ca.mobileconfig"
 		json_dump
+		exit 0
+		;;
+	cert_info)
+		if [ -f /etc/wloc-service/ca.info.json ]; then
+			cat /etc/wloc-service/ca.info.json
+		else
+			echo '{"error":"CA 信息文件不存在，请先启动 wloc-service"}'
+		fi
+		exit 0
+		;;
+	restart_service)
+		/etc/init.d/wloc-service restart >/dev/null 2>&1
+		sleep 2
+		echo '{"ok":true}'
+		exit 0
+		;;
+	regen_ca)
+		# Regenerate the root CA: remove the persisted key/cert, restart the
+		# daemon (procd respawns and creates a fresh CA + info), then rewrite
+		# the iOS profile. The iPhone must reinstall and re-trust the CA.
+		rm -f /etc/wloc-service/ca.pem /etc/wloc-service/ca.key /etc/wloc-service/ca.info.json
+		/etc/init.d/wloc-service restart >/dev/null 2>&1
+		sleep 3
+		if [ ! -f /etc/wloc-service/ca.info.json ]; then
+			json_init
+			json_add_string error "重新生成证书失败，请检查 wloc-service 状态"
+			json_dump
+			exit 1
+		fi
+		if [ -x "$EXPORT" ]; then
+			"$EXPORT" >/dev/null 2>&1
+		fi
+		cat /etc/wloc-service/ca.info.json
 		exit 0
 		;;
 	esac

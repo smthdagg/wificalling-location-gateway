@@ -64,6 +64,9 @@ pub struct WlocServiceConfig {
     pub scope_valid: bool,
     pub ipv6_ready: bool,
     pub assigned_device_configured: bool,
+    /// LAN IP of the device whose node binding the location follows
+    /// (shown in the monitor page).
+    pub assigned_device: Option<String>,
 }
 
 /// Production composition of the control API, runtime adapters, exit probe,
@@ -90,6 +93,8 @@ pub struct WlocService<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRun
     /// Reverse-geocoded place info for the manual preset (country/city/
     /// timezone), so the status file can show them without an auto probe.
     manual_geo: Option<crate::georesolver::geocode::ReverseGeoResult>,
+    /// LAN IP of the device whose node binding the location follows.
+    assigned_device: Option<String>,
     /// Root-local status JSON written on every status snapshot (includes GPS
     /// for the LuCI admin UI; never exposed through the control API).
     status_file: Option<PathBuf>,
@@ -119,6 +124,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             scope_valid: config.scope_valid,
             ipv6_ready: config.ipv6_ready,
             assigned_device_configured: config.assigned_device_configured,
+            assigned_device: config.assigned_device,
             desired_state: DesiredState::Disabled,
             generation: 0,
             exit_evidence: ExitEvidence::None,
@@ -289,6 +295,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                 GeoSource::Auto => "auto",
                 GeoSource::Manual { .. } => "manual",
             },
+            "assigned_device": self.assigned_device.clone(),
             "desired_state": serde_json::to_value(inputs.desired_state).ok(),
             "exit": {
                 "state": serde_json::to_value(inputs.exit_state).ok(),

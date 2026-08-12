@@ -1,7 +1,6 @@
 'use strict';
 'require view';
 'require wificalling-location-gateway.i18n as wlocI18n';
-'require wificalling-location-gateway.tabs as wlocTabs';
 'require form';
 'require fs';
 'require poll';
@@ -32,6 +31,21 @@ var regenProfile = rpc.declare({
 	method: 'regen_profile'
 });
 
+var certInfo = rpc.declare({
+	object: 'luci.wloc',
+	method: 'cert_info'
+});
+
+var regenCa = rpc.declare({
+	object: 'luci.wloc',
+	method: 'regen_ca'
+});
+
+var restartService = rpc.declare({
+	object: 'luci.wloc',
+	method: 'restart_service'
+});
+
 var STATUS_FILE = '/var/run/wloc-service/status.json';
 var EVENTS_FILE = '/var/run/wloc-service/events.jsonl';
 var PROFILE_URL = 'http://192.168.31.1/wloc-ca.mobileconfig';
@@ -55,16 +69,21 @@ return view.extend({
 		return Promise.all([
 			L.resolveDefault(fs.read(STATUS_FILE), '{}'),
 			L.resolveDefault(fs.read(EVENTS_FILE), ''),
-			uci.load('wloc-service')
+			uci.load('wloc-service'),
+			uci.load('wificalling-gateway'),
+			L.resolveDefault(certInfo(), {})
 		]);
 	},
 
 	render: function(data) {
 		wlocI18n.localizeTabs();
-		wlocTabs.localize();
 		var status;
 		try { status = JSON.parse(data[0]); } catch (e) { status = {}; }
 		var eventsText = data[1] || '';
+		var ca = data[4] || {};
+		var deviceList = uci.sections('wificalling-gateway', 'device').map(function(d) {
+			return { ip: d.source_ip, label: d.label || d.source_ip };
+		}).filter(function(d) { return d.ip; });
 
 		var m = new form.Map('wloc-service', wlocI18n.t('WLOC Settings'),
 			wlocI18n.t('WLOC location interception: spoofs the Apple WLOC response so the test device reports the gateway-chosen location. GPS values stay on this router.'));
@@ -117,6 +136,27 @@ return view.extend({
 
 		so.option(form.Value, 'manual_lat', wlocI18n.t('Manual latitude'));
 		so.option(form.Value, 'manual_lon', wlocI18n.t('Manual longitude'));
+
+		var follow = so.option(form.ListValue, 'assigned_device', wlocI18n.t('Follow device'),
+			wlocI18n.t('The device whose bound node the WLOC location follows (its exit IP drives auto mode).'));
+		deviceList.forEach(function(d) {
+			follow.value(d.ip, d.label + ' (' + d.ip + ')');
+		});
+		follow.onchange = function(ev, section_id, value) {
+			uci.set('wloc-service', 'main', 'assigned_device', value);
+			uci.save('wloc-service').then(function() {
+				return ui.changes.apply(true);
+			}).then(function() {
+				return restartService();
+			}).then(function(r) {
+				if (r && r.error)
+					notify(wlocI18n.t('Apply failed'), r.error);
+				else
+					notify(wlocI18n.t('Applied'), wlocI18n.t('Device saved. WLOC now follows its node.'));
+			}).catch(function(e) {
+				notify(wlocI18n.t('Apply failed'), String(e));
+			});
+		};
 
 		/* ---------- 6. Manual search + coordinate apply ---------- */
 		var searchResult = E('div', { 'class': 'cbi-row', 'id': 'wloc-search-result' });
@@ -315,6 +355,33 @@ return view.extend({
 
 		/* ---------- 1. Safari certificate ---------- */
 		var certLink = E('a', { 'href': PROFILE_URL, 'target': '_blank', 'id': 'wloc-cert-link' }, PROFILE_URL);
+		function fmtCertTime(unix) {
+			return unix ? new Date(unix * 1000).toLocaleString() : wlocI18n.t('Unknown');
+		}
+
+		var certInfoBody = E('tbody', { 'id': 'wloc-cert-info' });
+		var certInfoTable = E('table', { 'class': 'cbi-section-table' }, certInfoBody);
+
+		function renderCertInfo(info) {
+			certInfoBody.innerHTML = '';
+			if (!info || info.error || !info.fingerprint) {
+				certInfoBody.appendChild(E('tr', {}, [ E('td', {}, wlocI18n.t('CA info missing - start the service first.')) ]));
+				return;
+			}
+			var rows = [
+				[wlocI18n.t('Fingerprint'), info.fingerprint],
+				[wlocI18n.t('Issued at'), fmtCertTime(info.issued_at)],
+				[wlocI18n.t('Expires at'), fmtCertTime(info.expires_at)]
+			];
+			rows.forEach(function(r) {
+				certInfoBody.appendChild(E('tr', {}, [
+					E('td', { 'class': 'td' }, r[0]),
+					E('td', { 'class': 'td' }, r[1])
+				]));
+			});
+		}
+		renderCertInfo(ca);
+
 		var certText = E('div', { 'class': 'cbi-value' }, [
 			E('label', { 'class': 'cbi-value-title' }, wlocI18n.t('Profile link')),
 			E('div', { 'class': 'cbi-value-field' }, certLink)
@@ -325,21 +392,29 @@ return view.extend({
 			'id': 'wloc-regen-btn',
 			'click': function() {
 				this.disabled = true;
-				regenProfile().then(function(r) {
+				// regen_ca generates a brand-new root CA (not just a profile
+				// repack): the fingerprint changes and the iPhone must
+				// reinstall + re-trust the profile.
+				regenCa().then(function(r) {
 					regenBtn.disabled = false;
 					if (r.error) {
 						notify(wlocI18n.t('Regenerate failed'), r.error);
 						return;
 					}
+					renderCertInfo(r);
 					notify(wlocI18n.t('Profile ready'),
-						wlocI18n.t('On the iPhone open Safari and visit %s, then enable full trust in Settings > General > About > Certificate Trust Settings.')
-							.format(r.url || PROFILE_URL));
+						wlocI18n.t('New CA generated. Reinstall and trust it on the iPhone.'));
+				}).catch(function(e) {
+					regenBtn.disabled = false;
+					notify(wlocI18n.t('Regenerate failed'), String(e));
 				});
 			}
 		}, wlocI18n.t('Regenerate profile'));
 
 		var certBox = E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, wlocI18n.t('Certificate (Safari install)')),
+			E('h4', {}, wlocI18n.t('CA info')),
+			certInfoTable,
 			certText,
 			E('div', { 'class': 'cbi-row' },
 				E('div', { 'class': 'cbi-value' }, [
