@@ -206,7 +206,18 @@ return view.extend({
 		}, 5);
 		this.mapInstance = m;
 		return m.render().then(function(formNode) {
-			var nodes = E([], [formNode, importPanel]);
+			// Place the import panel between the proxy-node table (whose
+			// "Add proxy node" button lives in the table header) and the
+			// device-policy table: insert it right before the device
+			// section. Falls back to after the form if the section cannot
+			// be located.
+			var deviceSection = formNode.querySelector('#cbi-wificalling-gateway-device');
+			var importMoved = false;
+			if (deviceSection && deviceSection.parentNode) {
+				deviceSection.parentNode.insertBefore(importPanel, deviceSection);
+				importMoved = true;
+			}
+			var nodes = importMoved ? E([], [formNode]) : E([], [formNode, importPanel]);
 			// LuCI 24.10's footer "Save" button handler is resolved through
 			// the view prototype during footer creation; on this firmware it
 			// ends up unbound (the button does nothing, while "Save & Apply"
