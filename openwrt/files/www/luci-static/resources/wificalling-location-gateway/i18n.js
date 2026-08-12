@@ -83,6 +83,18 @@ var ZH = {
 	'Unknown': '未知',
 	'New CA generated. Reinstall and trust it on the iPhone.': '新证书已生成。请在 iPhone 上重新安装描述文件并开启完全信任。',
 	'CA info missing - start the service first.': '证书信息不可用，请先启动 wloc-service。',
+	'Certificate trust': '证书信任状态',
+	'Last handshake': '最近握手',
+	'Handshake failed - the iPhone does not trust this CA. Reinstall the profile and enable full trust.': '握手失败——iPhone 未信任当前证书。请重新安装描述文件并开启完全信任。',
+	'Handshake ok': '握手正常',
+	'Verify iPhone certificate': '校验 iPhone 证书',
+	'Paste the fingerprint shown on the iPhone (Settings > General > VPN & Device Management > wloc-service profile).':
+		'粘贴 iPhone 上显示的证书指纹（设置 > 通用 > VPN与设备管理 > wloc-service 描述文件）。',
+	'Verify': '校验',
+	'Match - the iPhone trusts this CA.': '匹配——iPhone 信任当前证书。',
+	'Mismatch - reinstall the profile on the iPhone and enable full trust.': '不匹配——请在 iPhone 上重新安装描述文件并开启完全信任。',
+	'Gateway fingerprint: ': '网关证书指纹：',
+	'No handshakes yet.': '暂无握手记录。',
 
 	/* ---- wloc monitor ---- */
 	'Current location': '当前定位',

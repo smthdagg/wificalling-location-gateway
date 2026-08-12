@@ -152,6 +152,39 @@ impl GeoProviderRuntime for StubGeo {
     }
 }
 
+/// Short-lived proxy handshake health for the admin UI.
+#[derive(Default)]
+struct ProxyHealth {
+    last_ok: Option<u64>,
+    last_failure: Option<u64>,
+    failures: u64,
+}
+
+/// Record a successful or failed proxy connection and rewrite the health
+/// file so the certificate-trust state is visible without log parsing.
+fn record_proxy_health(health: &std::sync::Mutex<ProxyHealth>, path: &std::path::Path, ok: bool) {
+    let mut guard = match health.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let now = now_unix();
+    if ok {
+        guard.last_ok = Some(now);
+    } else {
+        guard.last_failure = Some(now);
+        guard.failures = guard.failures.saturating_add(1);
+    }
+    let snapshot = serde_json::json!({
+        "last_success": guard.last_ok,
+        "last_failure": guard.last_failure,
+        "failures": guard.failures,
+    });
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(path, serde_json::to_string(&snapshot).unwrap_or_default());
+}
+
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let socket_path = std::env::var("WLOC_SOCKET")
         .unwrap_or_else(|_| "/var/run/wloc-service/control.sock".into());
@@ -333,6 +366,13 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))?;
     }
 
+    // Proxy TLS health: whether the test devices trust the current root CA.
+    // A TLS handshake failure (untrusted CA, wrong SNI, ...) is recorded so
+    // the admin UI can show "certificate not trusted" instead of a mystery.
+    let proxy_health = std::sync::Arc::new(std::sync::Mutex::new(ProxyHealth::default()));
+    let health_path = std::env::var("WLOC_HEALTH_FILE")
+        .unwrap_or_else(|_| "/var/run/wloc-service/proxy-health.json".into());
+
     let proxy_listener =
         runtime.block_on(tokio::net::TcpListener::bind(("0.0.0.0", proxy_port)))?;
     runtime.spawn(async move {
@@ -340,9 +380,27 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             if let Ok((stream, _)) = proxy_listener.accept().await {
                 let proxy = proxy.clone();
                 let patch_state = std::sync::Arc::clone(&patch_state);
+                let proxy_health = std::sync::Arc::clone(&proxy_health);
+                let health_path = health_path.clone();
                 tokio::spawn(async move {
                     let patch = patch_state.lock().ok().and_then(|guard| *guard);
-                    let _ = proxy.handle_connection(stream, patch.as_ref()).await;
+                    match proxy.handle_connection(stream, patch.as_ref()).await {
+                        Ok(()) => {
+                            record_proxy_health(
+                                &proxy_health,
+                                std::path::Path::new(&health_path),
+                                true,
+                            );
+                        }
+                        Err(error) => {
+                            eprintln!("wloc proxy: connection error: {error}");
+                            record_proxy_health(
+                                &proxy_health,
+                                std::path::Path::new(&health_path),
+                                false,
+                            );
+                        }
+                    }
                 });
             }
         }

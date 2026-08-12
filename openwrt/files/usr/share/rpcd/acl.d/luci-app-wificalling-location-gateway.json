@@ -8,7 +8,8 @@
           "regen_profile",
           "cert_info",
           "regen_ca",
-          "restart_service"
+          "restart_service",
+          "verify_fingerprint"
         ],
         "file": [
           "read"
@@ -39,7 +40,8 @@
           "regen_profile",
           "cert_info",
           "regen_ca",
-          "restart_service"
+          "restart_service",
+          "verify_fingerprint"
         ],
         "file": [
           "write"

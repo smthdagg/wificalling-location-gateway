@@ -24,6 +24,8 @@ list)
 	json_close_object
 	json_add_object restart_service
 	json_close_object
+	json_add_object verify_fingerprint
+	json_close_object
 	json_dump
 	json_cleanup
 	;;
@@ -104,6 +106,27 @@ call)
 			cat /etc/wloc-service/ca.info.json
 		else
 			echo '{"error":"CA 信息文件不存在，请先启动 wloc-service"}'
+		fi
+		exit 0
+		;;
+	verify_fingerprint)
+		read -r input
+		json_load "$input"
+		json_get_var fingerprint fingerprint
+		if [ -z "$fingerprint" ] || [ "$fingerprint" = "null" ]; then
+			echo '{"error":"请粘贴 iPhone 上显示的证书指纹"}'
+			exit 1
+		fi
+		if [ ! -f /etc/wloc-service/ca.info.json ]; then
+			echo '{"error":"CA 信息文件不存在，请先启动 wloc-service"}'
+			exit 1
+		fi
+		gw="$(jsonfilter -i /etc/wloc-service/ca.info.json -e '@.fingerprint')"
+		norm() { echo "$1" | tr -d ':' | tr '[:lower:]' '[:upper:]' | tr -d ' '; }
+		if [ "$(norm "$fingerprint")" = "$(norm "$gw")" ]; then
+			echo "{\"match\":true,\"gateway_fingerprint\":\"$gw\"}"
+		else
+			echo "{\"match\":false,\"gateway_fingerprint\":\"$gw\"}"
 		fi
 		exit 0
 		;;

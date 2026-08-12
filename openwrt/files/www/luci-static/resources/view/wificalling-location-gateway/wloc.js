@@ -46,6 +46,12 @@ var restartService = rpc.declare({
 	method: 'restart_service'
 });
 
+var verifyFingerprint = rpc.declare({
+	object: 'luci.wloc',
+	method: 'verify_fingerprint',
+	params: [ 'fingerprint' ]
+});
+
 var STATUS_FILE = '/var/run/wloc-service/status.json';
 var EVENTS_FILE = '/var/run/wloc-service/events.jsonl';
 var PROFILE_URL = 'http://192.168.31.1/wloc-ca.mobileconfig';
@@ -71,7 +77,8 @@ return view.extend({
 			L.resolveDefault(fs.read(EVENTS_FILE), ''),
 			uci.load('wloc-service'),
 			uci.load('wificalling-gateway'),
-			L.resolveDefault(certInfo(), {})
+			L.resolveDefault(certInfo(), {}),
+			L.resolveDefault(fs.read('/var/run/wloc-service/proxy-health.json'), '{}')
 		]);
 	},
 
@@ -81,6 +88,8 @@ return view.extend({
 		try { status = JSON.parse(data[0]); } catch (e) { status = {}; }
 		var eventsText = data[1] || '';
 		var ca = data[4] || {};
+		var proxyHealth;
+		try { proxyHealth = JSON.parse(data[5] || '{}'); } catch (e) { proxyHealth = {}; }
 		var deviceList = uci.sections('wificalling-gateway', 'device').map(function(d) {
 			return { ip: d.source_ip, label: d.label || d.source_ip };
 		}).filter(function(d) { return d.ip; });
@@ -411,10 +420,59 @@ return view.extend({
 			}
 		}, wlocI18n.t('Regenerate profile'));
 
+		function fmtHealth(t) {
+			return t ? new Date(t * 1000).toLocaleString() : wlocI18n.t('No handshakes yet.');
+		}
+		var trustText = proxyHealth.last_failure && (!proxyHealth.last_success || proxyHealth.last_failure > proxyHealth.last_success)
+			? wlocI18n.t('Handshake failed - the iPhone does not trust this CA. Reinstall the profile and enable full trust.')
+			: wlocI18n.t('Handshake ok');
+		var trustRow = E('div', { 'class': 'cbi-value' }, [
+			E('label', { 'class': 'cbi-value-title' }, wlocI18n.t('Certificate trust')),
+			E('div', { 'class': 'cbi-value-field' }, E('span', { 'class': proxyHealth.last_failure ? 'alert-message warning' : '' }, trustText))
+		]);
+
+		var fpInput = E('input', { 'class': 'cbi-input-text', 'id': 'wloc-fp-input', 'type': 'text', 'placeholder': 'CD:65:EC:B5:...' });
+		var fpResult = E('span', { 'id': 'wloc-fp-result' });
+		var verifyBtn = E('button', {
+			'class': 'cbi-button cbi-button-apply',
+			'click': function() {
+				var fp = document.getElementById('wloc-fp-input').value.trim();
+				if (!fp) return;
+				this.disabled = true;
+				verifyFingerprint(fp).then(function(r) {
+					verifyBtn.disabled = false;
+					var out;
+					if (r.error)
+						out = E('span', { 'class': 'alert-message error' }, r.error);
+					else if (r.match)
+						out = E('span', { 'class': 'alert-message' }, wlocI18n.t('Match - the iPhone trusts this CA.'));
+					else
+						out = E('span', { 'class': 'alert-message warning' }, wlocI18n.t('Mismatch - reinstall the profile on the iPhone and enable full trust.'));
+					fpResult.innerHTML = '';
+					fpResult.appendChild(out);
+				}).catch(function(e) {
+					verifyBtn.disabled = false;
+					fpResult.innerHTML = '';
+					fpResult.appendChild(E('span', { 'class': 'alert-message error' }, String(e)));
+				});
+			}
+		}, wlocI18n.t('Verify'));
+
+		var verifyRow = E('div', { 'class': 'cbi-value' }, [
+			E('label', { 'class': 'cbi-value-title' }, wlocI18n.t('Verify iPhone certificate')),
+			E('div', { 'class': 'cbi-value-field' }, [
+				fpInput, ' ', verifyBtn, ' ',
+				E('p', {}, wlocI18n.t('Paste the fingerprint shown on the iPhone (Settings > General > VPN & Device Management > wloc-service profile).')),
+				fpResult
+			])
+		]);
+
 		var certBox = E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, wlocI18n.t('Certificate (Safari install)')),
 			E('h4', {}, wlocI18n.t('CA info')),
 			certInfoTable,
+			trustRow,
+			verifyRow,
 			certText,
 			E('div', { 'class': 'cbi-row' },
 				E('div', { 'class': 'cbi-value' }, [
