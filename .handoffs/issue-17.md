@@ -31,6 +31,14 @@ Broadlands from the stub exit) instead of the real one.
   returns to automatic node-following. Both verified live: the iPhone shows
   the manual preset (Hong Kong) and, in auto mode, the node-exit location
   (US Broadlands from the stub exit).
+- **Complete multi-app location coverage verified**: with the test device
+  bound to a node and TPROXY-intercepted by the Gateway, and with Passwall
+  bypassing it (`WFC_GATEWAY_BYPASS`) and no device VPN running, Apple Maps,
+  Amap, and Google Maps all show the node location (UK/London) consistently;
+  web IP lookups show the sing-box node exit (13.40.106.250 AWS London); the
+  iPhone clock follows the patched timezone. Operational requirements are
+  documented in AX6S_DEPLOYMENT.md (device binding, Passwall bypass, no
+  Cloudflare WARP/device VPN, Safari cache clearing).
 - **Real-device WLOC rewrite works**: following the Home-Location-Endpoint
   reference, three protocol fixes made Apple accept the proxied request and
   the rewrite land:

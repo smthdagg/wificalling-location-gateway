@@ -90,6 +90,37 @@ to the local proxy port. No other traffic is touched.
   own table are cleaned by the redirect removal and a daemon restart always
   re-loads the persisted CA.
 
+## Verified end-to-end (AX6S, 2026-08-12)
+
+The complete chain is verified on the device with an iPhone:
+
+- Apple Maps, Amap, and Google Maps all show the node location (UK / London)
+  consistently.
+- The exit IP seen by web services is the sing-box node exit
+  (13.40.106.250, AWS eu-west-2 London).
+- System network location (WLOC) is rewritten to the target coordinates; the
+  iPhone clock follows the patched timezone once the device reloads it.
+
+Key operational requirements for consistent coverage:
+
+1. **The test device must be bound to a node in the Gateway** and its traffic
+   must be TPROXY-intercepted (`wificalling_gateway` clients4 set). Only then
+   do non-Apple location apps (Amap/Google, which locate by exit IP or by the
+   system location) also follow the node. A device that is not bound falls
+   back to the first enabled node for the probe and its non-WLOC traffic may
+   stay direct.
+2. **Passwall (or any other global proxy) must bypass the test device** so its
+   traffic is not stolen. The Gateway's generated rules add
+   `WFC_GATEWAY_BYPASS` for bound devices; verify with
+   `nft list table inet passwall | grep WFC_GATEWAY_BYPASS`.
+3. **Do not run Cloudflare WARP or any device VPN on the iPhone while
+   testing.** A device VPN encrypts traffic into a tunnel the router cannot
+   TPROXY, so those flows bypass the node and web IP lookups show the VPN
+   exit instead of the node. Clear Safari/DNS caches after toggling.
+4. The `wloc-service` redirect (`wloc_service` table) only intercepts the
+   four Apple WLOC hostnames; everything else is left to the Gateway's
+   sing-box node path.
+
 ## Notes and limits
 
 - The exit probe is currently a stub (`WLOC_STUB_EXIT_IP`, default 8.8.8.8 →
