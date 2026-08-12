@@ -153,18 +153,34 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         },
     );
 
-    // MITM proxy: generate an in-memory CA (keys never persisted), export the
-    // root certificate for installation on the test device, and share the
-    // freshest Geo patch target with the service.
-    let mitm_ca = CaBundle::generate()?;
+    // MITM proxy: load the persisted root CA or generate one and persist it.
+    // The private key stays in root-only on-device storage so iPhone trust
+    // survives daemon restarts; the key is never written to the repository.
     let ca_path =
         std::env::var("WLOC_CA_CERT").unwrap_or_else(|_| "/var/run/wloc-service/ca.pem".into());
+    let ca_key_path =
+        std::env::var("WLOC_CA_KEY").unwrap_or_else(|_| "/var/run/wloc-service/ca.key".into());
     if let Some(parent) = Path::new(&ca_path).parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let ca_der = mitm_ca.root_cert_der();
-    std::fs::write(&ca_path, pem_encode(&ca_der))?;
-    eprintln!("MITM root CA exported to {ca_path} (install on the test device)");
+    let mitm_ca = if Path::new(&ca_key_path).exists() && Path::new(&ca_path).exists() {
+        let key_der = std::fs::read(&ca_key_path)?;
+        let cert_der = pem_decode(&std::fs::read(&ca_path)?)?;
+        CaBundle::load(&key_der, &cert_der)?
+    } else {
+        let ca = CaBundle::generate()?;
+        std::fs::write(&ca_key_path, ca.export_key_der())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&ca_key_path, std::fs::Permissions::from_mode(0o600))?;
+        }
+        let ca_der = ca.root_cert_der();
+        std::fs::write(&ca_path, pem_encode(&ca_der))?;
+        eprintln!("MITM root CA generated; export at {ca_path} (install on the test device)");
+        ca
+    };
+    eprintln!("MITM root CA ready (private key: {ca_key_path})");
 
     let mut upstream_roots = rustls::RootCertStore::empty();
     upstream_roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -222,4 +238,17 @@ fn pem_encode(der: &rustls::pki_types::CertificateDer<'_>) -> String {
     }
     pem.push_str("-----END CERTIFICATE-----\n");
     pem
+}
+
+/// Decode a single PEM certificate block into DER.
+fn pem_decode(pem: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+    use base64::Engine;
+    let text = std::str::from_utf8(pem)?;
+    let body = text
+        .lines()
+        .skip_while(|line| !line.starts_with("-----BEGIN CERTIFICATE-----"))
+        .skip(1)
+        .take_while(|line| !line.starts_with("-----END CERTIFICATE-----"))
+        .collect::<String>();
+    Ok(base64::engine::general_purpose::STANDARD.decode(body)?)
 }

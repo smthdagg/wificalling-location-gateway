@@ -9,6 +9,7 @@ RUST_IMAGE=rust:1.90.0-slim-bookworm@sha256:64232e656c058f4468e8d024e990acff04f0
 RUST_TOOLCHAIN=1.90.0
 RUST_TARGET=aarch64-unknown-linux-musl
 SIZE_LIMIT_BYTES=$((8 * 1024 * 1024))
+BIN_NAME=${OPENWRT_BIN_NAME:-wloc-gateway-spike}
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 if [ "${OPENWRT_CROSS_CACHE_DIR+x}" = x ] && [ -z "$OPENWRT_CROSS_CACHE_DIR" ]; then
@@ -20,7 +21,7 @@ download_dir="$cache_dir/downloads"
 archive="$download_dir/$OPENWRT_TOOLCHAIN_ARCHIVE"
 toolchain_url="https://downloads.openwrt.org/releases/$OPENWRT_VERSION/targets/$OPENWRT_TARGET/$OPENWRT_TOOLCHAIN_ARCHIVE"
 output_dir="$cache_dir/output"
-artifact="$output_dir/wloc-gateway-spike"
+artifact="$output_dir/$BIN_NAME"
 report="$output_dir/report.txt"
 
 fail() {
@@ -144,14 +145,14 @@ docker run --rm --pull never --platform linux/amd64 --network none \
         CC_aarch64_unknown_linux_musl="$linker" \
         AR_aarch64_unknown_linux_musl="$archiver" \
             cargo build --offline --locked --release \
-                --target '"$RUST_TARGET"' --bin wloc-gateway-spike
-        cp /state/target/'"$RUST_TARGET"'/release/wloc-gateway-spike \
-            /state/output/wloc-gateway-spike
-        "$stripper" /state/output/wloc-gateway-spike
+                --target '"$RUST_TARGET"' --bin '"$BIN_NAME"'
+        cp /state/target/'"$RUST_TARGET"'/release/'"$BIN_NAME"' \
+            /state/output/'"$BIN_NAME"'
+        "$stripper" /state/output/'"$BIN_NAME"'
         {
-            "$inspector" -h /state/output/wloc-gateway-spike \
+            "$inspector" -h /state/output/'"$BIN_NAME"' \
                 | sed -n "/Class:/s/^/ELF_HEADER: /p; /Machine:/s/^/ELF_HEADER: /p"
-            needed=$("$inspector" -d /state/output/wloc-gateway-spike \
+            needed=$("$inspector" -d /state/output/'"$BIN_NAME"' \
                 | sed -n "/(NEEDED)/s/^/NEEDED: /p")
             if [ -n "$needed" ]; then
                 printf "%s\n" "$needed"

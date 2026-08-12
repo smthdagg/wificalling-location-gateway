@@ -52,34 +52,68 @@ impl From<rcgen::Error> for MitmError {
 /// A generated root CA with its private key held only in memory.
 pub struct CaBundle {
     root_params: CertificateParams,
-    root_cert: Certificate,
+    root_cert_der: Vec<u8>,
     root_key: KeyPair,
 }
 
 impl CaBundle {
     /// Generate a fresh root CA. Keys exist only in memory for the lifetime of
-    /// this object; nothing is written to disk.
+    /// this object unless explicitly exported for on-device persistence.
     pub fn generate() -> Result<Self, MitmError> {
+        let params = Self::ca_params()?;
+        let root_key = KeyPair::generate()?;
+        let root_cert = params.self_signed(&root_key)?;
+        Ok(Self {
+            root_params: params,
+            root_cert_der: root_cert.der().to_vec(),
+            root_key,
+        })
+    }
+
+    /// Load a persisted root CA from its private key (PKCS#8 DER) and
+    /// certificate (DER). The private key must come from root-only storage on
+    /// the device; it is never written to the repository. The issuer
+    /// parameters are reconstructed to match `generate()` so issued leaves
+    /// chain to the same root certificate and key.
+    pub fn load(key_der: &[u8], cert_der: &[u8]) -> Result<Self, MitmError> {
+        use rcgen::PKCS_ECDSA_P256_SHA256;
+        use rustls::pki_types::PrivatePkcs8KeyDer;
+        let root_key = KeyPair::from_pkcs8_der_and_sign_algo(
+            &PrivatePkcs8KeyDer::from(key_der.to_vec()),
+            &PKCS_ECDSA_P256_SHA256,
+        )
+        .map_err(MitmError::from)?;
+        let root_params = Self::ca_params()?;
+        Ok(Self {
+            root_params,
+            root_cert_der: cert_der.to_vec(),
+            root_key,
+        })
+    }
+
+    /// The issuer parameters shared by `generate()` and `load()` so leaf
+    /// chains validate against both paths.
+    fn ca_params() -> Result<CertificateParams, MitmError> {
         let mut params = CertificateParams::new(Vec::<String>::new())?;
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
         params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
         let mut distinguished_name = DistinguishedName::new();
         distinguished_name.push(DnType::CommonName, "wloc-service root CA");
         params.distinguished_name = distinguished_name;
+        Ok(params)
+    }
 
-        let root_key = KeyPair::generate()?;
-        let root_cert = params.self_signed(&root_key)?;
-        Ok(Self {
-            root_params: params,
-            root_cert,
-            root_key,
-        })
+    /// Export the root private key (PKCS#8 DER) and certificate (DER) for
+    /// on-device persistence. The caller must store the key with root-only
+    /// permissions and never commit it.
+    pub fn export_key_der(&self) -> Vec<u8> {
+        self.root_key.serialize_der()
     }
 
     /// The root CA certificate in DER form, for installation on the test
     /// device as a trusted root. Contains no private key material.
     pub fn root_cert_der(&self) -> CertificateDer<'static> {
-        CertificateDer::from(self.root_cert.der().to_vec())
+        CertificateDer::from(self.root_cert_der.clone())
     }
 
     /// Build a rustls root store containing this CA (used to verify leaf
@@ -213,6 +247,22 @@ mod tests {
         // The DER must parse as a certificate via rustls.
         let mut store = RootCertStore::empty();
         store.add(der).expect("root DER must parse");
+    }
+
+    #[test]
+    fn persisted_ca_round_trips_and_issues_valid_leaves() {
+        let ca = CaBundle::generate().unwrap();
+        let key_der = ca.export_key_der();
+        let cert_der = ca.root_cert_der().as_ref().to_vec();
+
+        let loaded = CaBundle::load(&key_der, &cert_der).unwrap();
+        // The loaded CA exposes the same root certificate.
+        assert_eq!(loaded.root_cert_der().as_ref(), cert_der.as_slice());
+        // It can issue leaves that chain to the persisted root, so iPhone
+        // trust survives a daemon restart that reloads the CA.
+        let hostname = APPROVED_WLOC_HOSTS[0];
+        let leaf = loaded.issue_leaf(hostname).unwrap();
+        verify_leaf(&loaded, &leaf, hostname).expect("loaded CA leaf must validate");
     }
 
     #[test]
