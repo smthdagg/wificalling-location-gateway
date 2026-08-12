@@ -7,7 +7,7 @@
 - Branch: codex/issue-17-wloc-service
 - Checkpoint parent: 273b4579d3e51f0fa3028d412581337f2948e170
 - Snapshot tag: snapshot-2026-08-12-ui-integration
-- Updated at (UTC): 2026-08-12T09:53:57Z
+- Updated at (UTC): 2026-08-12T12:50:00Z
 - Credentials included: no
 
 ## Quick resume (AX6S, token-safe)
@@ -19,17 +19,37 @@
   `geo.clear`.
 - Current mode: auto (follows the .176 bound node, UK). Manual: `geo.set
   {"query":"Hong Kong"}` then trigger iPhone location.
-- Tests: 160+ passing, coverage 80.26%, gates green. All commits pushed.
+- Tests: 160+ passing, coverage 81.10%, gates green. All commits pushed.
 
-## Next (UI integration, design in docs/ui/INTEGRATION_UI.md)
+## Done (UI integration complete, verified on device 2026-08-12)
 
-1. Backend data plane: wloc-service status file + geo country/city +
-   events.jsonl.
-2. `wloc-ctl` CLI (UDS bridge for LuCI ucode).
-3. Independent LuCI plugin `luci-app-wificalling-location-gateway` with
-   Wi-Fi Calling and WLOC modules side by side (shared nodes/bindings).
-4. UCI `/etc/config/wloc-service`; daemon startup init.
-5. On-device verification of the 8 UI features.
+1. ✅ Backend data plane: `status.json` (GPS + geo_source + service_phase),
+   `events.jsonl` usage log, GeoRecord city.
+2. ✅ `wloc-ctl` CLI (UDS bridge for LuCI) — deployed `/usr/sbin/wloc-ctl`.
+3. ✅ Independent LuCI plugin `luci-app-wificalling-location-gateway`:
+   - menu `admin/services/wificalling-location-gateway` with two side-by-side
+     tabs: Wi-Fi Calling (reuses existing views) + WLOC Location (8 features).
+   - RPC backend `/usr/libexec/rpcd/luci.wloc` (shell exec plugin; ucode
+     `child_process` unavailable on this firmware).
+   - ACL `luci-app-wificalling-location-gateway` — file entries MUST include
+     BOTH `/var/run/...` and `/tmp/run/...` (ImmortalWrt realpath).
+4. ✅ UCI `/etc/config/wloc-service` (enabled/geo_source/manual_lat/lon/
+   node_ref/assigned_device/probe_*/geo_provider + presets); daemon startup
+   init reads it.
+5. ✅ 8 features verified in browser on AX6S: CA profile link+regenerate,
+   mode switch (UCI persisted via uci.save + ui.changes.apply; `uci.commit`
+   does not exist), module on/off, geo info, GPS, Tokyo search geocode,
+   Hong Kong preset apply, usage log.
+
+## LuCI 26 gotchas (this firmware)
+
+- `onchange(ev, section_id, value)` — first arg is the event, not section.
+- Persistence: `uci.save(config)` then `ui.changes.apply(true)`; no
+  `uci.commit`.
+- `E(tag, attrs, data)` — one child; wrap multiple children in an array.
+- `form.Button` inside GridSection renders '-' — draw tables manually.
+- Menu index cached in browser sessionStorage; clear after adding menu.d.
+- rpcd exec plugins live in `/usr/libexec/rpcd/` (not rpcd/ucode dir).
 
 ## Objective
 
