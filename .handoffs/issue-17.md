@@ -19,6 +19,12 @@ Broadlands from the stub exit) instead of the real one.
 
 ## Completed
 
+- **Auto mode follows the real node exit**: `SingBoxProbe` reads the
+  Gateway's running sing-box.json, selects the outbound bound to the test
+  device (route rules, with first-non-direct fallback), spins up a temporary
+  sing-box with a local HTTP proxy, and probes the node's real exit IP via an
+  IP echo. Verified live: the auto mode now resolves the UK node exit
+  13.40.106.250 to GB/London (geo fresh), instead of the stub.
 - **Manual/auto location switching verified on the device**: `geo.set`
   accepts a place query (geocoded online via Nominatim) or explicit
   coordinates and publishes the preset to the proxy patch target; `geo.clear`
