@@ -21,6 +21,12 @@ pub const SERVICE_API_VERSION: u16 = 1;
 const MAX_CONNECTIONS: u16 = 32;
 const MAX_FAILURE_GRACE: Duration = Duration::from_secs(30);
 const MAX_GEO_TTL_SECONDS: u64 = 3_600;
+/// Tolerated offset between the record's production time and the consumer's
+/// clock. The sing-box exit probe and provider lookup can take several
+/// seconds, so a freshly produced record may legitimately carry an expiry a
+/// little beyond `MAX_GEO_TTL_SECONDS` when validated against an earlier
+/// snapshot timestamp.
+const MAX_GEO_TTL_GRACE_SECONDS: u64 = 300;
 const ISO_3166_ALPHA2: &str = concat!(
     "ADAEAFAGAIALAMAOARAQASATAUAWAXAZBABBBDBEBFBGBHBIBJBLBMBNBOBQBRBSBTBVBWBYBZ",
     "CACCCDCFCGCHCICKCLCMCNCOCRCUCVCWCXCYCZDEDJDKDMDODZECEEEGEHERESETFIFJFKFMFOFR",
@@ -126,7 +132,9 @@ impl GeoRecord {
         if !valid_timezone {
             return Err(GeoValidationError::InvalidTimezone);
         }
-        if self.expires_at_unix <= now_unix || self.expires_at_unix - now_unix > MAX_GEO_TTL_SECONDS
+        if self.expires_at_unix <= now_unix
+            || self.expires_at_unix.saturating_sub(now_unix)
+                > MAX_GEO_TTL_SECONDS + MAX_GEO_TTL_GRACE_SECONDS
         {
             return Err(GeoValidationError::Expired);
         }
