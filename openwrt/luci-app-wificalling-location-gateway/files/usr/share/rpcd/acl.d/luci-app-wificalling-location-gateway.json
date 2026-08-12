@@ -1,0 +1,21 @@
+{
+	"luci-app-wificalling-location-gateway": {
+		"description": "Grant access to the Wi-Fi Calling & WLOC location gateway admin pages",
+		"read": {
+			"ubus": {
+				"luci.wloc": [ "*" ]
+			},
+			"uci": [ "wloc-service" ],
+			"file": {
+				"/var/run/wloc-service/status.json": [ "read" ],
+				"/var/run/wloc-service/events.jsonl": [ "read" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"luci.wloc": [ "*" ]
+			},
+			"uci": [ "wloc-service" ]
+		}
+	}
+}

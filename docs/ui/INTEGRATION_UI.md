@@ -146,15 +146,18 @@ config preset 'hong_kong'       # 手动预设（可多个）
 ## 6. 文件清单（实现计划）
 
 ```
-openwrt/files/etc/config/wloc-service              # UCI 配置
+openwrt/files/etc/config/wloc-service              # UCI 配置（含 geo_source/manual/presets）
 openwrt/files/usr/sbin/wloc-ctl                    # 控制 CLI (Rust)
-openwrt/files/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json  # 菜单(独立插件)
-openwrt/files/usr/share/ucode/luci/controller/wloc.uc    # ucode 后端
-openwrt/files/usr/share/ucode/luci/model/cbi/wloc/*.uc   # CBI model
-openwrt/files/usr/share/rpcd/ucode/luci.wloc.uc    # 运行/控制 RPC
-openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc.js  # 页面(独立插件目录)
-openwrt/files/www/luci-static/resources/view/wificalling-gateway/wloc-log.js
-openwrt/files/usr/lib/lua/luci/i18n/wloc.zh-cn.po  # 中文
+openwrt/files/usr/sbin/export-mobileconfig.sh      # Safari 证书描述文件生成
+openwrt/Makefile                                   # wloc-service + wloc-ctl 包
+openwrt/luci-app-wificalling-location-gateway/     # 独立 LuCI 插件包
+  Makefile                                         # luci.mk 打包
+  files/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json  # 菜单(两模块并列)
+  files/usr/share/rpcd/acl.d/luci-app-wificalling-location-gateway.json   # ACL
+  files/usr/share/rpcd/ucode/luci.wloc.uc          # RPC 后端（白名单调 wloc-ctl）
+  files/www/luci-static/resources/view/wificalling-location-gateway/wloc.js  # WLOC 页面(8 功能)
+  files/usr/lib/lua/luci/i18n/wificalling-location-gateway.zh-cn.po  # 中文
+src/config/uci.rs                                  # daemon 启动读 UCI
 src/bin/wloc-ctl.rs                                # CLI 源码
 docs/ui/INTEGRATION_UI.md                          # 本文档
 ```
