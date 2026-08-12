@@ -87,6 +87,9 @@ pub struct WlocService<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRun
     patch_sink: Option<Arc<Mutex<Option<PatchTarget>>>>,
     /// Location source: follow the node exit (`Auto`) or a manual preset.
     geo_source: GeoSource,
+    /// Reverse-geocoded place info for the manual preset (country/city/
+    /// timezone), so the status file can show them without an auto probe.
+    manual_geo: Option<crate::georesolver::geocode::ReverseGeoResult>,
     /// Root-local status JSON written on every status snapshot (includes GPS
     /// for the LuCI admin UI; never exposed through the control API).
     status_file: Option<PathBuf>,
@@ -122,6 +125,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             geo_resolution: GeoResolution::Unavailable,
             patch_sink: None,
             geo_source: GeoSource::Auto,
+            manual_geo: None,
             status_file: None,
             events_file: None,
         }
@@ -248,7 +252,16 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             GeoSource::Manual {
                 latitude,
                 longitude,
-            } => (Some(*latitude), Some(*longitude), None, None, None),
+            } => {
+                let manual = self.manual_geo.as_ref();
+                (
+                    Some(*latitude),
+                    Some(*longitude),
+                    manual.map(|m| m.country_code.clone()),
+                    manual.map(|m| m.city.clone()),
+                    manual.map(|m| m.timezone.clone()),
+                )
+            }
             GeoSource::Auto => match &self.geo_resolution {
                 GeoResolution::Fresh(record) => (
                     Some(record.latitude),
@@ -330,6 +343,10 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             latitude,
             longitude,
         };
+        // Best-effort reverse geocode so the monitor page can show country/
+        // city/timezone for the manual preset. Failure keeps the previous
+        // place info (or none) - the coordinates themselves are authoritative.
+        self.manual_geo = crate::georesolver::geocode::reverse_geocode(latitude, longitude).ok();
         self.publish_patch_target();
         self.refresh_state_file();
         Ok(())
@@ -338,6 +355,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     /// Return to automatic node-following location.
     pub fn clear_manual_location(&mut self) -> Result<(), crate::service::dispatch::DispatchError> {
         self.geo_source = GeoSource::Auto;
+        self.manual_geo = None;
         self.publish_patch_target();
         self.refresh_state_file();
         Ok(())

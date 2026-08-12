@@ -62,7 +62,7 @@ return view.extend({
 		try { status = JSON.parse(data[0]); } catch (e) { status = {}; }
 		var eventsText = data[1] || '';
 
-		var m = new form.Map('wloc-service', _('Wi-Fi Calling 与 WLOC 网关'),
+		var m = new form.Map('wloc-service', _('WLOC 设置'),
 			_('WLOC 定位拦截：改写 Apple WLOC 响应，使测试设备上报网关指定的位置。GPS 数值只保留在本路由器上。'));
 
 		/* ---------- 3. Module on/off switch ---------- */

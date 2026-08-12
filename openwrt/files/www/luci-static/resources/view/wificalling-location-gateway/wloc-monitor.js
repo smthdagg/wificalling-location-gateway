@@ -21,16 +21,10 @@ function gpsOf(geo) {
 		? geo.latitude.toFixed(6) + ' / ' + geo.longitude.toFixed(6) : '-';
 }
 
+// Service phase is a technical status: keep the raw English values
+// (intercepting / disabled / ...) as-is.
 function phaseLabel(phase) {
-	switch (phase) {
-		case 'disabled': return _('已禁用');
-		case 'starting': return _('启动中');
-		case 'ready_passthrough': return _('就绪（透传）');
-		case 'intercepting': return _('拦截中');
-		case 'degraded_passthrough': return _('降级（透传）');
-		case 'draining': return _('排空中');
-		default: return phase || '-';
-	}
+	return phase || '-';
 }
 
 function sourceLabel(v) {

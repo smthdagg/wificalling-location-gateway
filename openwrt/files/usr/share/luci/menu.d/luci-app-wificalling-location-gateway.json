@@ -1,6 +1,6 @@
 {
   "admin/services/wificalling-location-gateway": {
-    "title": "Wi-Fi 通话与 WLOC 定位",
+    "title": "WifiCalling&Wloc Gateway",
     "order": 71,
     "action": {
       "type": "firstchild"
