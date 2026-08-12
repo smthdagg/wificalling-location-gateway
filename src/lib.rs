@@ -8,6 +8,7 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 pub mod app;
 pub mod exitprobe;
 pub mod georesolver;
+pub mod mitm;
 pub mod runtime;
 pub mod service;
 pub mod tls_h2;
