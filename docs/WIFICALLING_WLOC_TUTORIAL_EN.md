@@ -1,140 +1,219 @@
 # Wi‑Fi Calling & WLOC Complete User Guide
 
-This guide applies to an OpenWrt or ImmortalWrt gateway that combines Wi‑Fi Calling Gateway 1.7 with the router-side WLOC service. It starts after the software has been installed and the LuCI pages are available.
+This guide applies to an OpenWrt or ImmortalWrt gateway combining Wi‑Fi Calling Gateway 1.7 with the router-side WLOC service. It follows the built-in FAQ order: **complete Wi‑Fi Calling Gateway first, then configure WLOC**.
 
 [中文教程](WIFICALLING_WLOC_TUTORIAL_ZH.md)
 
-## 1. What this project does
+> Use this only on an authorized dedicated test device and network. WLOC does not change real GPS, cellular positioning, or the carrier emergency address. Never test emergency calls with a spoofed location.
 
-The project contains two side-by-side modules:
+# Part One: Wi‑Fi Calling Gateway
 
-- **Wi‑Fi Calling Gateway** routes selected LAN devices through selected sing-box nodes and reports observable ePDG/IPsec UDP 500/4500 sessions.
-- **WLOC** handles Apple network-location requests for the assigned test iPhone. It can follow the selected node's exit location or use a manually selected location.
+## 1. Preparation
 
-The modules share nodes and device policies but have different responsibilities. Router-side WLOC does not require a Cloudflare Worker, the WLOC Plus dashboard, a TOKEN, a Shadowrocket module, or on-device HTTPS decryption. Shadowrocket, Cloudflare WARP, Loon, WireGuard, and other device VPNs must be off during testing so that traffic continues through the router.
+Before starting, confirm that:
 
-> Use this only with a dedicated, authorized test device. WLOC does not replace GPS, cellular positioning, or a carrier emergency address. Never test emergency calls with a spoofed location.
+- The Wi‑Fi Calling & WLOC gateway and sing-box are installed and running.
+- The test iPhone is connected to this router's Wi‑Fi.
+- A proxy node in the SIM's home country or region is available.
+- The iPhone has a usable LAN IPv4 address.
+- Global proxies such as Passwall do not capture the test device.
 
-## 2. Prerequisites
+Wi‑Fi Calling is sensitive to packet loss and jitter. Prefer a TCP-based node such as **AnyTLS, VLESS, VMess, or Trojan**. Hysteria2 and TUIC may establish a tunnel but can drop calls under public-network jitter.
 
-1. The Wi‑Fi Calling & WLOC gateway is installed and running on the router.
-2. sing-box works, with an exit node in the SIM's home country or region.
-3. The test iPhone is connected to this router's Wi‑Fi.
-4. The iPhone has a stable LAN IPv4 address. The gateway maintains the DHCP static binding used by its device policy.
-5. All on-device VPNs, proxies, and global tunnels are disabled.
+## 2. Open Wi‑Fi Calling Settings
 
-Prefer a TCP-based node such as **AnyTLS, VLESS, VMess, or Trojan**. Hysteria2 and TUIC may show a Wi‑Fi Calling indicator but can drop calls under public-network jitter. WireGuard can work but should still be tested for stability.
-
-## 3. Configure Wi‑Fi Calling Gateway
-
-Open LuCI and go to **Services → WifiCalling&Wloc Gateway → Wi‑Fi Calling Settings**.
+In LuCI, open **Services → WifiCalling&Wloc Gateway → Wi‑Fi Calling Settings**.
 
 ![Wi‑Fi Calling settings](images/wificalling-wloc/01-wifi-calling-settings.png)
 
-### 3.1 General settings
+Under **General**:
 
 1. Select **Enable**.
 2. `Warning` is normally suitable for the log level.
-3. Enable **Activity log** if handshake and sustained encrypted-traffic records are required.
-4. The default 60-second activity interval and 20 records per device are suitable for most tests.
+3. Enable **Activity log** to record handshake and sustained encrypted-traffic metadata.
+4. The default 60-second interval and 20 records per device are suitable for most tests.
 
-### 3.2 Add a proxy node
+## 3. Add and save a proxy node
 
-Select **Add proxy node** for manual entry, or paste one AnyTLS, Hysteria2/Hy2, TUIC, VLESS, VMess, Trojan, or WireGuard share link under **Import proxy node**.
+Following the FAQ order, save a node before adding a device policy.
 
-Import parsing happens locally in the browser. Review the server, port, password or UUID, SNI, TLS, Reality, WebSocket, and other protocol fields, then select **Save & Apply**. A node must be saved before it can be selected in a device policy.
+1. Paste one AnyTLS, Hysteria2/Hy2, TUIC, VLESS, VMess, Trojan, or WireGuard share link under **Import proxy node**, or select **Add proxy node** for manual entry.
+2. Import parsing happens locally in the browser; the link is not sent to an external service.
+3. Review the name, server, port, password or UUID, SNI, TLS, and protocol-specific fields.
+4. Select **Save & Apply**.
+5. If the node is missing from the device-policy selector, reload the page before continuing.
 
-### 3.3 Add the iPhone device policy
+## 4. Add the iPhone device policy
 
-Under **Device policies**, select **Add LAN device** and enter:
+Under **Device policies**:
 
-1. A recognizable device name.
-2. **Independent tunnel** as the routing mode.
-3. The previously saved exit node.
-4. The iPhone's current LAN IPv4 address.
-
-Select **Save & Apply** again. The **DHCP binding** column should show **Bound**. If it shows pending, changed MAC, or offline, toggle iPhone Wi‑Fi so it obtains the reserved address, then check again.
+1. Select **Add LAN device**.
+2. Enter a recognizable device name.
+3. Select **Independent tunnel**. **Follow gateway** does not use the plugin node.
+4. Select the node saved in the previous step.
+5. Enter the iPhone's current LAN IPv4 address.
+6. Select **Save & Apply** again.
 
 ![Proxy nodes and device policies](images/wificalling-wloc/02-device-policies.png)
 
-## 4. Enable Wi‑Fi Calling on the iPhone
+Check the **DHCP binding** column:
+
+- **Bound:** continue.
+- **Pending** or **Device offline:** confirm that the iPhone is connected to this router.
+- **MAC changed:** toggle iPhone Wi‑Fi so the gateway can rebind the current lease automatically.
+
+The gateway identifies a device by IP. Traffic will not enter the selected node if the iPhone address differs from the policy.
+
+## 5. Enable Wi‑Fi Calling on the iPhone
 
 1. Open **Settings → Cellular**.
-2. Select the relevant SIM or line.
+2. Select the SIM or line under test.
 3. Open **Wi‑Fi Calling**.
 4. Enable **Wi‑Fi Calling on This iPhone**.
 
 Names vary by carrier and iOS version. If the option is absent, confirm that the SIM, plan, carrier, and region support Wi‑Fi Calling.
 
-## 5. Install the WLOC root CA on the iPhone
+## 6. Check Wi‑Fi Calling Monitor & Log
 
-The router generates the WLOC certificate. This project does not use a Shadowrocket certificate.
+Open **Wi‑Fi Calling Monitor & Log**.
 
-### 5.1 Download and install the profile
+![Wi‑Fi Calling monitor and activity log](images/wificalling-wloc/03-wifi-calling-monitor.png)
 
-1. In Safari on the test iPhone, open `http://192.168.31.1/wloc-ca.mobileconfig`. Replace `192.168.31.1` if the router uses another LAN address.
-2. After Safari reports that the profile was downloaded, open iPhone Settings.
-3. Select **Profile Downloaded** near the top, or go to **Settings → General → VPN & Device Management**.
-4. Select the WLOC profile and complete installation.
+| Page state | Router-side network evidence |
+|---|---|
+| Not detected | No matching session observed |
+| Negotiating | UDP 500 observed |
+| NAT-T | UDP 4500 observed |
+| Registered | Bidirectional UDP 4500 is `ASSURED` |
+| Sustained traffic | Sustained bidirectional encrypted traffic after registration |
 
-The following iOS system screenshot is reused from the iOS Location Spoofer Plus guide because the menu path is identical. In this project the installed profile should be named **wloc-service**, not Shadowrocket.
+**Registered** is router-side network evidence, not carrier activation confirmation. The activity log records only handshake success, handshake failure, and sustained encrypted traffic. It cannot reveal phone numbers, SMS, voice content, or call direction.
 
-![iOS VPN & Device Management](images/iphone/01-ios-vpn-device-management.jpg)
+If the carrier requires the location to match the SIM home region, the page may still show **Not detected**. Complete Part Two, wait a few minutes, and then refresh this page.
 
-### 5.2 Enable full trust
+## 7. Wi‑Fi Calling troubleshooting
+
+### It remains Not detected
+
+Check node reachability, enabled device policy, Independent tunnel mode, the selected node, the iPhone IP and DHCP binding, and the iPhone Wi‑Fi Calling switch.
+
+### It shows Registered but calls fail
+
+Use a stable TCP-based node, confirm that the node country matches the SIM home region, and verify carrier activation for the line. Final validation requires an ordinary outgoing and incoming call.
+
+### Airplane Mode check
+
+Enable Airplane Mode, turn Wi‑Fi back on, and look for the carrier Wi‑Fi Calling indicator. This is a real-device record from the Wi‑Fi Calling Gateway project:
+
+<img src="images/iphone/03-iphone-ee-wificall.jpg" alt="iPhone showing EE WiFiCall" width="420">
+
+# Part Two: WLOC
+
+## 8. Before configuring WLOC
+
+Confirm that:
+
+1. The proxy node and iPhone device policy from Part One have been saved.
+2. The iPhone uses the LAN address in that device policy.
+3. **Shadowrocket, Cloudflare WARP, Loon, WireGuard, and every other device VPN are off.** A device VPN bypasses the router redirect.
+4. Safari will be used to download the certificate profile.
+
+Router-side WLOC does not require a Cloudflare Worker, WLOC Plus website, TOKEN, Shadowrocket module, or on-device HTTPS decryption.
+
+## 9. Get the WLOC certificate from the router
+
+Open **WLOC Settings** and scroll to **Certificate (Safari install)**.
+
+![Saved locations and certificate section](images/wificalling-wloc/07-wloc-saved-certificate.png)
+
+1. Review the CA fingerprint, issue time, expiry time, and certificate status.
+2. Select the displayed **Profile link**. The default is normally `http://192.168.31.1/wloc-ca.mobileconfig`; always use the address shown on the page.
+3. **Regenerate profile** only re-exports the configuration profile.
+4. Do not select **Generate new CA** unless intentional. A new CA invalidates previously installed profiles, and every test device must install and trust the new CA.
+
+## 10. Download and install the profile on the iPhone
+
+### 10.1 Open the URL in Safari
+
+Enter the complete URL shown in WLOC Settings in Safari on the test iPhone.
+
+![Enter the WLOC profile URL in Safari](images/iphone/01-wloc-profile-url.jpg)
+
+### 10.2 Allow the download
+
+When Safari says that the website is trying to download a configuration profile, select **Allow**.
+
+![Allow Safari to download the configuration profile](images/iphone/02-wloc-profile-download.jpg)
+
+### 10.3 Open Profile Downloaded
+
+Open iPhone Settings and select **Profile Downloaded** near the top. If it is absent, go to **Settings → General → VPN & Device Management**.
+
+![Open Profile Downloaded](images/iphone/03-wloc-profile-downloaded.jpg)
+
+### 10.4 Install wloc-service root CA
+
+Confirm that the profile and signer are `wloc-service root CA`, select **Install**, and complete the iOS prompts.
+
+![Install the wloc-service root CA profile](images/iphone/04-wloc-profile-install.jpg)
+
+## 11. Enable full certificate trust
+
+After installing the profile:
 
 1. Open **Settings → General → About → Certificate Trust Settings**.
-2. Find **wloc-service root CA**.
-3. Enable full trust and confirm the iOS warning.
+2. Find `wloc-service root CA`.
+3. Enable full trust and confirm the warning.
 
-![iOS Certificate Trust Settings](images/iphone/02-ios-certificate-trust.jpg)
+![Enable full trust for wloc-service root CA](images/iphone/05-wloc-certificate-trust.jpg)
 
-Install the CA only on the dedicated test iPhone. Remove the profile and its trust when testing is complete.
+Back in WLOC Settings, the fingerprint shown in the iPhone profile may be pasted under **Verify iPhone certificate**. Select **Verify** and confirm that it matches the router CA.
 
-## 6. Configure WLOC
+## 12. Configure Auto or Manual location
 
-Open **Services → WifiCalling&Wloc Gateway → WLOC Settings**.
+Return to **WLOC Settings**.
 
-![WLOC settings](images/wificalling-wloc/04-wloc-settings.png)
+![WLOC module, location mode, and manual search](images/wificalling-wloc/04-wloc-settings.png)
 
-### 6.1 Select the followed device
+### 12.1 Select the followed device
 
-Under **Follow device**, select the test iPhone configured earlier. Auto mode uses the node bound to this device and derives the WLOC target from that node's exit IP.
+Under **Follow device**, select the test iPhone configured in Part One. Auto mode follows the exit of the node bound to this device.
 
-### 6.2 Auto mode
+### 12.2 Auto mode
 
 1. Set **Location mode** to **Auto (follow node)**.
-2. Confirm that the test device is bound to the intended node.
+2. Confirm the followed device.
 3. Enable **WLOC interception**.
 4. Select **Save & Apply**.
 
-When the device is moved to another node, WLOC updates its target on the next refresh.
+Auto mode uses the node exit IP to determine country, city, timezone, and coordinates. After changing the bound node, wait for a new exit probe and target update.
 
-### 6.3 Manual mode
+### 12.3 Manual mode
 
-To use a fixed location:
+1. Enter a place such as `London, UK` under **Place name**, then select **Search**.
+2. Search returns a result but does not change the active location.
+3. Review latitude and longitude, then select **Apply coordinates**.
+4. Coordinates may also be entered directly before selecting **Apply coordinates**.
+5. Select **Apply** beside a saved location, or use **Add saved location** to create a preset.
+6. Finish with **Save & Apply**.
 
-1. Enter a place such as `London, UK` under **Manual search**, then select **Search**.
-2. Review the returned city, latitude, and longitude.
-3. Select **Apply coordinates**. Searching without applying does not change the location.
-4. Coordinates may also be entered directly, or a saved location may be applied.
-5. Applying coordinates selects manual mode and stores the values in the router's local configuration.
+Manual coordinates and presets are stored in `/etc/config/wloc-service` and survive a reboot. GPS values remain in the router's local administration plane.
 
-## 7. Refresh location on the iPhone
+## 13. Re-trigger location on the iPhone
 
-1. Confirm that Shadowrocket, WARP, and every other device VPN are off.
-2. Open **Settings → Privacy & Security → Location Services**.
-3. Turn Location Services off, wait about 5–10 seconds, and turn it on again.
-4. Force-close Maps, Weather, or the app under test, then reopen it.
-5. If the location still does not refresh, toggle Airplane Mode once or toggle Wi‑Fi, then wait briefly.
+After switching mode or target, use one of the FAQ methods:
 
-Apple location services can cache results. In auto mode, the public IP, WLOC target, and the node bound to the device should point to the same country or region.
+1. Toggle Airplane Mode once; or
+2. Toggle Wi‑Fi; or
+3. Force-close and reopen Maps, Weather, or the app under test.
 
-## 8. Verify WLOC
+Location requests are triggered by iPhone apps, and Apple location services may cache results. Wait briefly and trigger again if the first attempt does not refresh.
+
+## 14. Check WLOC Monitor & Log
 
 Open **WLOC Monitor & Log**.
 
-![WLOC current location and log](images/wificalling-wloc/05-wloc-monitor.png)
+![WLOC current location and usage log](images/wificalling-wloc/05-wloc-monitor.png)
 
 Check that:
 
@@ -145,61 +224,43 @@ Check that:
 - `Geo state` is `fresh`.
 - The usage log contains a **Target updated** event.
 
-**Target updated** proves only that the router updated its WLOC target. It does not prove that GPS, cellular positioning, or the carrier emergency address changed.
+The usage log retains the newest 20 records and can be cleared. It records target-update time, place, and auto/manual source only; raw WLOC responses are never logged.
 
-## 9. Verify Wi‑Fi Calling
+**Target updated** means only that the router updated its target. It does not prove that real GPS, cellular positioning, or the carrier emergency address changed.
 
-Open **Wi‑Fi Calling Monitor & Log**.
+## 15. WLOC troubleshooting
 
-![Wi‑Fi Calling monitor and activity log](images/wificalling-wloc/03-wifi-calling-monitor.png)
+### Location does not change
 
-The normal observation sequence is:
-
-1. UDP 500 appears: negotiation started.
-2. UDP 4500 appears: NAT-T was observed.
-3. UDP 4500 becomes bidirectional and `ASSURED`: the page shows **Registered**.
-4. Sustained bidirectional encrypted traffic after registration may be shown as **Call in progress (inferred from sustained encrypted traffic)**.
-
-**Registered** is router-side network evidence, not carrier activation confirmation. Complete an ordinary authorized outgoing and incoming call test. The router cannot see phone numbers, SMS, voice content, or call direction inside the encrypted tunnel.
-
-You may also enable Airplane Mode and then turn Wi‑Fi back on to check for the carrier Wi‑Fi Calling indicator. This is a real-device record from the Wi‑Fi Calling Gateway project:
-
-<img src="images/iphone/03-iphone-ee-wificall.jpg" alt="iPhone showing EE WiFiCall" width="420">
-
-## 10. Troubleshooting
-
-### Wi‑Fi Calling remains Not detected
-
-Check node reachability, Independent tunnel mode, the iPhone address, DHCP binding, and the iPhone Wi‑Fi Calling switch.
-
-### Registered appears but calls fail
-
-Registered only proves an ASSURED UDP 4500 flow. Prefer a stable TCP-based node, confirm that the node location matches the SIM home region, and verify carrier activation for the line.
-
-### WLOC does not change
-
-Confirm that the wloc-service profile is installed and fully trusted, WLOC interception is enabled, the correct device is selected, and all device VPNs are off. Toggle Location Services and reopen Maps or Weather.
+Confirm that the profile is installed, `wloc-service root CA` has full trust, interception is enabled, the correct device is selected, and all device VPNs are off. Re-trigger Maps or Weather.
 
 ### Auto location does not match the node
 
-Confirm the device is bound to the intended node, no device VPN is active, global proxies such as Passwall are not capturing that device, and Geo state has had time to refresh.
+Confirm that the Part One device policy is bound to the intended node, global proxies such as Passwall bypass the test device, no device VPN is running, and `Geo state` has refreshed to `fresh`.
 
-### Restore the original location immediately
+### Certificate verification fails
 
-Disable **WLOC interception**, then save and apply. Apple WLOC traffic should return to its original response. To leave the test completely, remove the WLOC profile and root trust from the iPhone.
+Compare the fingerprint in the iPhone profile with the router CA fingerprint. If they differ, remove the old iPhone profile, download it again from the current router, install it, and enable full trust.
 
-![Built-in help](images/wificalling-wloc/06-help-faq.png)
+### Restore the original location
 
-## 11. Security notes
+Disable **WLOC interception** and select **Save & Apply**. To leave the test completely, remove the WLOC profile from the iPhone and disable its root trust.
 
-- Never publish proxy share links, passwords, UUIDs, private keys, or CA private keys.
+## 16. Final check
+
+After WLOC status is correct, return to **Wi‑Fi Calling Monitor & Log** and wait a few minutes. When **Registered** appears, complete one ordinary outgoing and incoming call.
+
+![Built-in FAQ](images/wificalling-wloc/06-help-faq.png)
+
+## 17. Security and privacy
+
+- Never publish node links, passwords, UUIDs, private keys, CA private keys, or complete certificate fingerprints.
 - Do not commit real device identifiers, raw traffic, or precise personal locations to GitHub.
-- Trust the CA only on an authorized test iPhone.
-- WLOC must remain limited to the assigned device's Apple WLOC traffic and must not intercept normal HTTPS sites.
-- Follow local law, Apple terms, and carrier terms, and always use the real location for emergency services.
+- Trust the WLOC CA only on a dedicated test iPhone and remove it after testing.
+- WLOC must remain limited to Apple WLOC traffic from the assigned device; normal HTTPS sites must not present a wloc-service certificate.
+- Follow local law, Apple terms, and carrier terms. Emergency services must always use the real location.
 
 ## Sources
 
 - [Wi‑Fi Calling Gateway English README](https://github.com/smthdagg/luci-app-wificalling-gateway/blob/main/README_EN.md)
-- [iOS Location Spoofer Plus complete installation guide](https://github.com/smthdagg/ios-location-spoofer-plus/blob/main/%E5%AE%8C%E6%95%B4%E7%9A%84%E5%AE%89%E8%A3%85%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B.md)
 - This project's current LuCI pages, built-in FAQ, and AX6S real-device validation notes

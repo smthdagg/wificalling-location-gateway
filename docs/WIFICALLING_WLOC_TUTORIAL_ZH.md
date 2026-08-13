@@ -1,205 +1,268 @@
 # Wi‑Fi Calling & WLOC 完整使用教程
 
-适用于集成了 Wi‑Fi Calling Gateway 1.7 与路由器端 WLOC 服务的 OpenWrt / ImmortalWrt 网关。本教程从软件已经安装完成、可以进入 LuCI 管理页面开始。
+适用于集成 Wi‑Fi Calling Gateway 1.7 与路由器端 WLOC 服务的 OpenWrt / ImmortalWrt 网关。本教程严格按照插件内置 FAQ 的操作顺序编写：**先完整配置 Wi‑Fi Calling Gateway，再配置 WLOC**。
 
 [English tutorial](WIFICALLING_WLOC_TUTORIAL_EN.md)
 
-## 一、使用前先了解
+> 只在获授权的专用测试设备和网络中使用。WLOC 不会改变真实 GPS、基站定位或运营商紧急呼叫地址。不要使用虚拟位置测试紧急呼叫。
 
-这个项目包含两个并列模块：
+# 第一部分：Wi‑Fi Calling Gateway
 
-- **Wi‑Fi Calling Gateway**：让指定局域网设备通过指定的 sing-box 节点联网，并观察 ePDG/IPsec UDP 500、4500 会话。
-- **WLOC**：由路由器为指定测试 iPhone 处理 Apple 网络定位请求，支持自动跟随节点出口位置或手动指定位置。
+## 1. 准备工作
 
-两者共享节点和设备策略，但功能边界不同。WLOC 不需要 Cloudflare Worker、WLOC Plus 后台、TOKEN、Shadowrocket 模块或手机端 HTTPS 解密。测试时必须关闭 Shadowrocket、Cloudflare WARP、Loon、WireGuard 等手机 VPN，避免绕过路由器。
+开始前确认：
 
-> 本功能只应用于已获授权的专用测试设备。WLOC 不能替代 GPS、基站定位或运营商的紧急呼叫地址。不要用虚拟位置测试紧急呼叫。
+- 路由器已经安装并运行 Wi‑Fi Calling & WLOC 网关及 sing-box。
+- 测试 iPhone 已连接此路由器的 Wi‑Fi。
+- 已准备一个与 SIM 卡归属国家或地区一致的代理节点。
+- iPhone 当前局域网 IPv4 地址可用。
+- Passwall 等全局代理不会抢走测试设备流量。
 
-## 二、准备条件
+Wi‑Fi Calling 对丢包和抖动比较敏感，建议优先使用 **AnyTLS、VLESS、VMess 或 Trojan** 等 TCP 系节点。Hysteria2、TUIC 等 UDP/QUIC 节点可能能够建立隧道，但实际通话容易因网络抖动而中断。
 
-1. 路由器已安装并运行 Wi‑Fi Calling & WLOC 网关。
-2. sing-box 可用，并准备好与 SIM 卡归属国家或地区一致的出口节点。
-3. 测试 iPhone 已连接此路由器 Wi‑Fi。
-4. iPhone 使用稳定的局域网 IPv4 地址；插件会通过 DHCP 静态租约维护设备策略与地址的绑定。
-5. 手机端所有 VPN、代理和全局隧道均已关闭。
-
-节点建议优先使用 **AnyTLS、VLESS、VMess 或 Trojan** 等 TCP 系协议。Hysteria2、TUIC 等 UDP/QUIC 协议可能可以看到 Wi‑Fi Calling 图标，但在公网抖动时通话容易中断。WireGuard 可用，但仍需实测稳定性。
-
-## 三、配置 Wi‑Fi Calling Gateway
+## 2. 打开 Wi‑Fi Calling 设置页面
 
 进入 LuCI：**服务 → WifiCalling&Wloc Gateway → Wi‑Fi 通话设置**。
 
 ![Wi‑Fi Calling 设置页面](images/wificalling-wloc/01-wifi-calling-settings.png)
 
-### 3.1 基本设置
+在“常规”区域：
 
 1. 勾选“启用”。
 2. 日志级别通常保持 `Warning`。
-3. 如需记录握手和持续加密通讯，开启“活动日志”。
+3. 如需观察握手和持续加密通讯，开启“活动日志”。
 4. 持续活动日志间隔可保持 60 秒，每台设备最大记录数可保持 20 条。
 
-### 3.2 添加代理节点
+## 3. 添加并保存代理节点
 
-可以点击“添加代理节点”手动填写，也可以在“导入代理节点”中粘贴一条 AnyTLS、Hysteria2/Hy2、TUIC、VLESS、VMess、Trojan 或 WireGuard 分享链接。
+按照 FAQ 顺序，必须先保存节点，再添加设备策略。
 
-导入只在当前浏览器本地解析。导入后仍要核对服务器、端口、密码或 UUID、SNI、TLS、Reality、WebSocket 等字段，然后点击一次“保存并应用”。节点必须先保存，才能在设备策略中选择。
+1. 在“导入代理节点”中粘贴一条 AnyTLS、Hysteria2/Hy2、TUIC、VLESS、VMess、Trojan 或 WireGuard 分享链接；也可以点击“添加代理节点”手动填写。
+2. 导入过程只在当前浏览器本地解析，不会把节点链接发送到外部服务。
+3. 核对节点名称、服务器、端口、密码或 UUID、SNI、TLS 及协议专属字段。
+4. 点击“保存并应用”。
+5. 如设备策略的节点下拉框没有出现新节点，刷新页面后再继续。
 
-### 3.3 添加 iPhone 设备策略
+## 4. 添加 iPhone 设备策略
 
-在“设备策略”中点击“添加局域网设备”，填写：
+在“设备策略”区域：
 
-1. 容易识别的设备名称。
-2. **独立通道**路由模式。
-3. 前一步保存的出口节点。
-4. iPhone 当前使用的局域网 IPv4 地址。
-
-再次点击“保存并应用”。检查“DHCP 绑定”一栏应显示“已绑定”。如果显示待绑定、MAC 已变化或设备离线，让 iPhone 关闭再打开 Wi‑Fi，重新获取地址后再检查。
+1. 点击“添加局域网设备”。
+2. 填写容易识别的设备名称。
+3. 路由模式选择“独立通道”。“跟随网关”不会使用插件节点。
+4. 选择刚才保存的节点。
+5. 填写 iPhone 当前使用的局域网 IPv4 地址。
+6. 再次点击“保存并应用”。
 
 ![代理节点与设备策略](images/wificalling-wloc/02-device-policies.png)
 
-## 四、在 iPhone 开启 Wi‑Fi Calling
+检查“DHCP 绑定”一栏：
+
+- “已绑定”：可以继续。
+- “待绑定”或“设备未在线”：确认 iPhone 已连接此路由器 Wi‑Fi。
+- “MAC 已变化”：关闭再打开 iPhone Wi‑Fi，让插件根据当前租约自动重新绑定。
+
+插件按 IP 识别设备。iPhone 实际地址与策略地址不一致时，流量不会进入所选节点。
+
+## 5. 在 iPhone 开启 Wi‑Fi Calling
 
 1. 打开 **设置 → 蜂窝网络**。
-2. 选择对应 SIM 或号码。
+2. 选择要测试的 SIM 或号码。
 3. 进入 **Wi‑Fi 通话**。
 4. 开启“在此 iPhone 上进行 Wi‑Fi 通话”。
 
-不同运营商和 iOS 版本的名称可能略有不同。如果完全没有这个选项，应先向运营商确认该 SIM、套餐和地区是否支持 Wi‑Fi Calling。
+不同运营商和 iOS 版本的名称可能略有不同。如果没有此选项，应先向运营商确认 SIM、套餐和地区是否支持 Wi‑Fi Calling。
 
-## 五、在 iPhone 安装 WLOC 根证书
-
-WLOC 的证书由路由器生成，不使用 Shadowrocket 证书。
-
-### 5.1 下载并安装描述文件
-
-1. 在测试 iPhone 的 Safari 中打开 `http://192.168.31.1/wloc-ca.mobileconfig`。如果路由器 LAN 地址不是 `192.168.31.1`，请换成实际地址。
-2. Safari 提示已下载描述文件后，打开 iPhone“设置”。
-3. 点击顶部的“已下载描述文件”；如果没有显示，进入 **设置 → 通用 → VPN 与设备管理**。
-4. 找到 WLOC 描述文件，按提示完成安装。
-
-下图复用了 iOS Location Spoofer Plus 教程中的 iOS 系统页面。菜单路径相同，但本项目显示的描述文件名称应为 **wloc-service**，不是 Shadowrocket。
-
-![iOS VPN 与设备管理](images/iphone/01-ios-vpn-device-management.jpg)
-
-### 5.2 开启根证书完全信任
-
-1. 进入 **设置 → 通用 → 关于本机 → 证书信任设置**。
-2. 找到 **wloc-service root CA**。
-3. 开启右侧的“完全信任”，并确认系统提示。
-
-![iOS 证书信任设置](images/iphone/02-ios-certificate-trust.jpg)
-
-证书只应安装在专用测试 iPhone。测试结束后，应删除描述文件并关闭对应根证书信任。
-
-## 六、配置 WLOC
-
-进入 LuCI：**服务 → WifiCalling&Wloc Gateway → WLOC 设置**。
-
-![WLOC 设置页面](images/wificalling-wloc/04-wloc-settings.png)
-
-### 6.1 选择跟随设备
-
-在“跟随设备”中选择刚才配置的测试 iPhone。自动模式会读取该设备绑定的节点，以节点出口 IP 的地理位置作为 WLOC 目标。
-
-### 6.2 自动模式
-
-1. 将“定位模式”设为“自动（跟随节点）”。
-2. 确认测试设备已绑定正确节点。
-3. 开启“启用 WLOC 拦截”。
-4. 点击“保存并应用”。
-
-更换设备绑定节点后，WLOC 会在下次刷新时更新目标位置。
-
-### 6.3 手动模式
-
-需要固定位置时：
-
-1. 在“手动搜索”中输入地点，例如 `London, UK`，点击“搜索”。
-2. 确认搜索返回的城市、纬度和经度。
-3. 点击“应用坐标”。只搜索而不点击“应用坐标”不会切换位置。
-4. 也可以直接输入纬度和经度，或从“已保存的位置”中点击“应用”。
-5. 保存后，定位模式会切换为手动；手动坐标保存在路由器本地配置中。
-
-## 七、让新位置在 iPhone 生效
-
-1. 确认 Shadowrocket、WARP 和其他 VPN 的总开关均已关闭。
-2. 打开 **设置 → 隐私与安全性 → 定位服务**。
-3. 关闭定位服务，等待约 5 至 10 秒，再重新开启。
-4. 强制退出地图、天气等应用后重新打开。
-5. 如果仍未刷新，可切换一次飞行模式，或关闭再打开 Wi‑Fi，然后等待片刻。
-
-Apple 定位服务可能存在缓存。自动模式下，网页看到的公网 IP、WLOC 目标位置和设备绑定节点应指向同一国家或地区。
-
-## 八、检查 WLOC 状态
-
-进入 **WLOC 监控与日志**。
-
-![WLOC 当前位置与日志](images/wificalling-wloc/05-wloc-monitor.png)
-
-重点检查：
-
-- `Service phase` 为 `intercepting`。
-- `Follow device` 是当前测试 iPhone。
-- `Location mode` 与所选自动或手动模式一致。
-- 国家、城市、时区和 GPS 坐标符合目标。
-- `Geo state` 为 `fresh`。
-- WLOC 使用日志出现“定位目标更新”。
-
-“定位目标更新”只证明路由器已经更新 WLOC 目标，不代表手机 GPS、基站位置或运营商紧急地址已经改变。
-
-## 九、检查 Wi‑Fi Calling
+## 6. 查看 Wi‑Fi Calling 监控与日志
 
 进入 **Wi‑Fi 通话监控与日志**。
 
 ![Wi‑Fi Calling 监控与活动日志](images/wificalling-wloc/03-wifi-calling-monitor.png)
 
-状态通常按以下顺序变化：
+常见状态含义：
 
-1. 观察到 UDP 500：正在协商。
-2. 观察到 UDP 4500：已进入 NAT-T。
-3. UDP 4500 为双向 `ASSURED`：页面显示“已注册”。
-4. 注册后出现持续双向加密流量：日志可能显示“通话进行中（根据持续加密流量推断）”。
+| 页面状态 | 路由器观察到的网络证据 |
+|---|---|
+| 未检测到 | 尚未观察到相关会话 |
+| 正在协商 | 观察到 UDP 500 |
+| NAT-T | 观察到 UDP 4500 |
+| 已注册 | 双向 UDP 4500 已进入 `ASSURED` 状态 |
+| 持续流量 | 注册后出现持续双向加密流量 |
 
-“已注册”是路由器侧网络证据，不是运营商激活确认。最终必须使用普通号码实际呼出和呼入验证。路由器无法看到加密隧道内的号码、短信、语音内容或呼叫方向。
+“已注册”只是路由器侧网络证据，不是运营商激活确认。活动日志只能记录握手成功、握手失败和持续加密流量，无法读取号码、短信、语音内容或呼叫方向。
 
-也可以打开飞行模式，再单独开启 Wi‑Fi，观察状态栏是否出现运营商的 Wi‑Fi Calling 标识。下图是 Wi‑Fi Calling Gateway 项目的 iPhone 实机记录：
+如果运营商要求位置与 SIM 归属地一致，此时可能仍显示“未检测到”。完成下面的 WLOC 配置后再等待几分钟并刷新此页面。
+
+## 7. Wi‑Fi Calling 常见问题
+
+### 一直显示“未检测到”
+
+检查节点连通性、设备策略是否启用、路由模式是否为独立通道、节点是否正确、iPhone IP 与 DHCP 绑定是否一致，以及 iPhone 的 Wi‑Fi Calling 开关。
+
+### 显示“已注册”，但不能通话
+
+改用稳定的 TCP 系节点，确认节点国家与 SIM 归属地匹配，并向运营商确认号码已经开通。最终必须使用普通号码实际完成呼出和呼入测试。
+
+### 飞行模式验证
+
+可打开飞行模式，再单独开启 Wi‑Fi，观察状态栏是否出现运营商 Wi‑Fi Calling 标识。下图是 Wi‑Fi Calling Gateway 项目的 iPhone 实机记录：
 
 <img src="images/iphone/03-iphone-ee-wificall.jpg" alt="iPhone 显示 EE WiFiCall" width="420">
 
-## 十、常见问题
+# 第二部分：WLOC
 
-### Wi‑Fi Calling 一直“未检测到”
+## 8. WLOC 开始前检查
 
-检查节点是否可达、设备策略是否为独立通道、iPhone IP 是否与策略一致、DHCP 是否已绑定，以及 iPhone 的 Wi‑Fi Calling 开关是否开启。
+继续前确认：
 
-### 显示“已注册”，但无法通话
+1. 第一部分的代理节点和 iPhone 设备策略已经保存。
+2. iPhone 正在使用该设备策略中的局域网 IP。
+3. **关闭 Shadowrocket、Cloudflare WARP、Loon、WireGuard 和其他手机 VPN。** 手机 VPN 会绕过路由器重定向，使 WLOC 不生效。
+4. iPhone 使用 Safari 下载证书描述文件。
 
-“已注册”只代表观察到 ASSURED UDP 4500。优先改用稳定的 TCP 系节点，确认节点国家与 SIM 归属地匹配，并检查运营商是否真正为号码开通服务。
+当前项目的 WLOC 完全运行在路由器上，不需要 Cloudflare Worker、WLOC Plus 网站、TOKEN、Shadowrocket 模块或手机端 HTTPS 解密。
 
-### WLOC 位置没有变化
+## 9. 从路由器获取 WLOC 证书
 
-确认 wloc-service 根证书已经安装并完全信任、WLOC 拦截已开启、跟随设备正确、手机 VPN 已关闭。然后重新开关定位服务并重启地图或天气应用。
+进入 **WLOC 设置**，向下找到“证书（Safari 安装）”区域。
 
-### WLOC 自动位置与节点不一致
+![WLOC 已保存位置与证书区域](images/wificalling-wloc/07-wloc-saved-certificate.png)
 
-确认测试设备绑定的是预期节点，手机没有使用其他 VPN，Passwall 等全局代理没有抢走该设备流量，并等待 Geo 状态刷新。
+1. 查看 CA 指纹、签发时间、过期时间和证书状态。
+2. 点击页面显示的“配置文件链接”。默认地址通常为 `http://192.168.31.1/wloc-ca.mobileconfig`；以页面实际显示的地址为准。
+3. “重新生成配置文件”只重新导出描述文件。
+4. 不要随意点击“生成新 CA”。生成新 CA 后，原来安装在 iPhone 上的证书将失效，所有测试设备都要重新安装并信任新证书。
 
-### 如何立即恢复正常定位
+## 10. 在 iPhone 下载并安装描述文件
 
-在 WLOC 设置中关闭“启用 WLOC 拦截”，保存并应用；Apple WLOC 流量应恢复原始响应。需要彻底退出测试时，再删除 iPhone 上的 WLOC 描述文件和根证书信任。
+### 10.1 在 Safari 打开配置文件地址
 
-![内置使用帮助](images/wificalling-wloc/06-help-faq.png)
+在测试 iPhone 的 Safari 地址栏输入 WLOC 设置页面显示的完整链接。
 
-## 十一、安全说明
+![在 Safari 输入 WLOC 配置文件地址](images/iphone/01-wloc-profile-url.jpg)
 
-- 不要公开代理节点链接、密码、UUID、私钥或证书私钥。
-- 不要把真实设备标识、原始网络流量或精确个人位置提交到 GitHub。
-- 只对获授权的测试 iPhone 使用根证书。
-- WLOC 只应处理指定设备的 Apple WLOC 请求，不能用于普通 HTTPS 网站。
-- 遵守当地法律、Apple 条款和运营商条款，并始终使用真实位置处理紧急服务。
+### 10.2 允许下载
+
+Safari 提示“此网站正尝试下载一个配置描述文件”时，点击“允许”。
+
+![允许 Safari 下载配置描述文件](images/iphone/02-wloc-profile-download.jpg)
+
+### 10.3 打开已下载描述文件
+
+下载完成后打开 iPhone“设置”，点击顶部的“已下载描述文件”。如果没有出现此入口，可进入 **设置 → 通用 → VPN 与设备管理**。
+
+![打开已下载描述文件](images/iphone/03-wloc-profile-downloaded.jpg)
+
+### 10.4 安装 wloc-service root CA
+
+确认描述文件名称和签名者均为 `wloc-service root CA`，然后点击右上角“安装”，按系统提示完成安装。
+
+![安装 wloc-service root CA 描述文件](images/iphone/04-wloc-profile-install.jpg)
+
+## 11. 在 iPhone 开启证书完全信任
+
+安装描述文件后，还必须执行：
+
+1. 进入 **设置 → 通用 → 关于本机 → 证书信任设置**。
+2. 找到 `wloc-service root CA`。
+3. 打开右侧的完全信任开关，并确认系统提示。
+
+![为 wloc-service root CA 开启完全信任](images/iphone/05-wloc-certificate-trust.jpg)
+
+返回路由器 WLOC 设置页面后，可以把 iPhone 描述文件中显示的指纹粘贴到“验证 iPhone 证书”，点击“验证”，确认与路由器 CA 指纹一致。
+
+## 12. 设置 WLOC 自动或手动位置
+
+回到 **WLOC 设置**页面。
+
+![WLOC 模块、定位模式和手动搜索](images/wificalling-wloc/04-wloc-settings.png)
+
+### 12.1 选择跟随设备
+
+在“跟随设备”中选择第一部分已经配置好的测试 iPhone。自动模式会跟随该设备绑定节点的出口位置。
+
+### 12.2 自动模式
+
+1. 将“定位模式”设为“自动（跟随节点）”。
+2. 确认“跟随设备”正确。
+3. 打开“启用 WLOC 拦截”。
+4. 点击“保存并应用”。
+
+自动模式使用节点出口 IP 的国家、城市、时区和坐标。更换设备绑定节点后，等待服务重新探测出口并更新目标。
+
+### 12.3 手动模式
+
+1. 在“地点名称”中输入地点，例如 `London, UK`，点击“搜索”。
+2. 搜索只会返回结果，不会立即修改位置。
+3. 确认纬度和经度后，点击“应用坐标”。
+4. 也可以直接输入纬度和经度，再点击“应用坐标”。
+5. 已保存的位置可以一键“应用”；点击“添加保存位置”可创建新的预设。
+6. 最后点击“保存并应用”。
+
+手动坐标和预设保存在路由器 `/etc/config/wloc-service` 中，重启后仍然保留。GPS 数值只保存在路由器本地管理面。
+
+## 13. 在 iPhone 重新触发定位
+
+切换模式或更换位置后，按 FAQ 建议执行以下任意一种操作：
+
+1. 开关一次飞行模式；或
+2. 关闭再打开 Wi‑Fi；或
+3. 强制退出地图、天气等应用后重新打开。
+
+定位请求由 iPhone 应用触发，Apple 定位服务也可能存在缓存。如果第一次未刷新，稍等片刻后再触发一次。
+
+## 14. 查看 WLOC 监控与日志
+
+进入 **WLOC 监控与日志**。
+
+![WLOC 当前定位与使用日志](images/wificalling-wloc/05-wloc-monitor.png)
+
+检查以下项目：
+
+- `Service phase` 为 `intercepting`。
+- `Follow device` 是当前测试 iPhone。
+- `Location mode` 与自动或手动模式一致。
+- 国家、城市、时区和 GPS 坐标符合目标。
+- `Geo state` 为 `fresh`。
+- WLOC 使用日志出现“定位目标更新”。
+
+WLOC 使用日志最多保留最近 20 条，可点击“清空日志”。日志只记录目标更新时间、地点和自动/手动来源，不记录原始 WLOC 响应。
+
+“定位目标更新”只说明路由器已经更新目标，不能证明真实 GPS、基站位置或运营商紧急地址已经改变。
+
+## 15. WLOC 常见问题
+
+### WLOC 完全没有变化
+
+确认描述文件已安装、`wloc-service root CA` 已开启完全信任、WLOC 拦截已开启、跟随设备正确，并关闭手机上的所有 VPN。然后重新触发地图或天气定位。
+
+### 自动位置与节点不一致
+
+确认第一部分的设备策略绑定了预期节点，Passwall 等全局代理已绕过测试设备，手机没有运行其他 VPN，并等待 `Geo state` 更新为 `fresh`。
+
+### 证书验证失败
+
+比较 iPhone 描述文件与路由器页面显示的 CA 指纹。如果不一致，删除 iPhone 上的旧描述文件，重新从当前路由器下载、安装并开启完全信任。
+
+### 如何恢复原始位置
+
+在 WLOC 设置中关闭“启用 WLOC 拦截”，点击“保存并应用”。需要彻底退出测试时，再到 iPhone 删除 WLOC 描述文件并关闭对应根证书信任。
+
+## 16. 最终检查
+
+WLOC 状态正确后，返回 **Wi‑Fi 通话监控与日志**，等待几分钟。页面出现“已注册”后，使用普通号码完成一次呼出和一次呼入测试。
+
+![插件内置 FAQ](images/wificalling-wloc/06-help-faq.png)
+
+## 17. 安全与隐私
+
+- 不要公开节点链接、密码、UUID、私钥、CA 私钥或完整证书指纹。
+- 不要把真实设备标识、原始流量或精确个人位置提交到 GitHub。
+- 只在专用测试 iPhone 上信任 WLOC CA，测试结束后删除。
+- WLOC 只应处理指定设备的 Apple WLOC 请求，普通 HTTPS 网站不应出现 wloc-service 签发的证书。
+- 遵守当地法律、Apple 条款和运营商条款，紧急服务始终使用真实位置。
 
 ## 资料来源
 
 - [Wi‑Fi Calling Gateway 中文 README](https://github.com/smthdagg/luci-app-wificalling-gateway/blob/main/README.md)
-- [iOS Location Spoofer Plus 完整安装使用教程](https://github.com/smthdagg/ios-location-spoofer-plus/blob/main/%E5%AE%8C%E6%95%B4%E7%9A%84%E5%AE%89%E8%A3%85%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B.md)
 - 本项目当前 LuCI 页面、内置 FAQ 和 AX6S 实机验证记录
