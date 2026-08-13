@@ -19,6 +19,7 @@ done
 ./scripts/ci/verify-handoffs.sh
 ./tests/scripts/test-agent-handoff-tools.sh
 ./tests/scripts/test-verify-rust-openwrt.sh
+./tests/scripts/test-openwrt-release-packaging.sh
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 ./scripts/scan_secrets.py
 
