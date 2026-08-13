@@ -31,10 +31,8 @@ plan=$(
 		--arch x86_64 --service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl"
 )
 for expected in \
-	'wloc-service_1.0.0-r1_x86_64.ipk' \
-	'luci-app-wificalling-location-gateway_1.0.0-r1_all.ipk' \
-	'wloc-service-1.0.0-r1.apk' \
-	'luci-app-wificalling-location-gateway-1.0.0-r1.apk'; do
+	'wificalling-location-gateway_1.0.0-r1_x86_64.ipk' \
+	'wificalling-location-gateway-1.0.0-r1.apk'; do
 	printf '%s\n' "$plan" | grep -F "$expected" >/dev/null ||
 		fail "release plan is missing $expected"
 done

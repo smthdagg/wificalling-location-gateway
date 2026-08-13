@@ -35,14 +35,10 @@ case "$dist_dir" in /*) ;; *) fail '--dist-dir must be absolute' ;; esac
 [ -d "$dist_dir" ] || fail "package directory does not exist: $dist_dir"
 report=${report:-$dist_dir/docker-matrix-report.txt}
 
-ipk_runtime=$(find "$dist_dir" -maxdepth 1 -type f -name 'wloc-service*_x86_64.ipk' -print -quit)
-ipk_luci=$(find "$dist_dir" -maxdepth 1 -type f -name 'luci-app-wificalling-location-gateway*_all.ipk' -print -quit)
-apk_runtime=$(find "$dist_dir" -maxdepth 1 -type f -name 'wloc-service*.apk' -print -quit)
-apk_luci=$(find "$dist_dir" -maxdepth 1 -type f -name 'luci-app-wificalling-location-gateway*.apk' -print -quit)
-[ -n "$ipk_runtime" ] || fail 'x86_64 runtime IPK not found'
-[ -n "$ipk_luci" ] || fail 'all-architecture LuCI IPK not found'
-[ -n "$apk_runtime" ] || fail 'runtime APK not found'
-[ -n "$apk_luci" ] || fail 'LuCI APK not found'
+ipk_package=$(find "$dist_dir" -maxdepth 1 -type f -name 'wificalling-location-gateway*_x86_64.ipk' -print -quit)
+apk_package=$(find "$dist_dir" -maxdepth 1 -type f -name 'wificalling-location-gateway*.apk' -print -quit)
+[ -n "$ipk_package" ] || fail 'integrated x86_64 IPK not found'
+[ -n "$apk_package" ] || fail 'integrated x86_64 APK not found'
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-docker-matrix.XXXXXX")
 trap 'for name in $containers; do docker rm -f "$name" >/dev/null 2>&1 || true; done; rm -rf "$tmp"' EXIT HUP INT TERM
@@ -61,7 +57,7 @@ docker run --rm --pull never --platform linux/amd64 --network none \
 		/builder/staging_dir/host/bin/apk mkpkg \
 			--info "name:wloc-docker-smoke-deps" \
 			--info "version:1-r1" --info "arch:noarch" --info "license:MIT" \
-			--info "provides:ip-full sing-box luci-app-wificalling-gateway rpcd-mod-rpcsys" \
+			--info "provides:firewall4 ip-full nftables sing-box luci-base rpcd-mod-rpcsys kmod-nft-tproxy kmod-nft-socket" \
 			--files /state/empty --output /state/stub-output/wloc-docker-smoke-deps.apk
 	'
 
@@ -93,18 +89,18 @@ run_case() {
 		# architecture stanza. Register the architecture reported by the image;
 		# production firmware already has this in /etc/opkg.conf.
 		docker exec "$container" /bin/sh -c '
-			for package in ip-full sing-box luci-app-wificalling-gateway rpcd-mod-rpcsys; do
+			for package in firewall4 ip-full nftables sing-box luci-base rpcd-mod-rpcsys kmod-nft-tproxy kmod-nft-socket; do
 				printf "Package: %s\nVersion: 0-docker-smoke\nArchitecture: all\nStatus: install ok installed\n\n" "$package" >> /usr/lib/opkg/status
 				: > "/usr/lib/opkg/info/$package.list"
 			done
 		'
 		docker exec "$container" opkg --add-arch all:1 --add-arch x86_64:100 install --force-depends \
-			"/packages/${ipk_runtime##*/}" "/packages/${ipk_luci##*/}" >/dev/null
+			"/packages/${ipk_package##*/}" >/dev/null
 	else
 		docker exec "$container" apk add --allow-untrusted --no-network \
 			--force-missing-repositories --repositories-file /dev/null \
 			/smoke/wloc-docker-smoke-deps.apk \
-			"/packages/${apk_runtime##*/}" "/packages/${apk_luci##*/}" >/dev/null
+			"/packages/${apk_package##*/}" >/dev/null
 	fi
 
 	docker exec "$container" /etc/init.d/wloc-service enable

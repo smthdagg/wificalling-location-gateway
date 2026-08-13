@@ -5,11 +5,13 @@ OPENWRT_24_SDK='ghcr.io/openwrt/sdk:x86_64-24.10.8@sha256:b28d5e4087dbd3f815a8bf
 OPENWRT_25_SDK='ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35bebb77b3f6d9523fd68873fab78a1bd19cc123cd0f'
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
-version=0.1.0
-release=3
+version=1.0.0
+release=1
 arch=x86_64
 service_bin=
 ctl_bin=
+gateway_ipk=
+gateway_sha256=
 out_dir="$repo_root/dist/openwrt-release"
 plan_only=0
 
@@ -23,13 +25,15 @@ usage() {
 Usage: build-release-packages.sh [--plan] [options]
 
 Options:
-  --version VERSION       Package version (default: 0.1.0)
-  --release RELEASE       Package release number (default: 3)
-  --arch ARCH             OpenWrt runtime architecture (default: x86_64)
-  --service-bin PATH      Static wloc-service binary (required)
-  --ctl-bin PATH          Static wloc-ctl binary (required)
-  --out-dir PATH          Output directory
-  --plan                  Print the immutable build plan without Docker
+  --version VERSION          Package version (default: 1.0.0)
+  --release RELEASE          Package release number (default: 1)
+  --arch ARCH                OpenWrt runtime architecture (default: x86_64)
+  --service-bin PATH         Static wloc-service binary (required)
+  --ctl-bin PATH             Static wloc-ctl binary (required)
+  --gateway-ipk PATH         Pinned Wi-Fi Calling Gateway 1.7 IPK (required to build)
+  --gateway-sha256 SHA256    Expected Gateway IPK digest (required to build)
+  --out-dir PATH             Output directory
+  --plan                     Print the immutable build plan without Docker
 EOF
 }
 
@@ -40,6 +44,8 @@ while [ "$#" -gt 0 ]; do
 		--arch) [ "$#" -ge 2 ] || fail 'missing --arch value'; arch=$2; shift 2 ;;
 		--service-bin) [ "$#" -ge 2 ] || fail 'missing --service-bin value'; service_bin=$2; shift 2 ;;
 		--ctl-bin) [ "$#" -ge 2 ] || fail 'missing --ctl-bin value'; ctl_bin=$2; shift 2 ;;
+		--gateway-ipk) [ "$#" -ge 2 ] || fail 'missing --gateway-ipk value'; gateway_ipk=$2; shift 2 ;;
+		--gateway-sha256) [ "$#" -ge 2 ] || fail 'missing --gateway-sha256 value'; gateway_sha256=$2; shift 2 ;;
 		--out-dir) [ "$#" -ge 2 ] || fail 'missing --out-dir value'; out_dir=$2; shift 2 ;;
 		--plan) plan_only=1; shift ;;
 		-h|--help) usage; exit 0 ;;
@@ -62,10 +68,8 @@ esac
 cat <<EOF
 24.10 SDK: $OPENWRT_24_SDK
 25.12 SDK: $OPENWRT_25_SDK
-24.10 runtime: wloc-service_${version}-r${release}_${arch}.ipk
-24.10 LuCI: luci-app-wificalling-location-gateway_${version}-r${release}_all.ipk
-25.12 runtime: wloc-service-${version}-r${release}.apk (arch: ${arch})
-25.12 LuCI: luci-app-wificalling-location-gateway-${version}-r${release}.apk (arch: noarch)
+24.10 integrated: wificalling-location-gateway_${version}-r${release}_${arch}.ipk
+25.12 integrated: wificalling-location-gateway-${version}-r${release}.apk (arch: ${arch})
 EOF
 
 [ "$plan_only" -eq 0 ] || exit 0
@@ -77,97 +81,80 @@ case "${out_dir##*/}" in
 esac
 case "$out_dir" in /|"$repo_root") fail 'unsafe --out-dir' ;; esac
 [ ! -L "$out_dir" ] || fail '--out-dir must not be a symbolic link'
+[ -f "$gateway_ipk" ] || fail '--gateway-ipk must name an existing file'
+[ -n "$gateway_sha256" ] || fail '--gateway-sha256 is required'
+case "$gateway_sha256" in *[!0-9a-fA-F]*|'') fail 'invalid Gateway SHA-256' ;; esac
+[ "${#gateway_sha256}" -eq 64 ] || fail 'invalid Gateway SHA-256'
+actual_gateway_sha=$(shasum -a 256 "$gateway_ipk" | awk '{print $1}')
+[ "$actual_gateway_sha" = "$gateway_sha256" ] || fail 'Gateway IPK SHA-256 mismatch'
 
 stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-openwrt-package.XXXXXX")
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
-mkdir -p "$stage/input/wloc-service/files/usr/sbin" \
-	"$stage/input/wloc-service/files/etc/init.d" \
-	"$stage/input/wloc-service/files/etc/config" \
-	"$stage/input/luci-app-wificalling-location-gateway/files" \
-	"$stage/output"
+package_dir="$stage/input/wificalling-location-gateway"
+mkdir -p "$package_dir/files" "$stage/gateway" "$stage/output"
 chmod 0777 "$stage/output"
 
-cp "$service_bin" "$stage/input/wloc-service/files/usr/sbin/wloc-service"
-cp "$ctl_bin" "$stage/input/wloc-service/files/usr/sbin/wloc-ctl"
-cp "$repo_root/openwrt/files/etc/init.d/wloc-service" \
-	"$stage/input/wloc-service/files/etc/init.d/wloc-service"
-cp "$repo_root/openwrt/files/etc/config/wloc-service" \
-	"$stage/input/wloc-service/files/etc/config/wloc-service"
-for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh; do
-	cp "$repo_root/openwrt/files/usr/sbin/$helper" \
-		"$stage/input/wloc-service/files/usr/sbin/$helper"
+tar -xf "$gateway_ipk" -C "$stage/gateway"
+gateway_control=$(tar -xOf "$stage/gateway/control.tar.gz" ./control)
+printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null ||
+	fail 'Gateway IPK has an unexpected package identity'
+printf '%s\n' "$gateway_control" | grep -E '^Version: 1\.7\.[0-9]+-[0-9]+$' >/dev/null ||
+	fail 'Gateway IPK must be a validated 1.7.x release'
+tar -tzf "$stage/gateway/data.tar.gz" | while IFS= read -r member; do
+	case "$member" in /*|../*|*/../*|*/..) fail 'Gateway IPK contains an unsafe path' ;; esac
 done
-chmod 0755 "$stage/input/wloc-service/files/usr/sbin/"* \
-	"$stage/input/wloc-service/files/etc/init.d/wloc-service"
-cp -R "$repo_root/openwrt/luci-app-wificalling-location-gateway/files/." \
-	"$stage/input/luci-app-wificalling-location-gateway/files/"
-# The runtime package owns the executable helper. The LuCI package invokes it
-# through rpcd but must not install a second copy of the same path.
-rm -f "$stage/input/luci-app-wificalling-location-gateway/files/usr/sbin/export-mobileconfig.sh"
+tar -xzf "$stage/gateway/data.tar.gz" -C "$package_dir/files"
 
-cat > "$stage/input/wloc-service/Makefile" <<EOF
+# Overlay the integrated UI, then the architecture-specific WLOC runtime.
+cp -R "$repo_root/openwrt/luci-app-wificalling-location-gateway/files/." "$package_dir/files/"
+mkdir -p "$package_dir/files/usr/sbin" "$package_dir/files/etc/init.d" "$package_dir/files/etc/config"
+cp "$service_bin" "$package_dir/files/usr/sbin/wloc-service"
+cp "$ctl_bin" "$package_dir/files/usr/sbin/wloc-ctl"
+cp "$repo_root/openwrt/files/etc/init.d/wloc-service" "$package_dir/files/etc/init.d/wloc-service"
+cp "$repo_root/openwrt/files/etc/config/wloc-service" "$package_dir/files/etc/config/wloc-service"
+for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh; do
+	cp "$repo_root/openwrt/files/usr/sbin/$helper" "$package_dir/files/usr/sbin/$helper"
+done
+chmod 0755 "$package_dir/files/usr/sbin/"* "$package_dir/files/etc/init.d/"*
+
+cat > "$package_dir/Makefile" <<EOF
 include \$(TOPDIR)/rules.mk
-PKG_NAME:=wloc-service
+PKG_NAME:=wificalling-location-gateway
 PKG_VERSION:=$version
 PKG_RELEASE:=$release
 PKG_MAINTAINER:=wificalling-location-gateway maintainers
 PKG_LICENSE:=MIT
 include \$(INCLUDE_DIR)/package.mk
-define Package/wloc-service
+define Package/wificalling-location-gateway
   SECTION:=net
   CATEGORY:=Network
-  TITLE:=WLOC location service and control client
-  DEPENDS:=+firewall4 +ip-full +nftables +sing-box
+  TITLE:=Integrated Wi-Fi Calling and WLOC Location Gateway
+  DEPENDS:=+firewall4 +ip-full +nftables +sing-box +luci-base +rpcd-mod-rpcsys +kmod-nft-tproxy +kmod-nft-socket
+  PROVIDES:=wloc-service luci-app-wificalling-location-gateway luci-app-wificalling-gateway
 endef
-define Package/wloc-service/description
-  Architecture-specific WLOC daemon and local Unix-socket control client.
+define Package/wificalling-location-gateway/description
+  Complete Wi-Fi Calling Gateway 1.7, WLOC service, control client, and unified LuCI UI.
 endef
 define Build/Compile
 endef
-define Package/wloc-service/conffiles
+define Package/wificalling-location-gateway/conffiles
+/etc/config/wificalling-gateway
 /etc/config/wloc-service
 endef
-define Package/wloc-service/install
-	\$(INSTALL_DIR) \$(1)/usr/sbin \$(1)/etc/init.d \$(1)/etc/config
-	\$(INSTALL_BIN) ./files/usr/sbin/wloc-service \$(1)/usr/sbin/
-	\$(INSTALL_BIN) ./files/usr/sbin/wloc-ctl \$(1)/usr/sbin/
-	\$(INSTALL_BIN) ./files/usr/sbin/export-mobileconfig.sh \$(1)/usr/sbin/
-	\$(INSTALL_BIN) ./files/usr/sbin/wloc-redirect-sync.sh \$(1)/usr/sbin/
-	\$(INSTALL_BIN) ./files/usr/sbin/wloc-refresh-set.sh \$(1)/usr/sbin/
-	\$(INSTALL_BIN) ./files/etc/init.d/wloc-service \$(1)/etc/init.d/
-	\$(INSTALL_CONF) ./files/etc/config/wloc-service \$(1)/etc/config/
-endef
-define Package/wloc-service/postinst
-#!/bin/sh
-[ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
-/etc/init.d/wloc-service enable >/dev/null 2>&1 || true
-exit 0
-endef
-\$(eval \$(call BuildPackage,wloc-service))
-EOF
-
-cat > "$stage/input/luci-app-wificalling-location-gateway/Makefile" <<EOF
-include \$(TOPDIR)/rules.mk
-PKG_NAME:=luci-app-wificalling-location-gateway
-PKG_VERSION:=$version
-PKG_RELEASE:=$release
-PKG_MAINTAINER:=wificalling-location-gateway maintainers
-PKG_LICENSE:=MIT
-include \$(INCLUDE_DIR)/package.mk
-define Package/luci-app-wificalling-location-gateway
-  SECTION:=luci
-  CATEGORY:=LuCI
-  SUBMENU:=3. Applications
-  TITLE:=Wi-Fi Calling and WLOC Location Gateway UI
-  PKGARCH:=all
-  DEPENDS:=+wloc-service +luci-app-wificalling-gateway +luci-base +rpcd-mod-rpcsys
-endef
-define Build/Compile
-endef
-define Package/luci-app-wificalling-location-gateway/install
+define Package/wificalling-location-gateway/install
 	\$(CP) ./files/. \$(1)/
 endef
-\$(eval \$(call BuildPackage,luci-app-wificalling-location-gateway))
+define Package/wificalling-location-gateway/postinst
+#!/bin/sh
+[ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wificalling-gateway enable >/dev/null 2>&1 || true
+/etc/init.d/wloc-service enable >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || true
+/etc/init.d/wloc-service restart >/dev/null 2>&1 || true
+/etc/init.d/rpcd reload >/dev/null 2>&1 || true
+exit 0
+endef
+\$(eval \$(call BuildPackage,wificalling-location-gateway))
 EOF
 
 build_with_sdk() {
@@ -181,17 +168,13 @@ build_with_sdk() {
 	docker run --rm --pull never --platform linux/amd64 --network none \
 		-v "$stage/input:/input:ro" -v "$out:/output" \
 		--entrypoint /bin/bash "$image" -ec '
-			cp -a /input/wloc-service /builder/package/
-			cp -a /input/luci-app-wificalling-location-gateway /builder/package/
-			printf "%s\n" "CONFIG_PACKAGE_wloc-service=m" \
-				"CONFIG_PACKAGE_luci-app-wificalling-location-gateway=m" >> /builder/.config
+			cp -a /input/wificalling-location-gateway /builder/package/
+			printf "%s\n" "CONFIG_PACKAGE_wificalling-location-gateway=m" >> /builder/.config
 			cd /builder
 			make defconfig >/dev/null
-			make package/wloc-service/compile package/luci-app-wificalling-location-gateway/compile V=s
-			find bin/packages -type f \( -name "wloc-service*.ipk" -o -name "wloc-service*.apk" \
-				-o -name "luci-app-wificalling-location-gateway*.ipk" \
-				-o -name "luci-app-wificalling-location-gateway*.apk" \) \
-				-exec cp {} /output/ \;
+			make package/wificalling-location-gateway/compile V=s
+			find bin/packages -type f \( -name "wificalling-location-gateway*.ipk" \
+				-o -name "wificalling-location-gateway*.apk" \) -exec cp {} /output/ \;
 		'
 }
 
@@ -199,14 +182,13 @@ build_with_sdk openwrt-24.10 "$OPENWRT_24_SDK"
 build_with_sdk openwrt-25.12 "$OPENWRT_25_SDK"
 
 mkdir -p "$out_dir"
-rm -f "$out_dir"/wloc-service*.ipk "$out_dir"/wloc-service*.apk \
-	"$out_dir"/luci-app-wificalling-location-gateway*.ipk \
-	"$out_dir"/luci-app-wificalling-location-gateway*.apk \
-	"$out_dir"/SHA256SUMS "$out_dir"/docker-matrix-report.txt
+find "$out_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk' \
+	-o -name 'wificalling-location-gateway*.apk' -o -name 'SHA256SUMS' \
+	-o -name 'docker-matrix-report.txt' \) -delete
 find "$stage/output" -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp {} "$out_dir/" \;
-count=$(find "$out_dir" -maxdepth 1 -type f \( -name 'wloc-service*.ipk' -o -name 'wloc-service*.apk' \
-	-o -name 'luci-app-wificalling-location-gateway*.ipk' \
-	-o -name 'luci-app-wificalling-location-gateway*.apk' \) | wc -l | tr -d ' ')
-[ "$count" -eq 4 ] || fail "expected four packages, found $count"
-(cd "$out_dir" && shasum -a 256 ./*.ipk ./*.apk > SHA256SUMS)
+count=$(find "$out_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk' \
+	-o -name 'wificalling-location-gateway*.apk' \) | wc -l | tr -d ' ')
+[ "$count" -eq 2 ] || fail "expected two integrated packages, found $count"
+(cd "$out_dir" && shasum -a 256 ./wificalling-location-gateway*.ipk \
+	./wificalling-location-gateway*.apk > SHA256SUMS)
 printf 'release packages: %s\n' "$out_dir"
