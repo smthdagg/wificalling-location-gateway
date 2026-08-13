@@ -11,4 +11,5 @@
 - Re-review found one P2 builder/verifier mismatch: the builder wrote `./`
   paths while the verifier correctly requires basenames. The builder now emits
   basename-only entries and its regression test forbids the incompatible form.
-- Final verdict: pending confirmation of this last remediation.
+- Final verdict: `APPROVE` after the reviewer reproduced the corrected builder
+  output and passed the four-environment Docker matrix with no P0/P1/P2.
