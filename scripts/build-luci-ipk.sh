@@ -7,7 +7,9 @@ dependency_mode=${2:-production}
 package=luci-app-wificalling-location-gateway
 source_dir="$root/openwrt/$package/files"
 out_dir="$root/dist"
-out="$out_dir/${package}_${version}_all.ipk"
+architecture=all
+[ "$dependency_mode" = ax6s-standalone ] && architecture=aarch64_cortex-a53
+out="$out_dir/${package}_${version}_${architecture}.ipk"
 stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-luci-ipk.XXXXXX")
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
 
@@ -31,17 +33,72 @@ make_archive() {
 
 mkdir -p "$stage/control" "$stage/data" "$out_dir"
 cp -R "$source_dir/." "$stage/data/"
+provides=
+replaces=
+
+archive_is_safe() {
+	archive=$1
+	tar -tzf "$archive" | while IFS= read -r member; do
+		case "$member" in
+			/*|../*|*/../*|*/..) exit 1 ;;
+		esac
+	done
+}
+
+sha256_file() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | awk '{print $1}'
+	else
+		shasum -a 256 "$1" | awk '{print $1}'
+	fi
+}
 
 case "$dependency_mode" in
 	production)
 		depends='wloc-service, luci-app-wificalling-gateway, luci-base, rpcd-mod-rpcsys'
 		;;
-	ax6s-existing|ax6s-full)
+	ax6s-existing|ax6s-full|ax6s-standalone)
 		# The validated AX6S predates package registration for its already-running
-		# wloc-service. This variant only installs LuCI files and keeps runtime
-		# service/config ownership outside opkg.
-		depends='luci-app-wificalling-gateway, luci-base, rpcd-mod-rpcsys'
-		rm -f "$stage/data/www/luci-static/resources/view/wificalling-gateway/overview.js"
+		# wloc-service. The existing/full variants retain the external Gateway
+		# package dependency; standalone safely merges a pinned Gateway IPK.
+		if [ "$dependency_mode" = ax6s-standalone ]; then
+			gateway_ipk=${GATEWAY_IPK:-}
+			gateway_sha=${GATEWAY_IPK_SHA256:-}
+			[ -f "$gateway_ipk" ] || { echo "missing Gateway IPK: $gateway_ipk" >&2; exit 2; }
+			[ -n "$gateway_sha" ] || { echo 'GATEWAY_IPK_SHA256 is required' >&2; exit 2; }
+			actual_gateway_sha=$(sha256_file "$gateway_ipk")
+			[ "$actual_gateway_sha" = "$gateway_sha" ] || {
+				echo "Gateway IPK SHA-256 mismatch: expected $gateway_sha, got $actual_gateway_sha" >&2
+				exit 2
+			}
+			gateway_stage="$stage/gateway"
+			mkdir -p "$gateway_stage/package" "$gateway_stage/data"
+			tar -xf "$gateway_ipk" -C "$gateway_stage/package"
+			gateway_control=$(tar -xOf "$gateway_stage/package/control.tar.gz" ./control)
+			printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null || {
+				echo 'Gateway IPK has an unexpected package identity' >&2
+				exit 2
+			}
+			printf '%s\n' "$gateway_control" | grep -E '^Version: 1\.7\.[0-9]+-[0-9]+$' >/dev/null || {
+				echo 'Gateway IPK must be a validated 1.7.x release' >&2
+				exit 2
+			}
+			archive_is_safe "$gateway_stage/package/data.tar.gz" || {
+				echo 'Gateway IPK contains an unsafe path' >&2
+				exit 2
+			}
+			tar -xzf "$gateway_stage/package/data.tar.gz" -C "$gateway_stage/data"
+			cp -R "$gateway_stage/data/." "$stage/data/"
+			# The integrated LuCI views intentionally replace the standalone
+			# Gateway views after the verified Gateway payload is merged.
+			cp -R "$source_dir/." "$stage/data/"
+			depends='luci-base, rpcd-mod-rpcsys, sing-box, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full'
+			provides='luci-app-wificalling-gateway, wloc-service'
+			replaces='luci-app-wificalling-gateway, wloc-service'
+		else
+			depends='luci-app-wificalling-gateway, luci-base, rpcd-mod-rpcsys'
+			rm -f "$stage/data/www/luci-static/resources/view/wificalling-gateway/overview.js"
+		fi
 		view_suffix=$(printf '%s' "$version" | tr '.-' '__')
 		view_name="wloc_mode_fix_$view_suffix"
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/wloc.js" \
@@ -61,7 +118,7 @@ with open(path, "w", encoding="utf-8") as handle:
     json.dump(menu, handle, ensure_ascii=False, indent=2)
     handle.write("\n")
 PY
-		if [ "$dependency_mode" = ax6s-full ]; then
+		if [ "$dependency_mode" = ax6s-full ] || [ "$dependency_mode" = ax6s-standalone ]; then
 			service_bin=${WLOC_SERVICE_BIN:-$out_dir/wloc-service_aarch64-openwrt-linux-musl}
 			ctl_bin=${WLOC_CTL_BIN:-$out_dir/wloc-ctl_aarch64-openwrt-linux-musl}
 			[ -x "$service_bin" ] || { echo "missing WLOC service binary: $service_bin" >&2; exit 2; }
@@ -74,13 +131,21 @@ PY
 			cp "$service_bin" "$stage/data/usr/sbin/wloc-service"
 			cp "$ctl_bin" "$stage/data/usr/sbin/wloc-ctl"
 			chmod 0755 "$stage/data/etc/init.d/wloc-service" "$stage/data/usr/sbin/"*
-			printf '%s\n' '/etc/config/wloc-service' > "$stage/control/conffiles"
+			if [ "$dependency_mode" = ax6s-standalone ]; then
+				printf '%s\n' \
+					'/etc/config/wificalling-gateway' \
+					'/etc/config/wloc-service' > "$stage/control/conffiles"
+			else
+				printf '%s\n' '/etc/config/wloc-service' > "$stage/control/conffiles"
+			fi
 			cat > "$stage/control/postinst" <<'POSTINST'
 #!/bin/sh
 [ -n "${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wificalling-gateway enable >/dev/null 2>&1 || true
 /etc/init.d/wloc-service enable >/dev/null 2>&1 || true
 killall -q wloc-service >/dev/null 2>&1 || true
 rm -f /var/run/wloc-service/control.sock
+/etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || true
 /etc/init.d/wloc-service restart >/dev/null 2>&1 || true
 /etc/init.d/rpcd reload >/dev/null 2>&1 || true
 exit 0
@@ -97,7 +162,7 @@ esac
 printf '%s\n' \
 	"Package: $package" \
 	"Version: $version" \
-	'Architecture: all' \
+	"Architecture: $architecture" \
 	'Maintainer: wificalling-location-gateway maintainers' \
 	"Depends: $depends" \
 	'Section: luci' \
@@ -105,6 +170,8 @@ printf '%s\n' \
 	'License: MIT' \
 	'Description: Unified LuCI UI for Wi-Fi Calling and WLOC location controls.' \
 	> "$stage/control/control"
+[ -z "$provides" ] || printf 'Provides: %s\n' "$provides" >> "$stage/control/control"
+[ -z "$replaces" ] || printf 'Replaces: %s\n' "$replaces" >> "$stage/control/control"
 printf '2.0\n' > "$stage/debian-binary"
 
 make_archive "$stage/control" "$stage/control.tar.gz" .

@@ -50,6 +50,10 @@ control=$(tar -xOf "$tmp/result/control.tar.gz" ./control)
 conffiles=$(tar -xOf "$tmp/result/control.tar.gz" ./conffiles)
 data_members=$(tar -tzf "$tmp/result/data.tar.gz")
 
+printf '%s\n' "$output" | grep -F "_${version}_aarch64_cortex-a53.ipk" >/dev/null ||
+	fail 'standalone package filename must identify the AX6S runtime architecture'
+printf '%s\n' "$control" | grep -Fx 'Architecture: aarch64_cortex-a53' >/dev/null ||
+	fail 'standalone package metadata must identify the AX6S runtime architecture'
 printf '%s\n' "$control" | grep -F 'Provides: luci-app-wificalling-gateway, wloc-service' >/dev/null ||
 	fail 'standalone package must provide both bundled components'
 printf '%s\n' "$control" | grep -F 'Depends: luci-base, rpcd-mod-rpcsys, sing-box, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full' >/dev/null ||

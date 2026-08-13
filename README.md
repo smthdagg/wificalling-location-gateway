@@ -102,7 +102,6 @@ flowchart LR
 
 ### 前置条件
 
-- 已配置并可用的 [Wi‑Fi Calling Gateway 1.7](https://github.com/smthdagg/luci-app-wificalling-gateway)。
 - sing-box、firewall4/nftables、LuCI 与 rpcd 可用。
 - 为测试 iPhone 建立固定 DHCP 地址，并在 Gateway 中绑定正确节点。
 - 已备份路由器配置；手机上的 WARP、Shadowrocket 或其他 VPN 在路由器 WLOC 测试期间保持关闭。
@@ -110,14 +109,28 @@ flowchart LR
 
 ### 1. 选择正确的安装包
 
-每个平台需要同时安装两个包：
+Redmi AX6S 使用单一的架构专用集成包：
+
+- `luci-app-wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk`
+
+该包内含 Wi‑Fi Calling Gateway 1.7、WLOC 服务、控制工具和统一 LuCI，不依赖另行安装 `luci-app-wificalling-gateway` 或 `wloc-service`。重新安装或升级时，opkg 会保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
+
+通用 OpenWrt/iStoreOS 发布仍采用两个包，以便为不同 CPU 提供正确的运行时：
 
 - `wloc-service`：与 CPU 架构匹配的 Rust 服务和控制工具；
 - `luci-app-wificalling-location-gateway`：架构无关的 LuCI/rpcd 界面。
 
 从 [Releases](https://github.com/smthdagg/wificalling-location-gateway/releases) 下载对应文件，并先校验同一发布目录中的 `SHA256SUMS`。
 
-### 2. OpenWrt 24.10 / iStoreOS 24.10（IPK）
+### 2. Redmi AX6S（单一集成 IPK）
+
+```sh
+opkg install /tmp/luci-app-wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk
+```
+
+不要先执行 `opkg remove`；直接安装即可恢复缺失组件并保留现有配置。安装后按“验证服务”一节检查两个服务。
+
+### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
 opkg install /tmp/wloc-service_0.1.0-r3_<路由器架构>.ipk
@@ -127,7 +140,7 @@ opkg install /tmp/luci-app-wificalling-location-gateway_0.1.0-r3_all.ipk
 /etc/init.d/rpcd restart
 ```
 
-### 3. OpenWrt 25.12（原生 APK v3）
+### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
 apk add --allow-untrusted /tmp/wloc-service-0.1.0-r3.apk
@@ -139,11 +152,12 @@ apk add --allow-untrusted /tmp/luci-app-wificalling-location-gateway-0.1.0-r3.ap
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。
 
-### 4. 验证服务
+### 5. 验证服务
 
 ```sh
 test -S /var/run/wloc-service/control.sock
 /usr/sbin/wloc-ctl status
+/etc/init.d/wificalling-gateway status
 logread -e wloc-service
 ```
 
