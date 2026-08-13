@@ -7,7 +7,8 @@
 //! Fail-open: any interception error forwards the original upstream response
 //! unchanged; a malformed WLOC response is never replaced.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
 use http::{HeaderValue, Request, Response};
@@ -34,6 +35,12 @@ pub struct MitmProxy {
     upstream_override: Option<(String, u16)>,
     /// Append-only rewrite log (one JSON line per patched response).
     events_file: Option<std::path::PathBuf>,
+    /// Per-client cache of the last synthesized BlockBSSIDApple payload
+    /// (visible APs at the target). Coordinate queries (kind 3) carry no
+    /// BSSIDs of their own, so they are answered from here instead of with
+    /// an empty block - that is what makes older iOS accept the target on
+    /// the first try instead of retrying for several refresh cycles.
+    synthesized_payloads: Arc<Mutex<HashMap<String, Vec<u8>>>>,
 }
 
 impl MitmProxy {
@@ -66,6 +73,7 @@ impl MitmProxy {
             upstream_connector: TlsConnector::from(Arc::new(client)),
             upstream_override: None,
             events_file: None,
+            synthesized_payloads: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -165,6 +173,54 @@ impl MitmProxy {
             }
         }
         eprintln!("wloc proxy: request body {} bytes", request_body.len());
+
+        // WLOC synthesis: when enabled, answer directly from the request
+        // instead of forwarding to Apple (millisecond responses, like local
+        // proxy apps). Set WLOC_SYNTH_RESPONSE=1 to activate.
+        if is_wloc && std::env::var("WLOC_SYNTH_RESPONSE").as_deref() == Ok("1") {
+            if let Some(target) = patch {
+                let request_body = request_body.clone();
+                match crate::wloc::synthesize_wloc_response(&request_body, target) {
+                    Ok(patched) => {
+                        let (kind, payload) = crate::wloc::synthesized_parts(&patched)
+                            .unwrap_or((1, &[][..]));
+                        if payload.is_empty() {
+                            // Coordinate query (kind 3): answer with the last
+                            // known visible devices instead of an empty block,
+                            // so the phone gets its APs at the target without
+                            // waiting for the next BSSID round trip.
+                            if let Some(cached) = self
+                                .synthesized_payloads
+                                .lock()
+                                .ok()
+                                .and_then(|cache| cache.get(client_addr).cloned())
+                            {
+                                let mut out = Vec::with_capacity(10 + cached.len());
+                                out.extend([0x00, 0x01, 0x00, 0x00, 0x00, kind]);
+                                out.extend((cached.len() as u32).to_be_bytes());
+                                out.extend(cached);
+                                eprintln!(
+                                    "wloc proxy: synthesized kind={kind} from cache -> {} bytes",
+                                    out.len()
+                                );
+                                return Ok((request_body.len(), out));
+                            }
+                        } else if let Ok(mut cache) = self.synthesized_payloads.lock() {
+                            cache.insert(client_addr.to_string(), payload.to_vec());
+                        }
+                        eprintln!(
+                            "wloc proxy: synthesized {} -> {} bytes (is_wloc={is_wloc})",
+                            request_body.len(),
+                            patched.len()
+                        );
+                        return Ok((request_body.len(), patched));
+                    }
+                    // Fail open: any synthesis error falls through to the
+                    // upstream forwarding path below.
+                    Err(_) => eprintln!("wloc proxy: synthesis failed, forwarding upstream"),
+                }
+            }
+        }
 
         let (connect_host, connect_port) = match &self.upstream_override {
             Some((host, port)) => (host.clone(), *port),

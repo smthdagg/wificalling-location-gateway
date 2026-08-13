@@ -6,7 +6,7 @@
 
 use wificalling_location_gateway::wloc::{
     coord_to_int, encode_length_delimited_field, encode_varint_field, patch_payload,
-    patch_wloc_response, PatchTarget, WLOC_MARKER,
+    patch_wloc_response, synthesize_wloc_response, PatchTarget, WLOC_MARKER,
 };
 
 const LAT: f64 = 51.5074; // London
@@ -310,6 +310,41 @@ fn root_location_field_is_patched() {
     assert_eq!(location.0, coord_to_int(LAT));
     assert_eq!(location.1, coord_to_int(LON));
     assert!(!fields.iter().any(|(number, _, _)| *number == 3));
+}
+
+#[test]
+fn synthesize_response_from_request_without_upstream() {
+    // A request with a WifiDevice is turned into a response with the patched
+    // WifiDevice - no upstream needed. The real client frames requests in
+    // the Wloc10 envelope, and the synthesized response must use the
+    // standard gs-loc header.
+    let request = wloc10_envelope(&root_payload());
+    let synthesized = synthesize_wloc_response(&request, &target()).unwrap();
+    assert_eq!(&synthesized[..6], &[0x00, 0x01, 0x00, 0x00, 0x00, 0x01]);
+    let new_len = u32::from_be_bytes([synthesized[6], synthesized[7], synthesized[8], synthesized[9]]) as usize;
+    assert_eq!(synthesized.len(), 10 + new_len);
+    let fields = fields_of(&synthesized[10..10 + new_len]);
+    let wifi = fields
+        .iter()
+        .find(|(number, wire, _)| *number == 2 && *wire == 2)
+        .expect("WifiDevice from the request must be reused");
+    let wifi_value = strip_length_prefix(&wifi.2);
+    let location = fields_of(&wifi_value)
+        .into_iter()
+        .find(|(number, wire, _)| *number == 2 && *wire == 2)
+        .expect("WifiDevice must contain a Location");
+    let (lat, lon) = location_of_field(&location.2);
+    assert_eq!(lat, coord_to_int(LAT));
+    assert_eq!(lon, coord_to_int(LON));
+    assert!(
+        fields.iter().all(|(number, _, _)| *number == 2),
+        "synthesized response must contain only WifiDevice fields"
+    );
+}
+
+#[test]
+fn synthesize_rejects_invalid_request() {
+    assert!(synthesize_wloc_response(b"not-protobuf", &target()).is_err());
 }
 
 #[test]

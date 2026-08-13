@@ -39,7 +39,7 @@ for hosts_file in /etc/hosts /tmp/hosts/wloc-hosts; do
     sed -i "/$HOSTS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
     cat >> "$hosts_file" <<EOF
 $HOSTS_MARKER
-192.168.31.1 gs-loc.apple.com gs-loc-cn.apple.com bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com
+192.168.31.1 gs-loc.apple.com gs-loc-cn.apple.com gs-loc-corpa.apple.com gs-loc.apple.com.cn bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com
 # wloc-service end
 EOF
 done

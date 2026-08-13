@@ -13,7 +13,7 @@ set -eu
 TABLE=wloc_service
 SET=apple_hosts
 
-HOSTS="gs-loc.apple.com gs-loc-cn.apple.com bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com"
+HOSTS="gs-loc.apple.com gs-loc-cn.apple.com gs-loc-corpa.apple.com gs-loc.apple.com.cn bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com"
 
 collect() {
     # Query an explicit public resolver so the DNS hijack (which maps the
