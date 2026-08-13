@@ -4,7 +4,7 @@ Private, security-gated development repository for an isolated OpenWrt WLOC loca
 
 The `main` branch remains the security-gated integration baseline. The standalone daemon/UI work is developed on the Issue 17 branch and is not a claim of production readiness until its pull request and device gates are accepted.
 
-For the integrated AX6S test workflow, see the bilingual [Wi‑Fi Calling + WLOC tutorial](docs/WIFICALLING_WLOC_TUTORIAL_ZH_EN.md). The tutorial documents the Issue 17 development/AX6S deployment branch; merge and release status is tracked by the GitHub pull request.
+For the integrated AX6S workflow, see the separate [中文 Wi‑Fi Calling + WLOC 完整使用教程](docs/WIFICALLING_WLOC_TUTORIAL_ZH.md) and [English Wi‑Fi Calling + WLOC complete user guide](docs/WIFICALLING_WLOC_TUTORIAL_EN.md). These guides document the Issue 17 development/AX6S branch; merge and release status is tracked by the GitHub pull request.
 
 ## Multi-Agent task graph
 
