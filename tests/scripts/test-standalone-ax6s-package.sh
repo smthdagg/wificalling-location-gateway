@@ -54,6 +54,7 @@ mkdir -p "$tmp/result"
 tar -xf "$output" -C "$tmp/result"
 control=$(tar -xOf "$tmp/result/control.tar.gz" ./control)
 conffiles=$(tar -xOf "$tmp/result/control.tar.gz" ./conffiles)
+postinst=$(tar -xOf "$tmp/result/control.tar.gz" ./postinst)
 data_members=$(tar -tzf "$tmp/result/data.tar.gz")
 
 printf '%s\n' "$output" | grep -F "/wificalling-location-gateway_${version}_aarch64_cortex-a53.ipk" >/dev/null ||
@@ -77,6 +78,12 @@ printf '%s\n' "$conffiles" | grep -Fx '/etc/config/wificalling-gateway' >/dev/nu
 	fail 'Gateway configuration must be preserved across reinstalls'
 printf '%s\n' "$conffiles" | grep -Fx '/etc/config/wloc-service' >/dev/null ||
 	fail 'WLOC configuration must be preserved across reinstalls'
+printf '%s\n' "$postinst" | grep -F 'install -d -m 0700 /var/run/wificalling-gateway' >/dev/null ||
+	fail 'standalone post-install must create the volatile Gateway runtime directory before restart'
+runtime_line=$(printf '%s\n' "$postinst" | grep -n -F 'install -d -m 0700 /var/run/wificalling-gateway' | cut -d: -f1)
+restart_line=$(printf '%s\n' "$postinst" | grep -n -F '/etc/init.d/wificalling-gateway restart' | cut -d: -f1)
+[ "$runtime_line" -lt "$restart_line" ] ||
+	fail 'standalone post-install must create the Gateway runtime directory before restart'
 for member in \
 	'./etc/config/wificalling-gateway' \
 	'./etc/init.d/wificalling-gateway' \
