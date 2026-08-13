@@ -7,6 +7,7 @@
 在不修改 Wi‑Fi Calling Gateway 1.7 稳定数据面的前提下，以独立 Rust 服务完成出口定位、WLOC 定位响应处理、证书生命周期、精确流量隔离和 LuCI 管理。
 
 [![CI](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.0.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Rust 1.90](https://img.shields.io/badge/Rust-1.90-orange.svg?logo=rust)](Cargo.toml)
 [![OpenWrt](https://img.shields.io/badge/OpenWrt-24.10%20%7C%2025.12-00B5E2.svg?logo=openwrt)](#支持范围与验证状态)
@@ -91,7 +92,7 @@ flowchart LR
 | 平台 | 架构 | 包管理器 | 当前证据 | 状态 |
 |---|---:|---|---|---|
 | Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | 实机安装、procd、LuCI、自动/手动切换、证书和 iPhone WLOC 链路 | **真机通过** |
-| OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker 中启动 init/ubus、安装双包、启动服务、Socket 与 v1 状态检查 | **安装矩阵通过** |
+| OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker 中启动 init/ubus、安装集成包、启动服务、Socket 与 v1 状态检查 | **安装矩阵通过** |
 | iStoreOS 24.10.5 | x86_64 | opkg / IPK | 同上 | **安装矩阵通过** |
 | OpenWrt 25.12.3 | x86_64 | apk / APK v3 | 同上，使用原生 APK v3，非改名 IPK | **安装矩阵通过** |
 | 其他 OpenWrt / ImmortalWrt 版本或 CPU | — | — | 尚无对应设备/SDK证据 | **未验证** |
@@ -115,10 +116,9 @@ Redmi AX6S 使用单一的架构专用集成包：
 
 该包内含 Wi‑Fi Calling Gateway 1.7、WLOC 服务、控制工具和统一 LuCI，不依赖另行安装 `luci-app-wificalling-gateway` 或 `wloc-service`。重新安装或升级时，opkg 会保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
 
-通用 OpenWrt/iStoreOS 发布仍采用两个包，以便为不同 CPU 提供正确的运行时：
-
-- `wloc-service`：与 CPU 架构匹配的 Rust 服务和控制工具；
-- `luci-app-wificalling-location-gateway`：架构无关的 LuCI/rpcd 界面。
+正式版 1.0 对每个平台只提供一个完整集成包。包名统一为
+`wificalling-location-gateway`，内含 Wi‑Fi Calling Gateway 1.7、WLOC
+服务、控制工具和统一 LuCI；不再要求用户分别安装组件包。
 
 从 [Releases](https://github.com/smthdagg/wificalling-location-gateway/releases) 下载对应文件，并先校验同一发布目录中的 `SHA256SUMS`。
 
@@ -133,21 +133,13 @@ opkg install /tmp/wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
-opkg install /tmp/wloc-service_0.1.0-r3_<路由器架构>.ipk
-opkg install /tmp/luci-app-wificalling-location-gateway_0.1.0-r3_all.ipk
-/etc/init.d/wloc-service enable
-/etc/init.d/wloc-service restart
-/etc/init.d/rpcd restart
+opkg install /tmp/wificalling-location-gateway_1.0.0-r1_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
-apk add --allow-untrusted /tmp/wloc-service-0.1.0-r3.apk
-apk add --allow-untrusted /tmp/luci-app-wificalling-location-gateway-0.1.0-r3.apk
-/etc/init.d/wloc-service enable
-/etc/init.d/wloc-service restart
-/etc/init.d/rpcd restart
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.0-r1.apk
 ```
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。
@@ -190,7 +182,7 @@ logread -e wloc-service
 ./scripts/ci/verify.sh
 ```
 
-该入口执行格式、Clippy、单元/集成测试、Rust 行覆盖率（最低 80%）、依赖审计、许可证策略、秘密扫描、发布体积和仓库契约检查。当前验证基线为 **46 个 Python 测试通过、Rust 行覆盖率 80.25%、release 验证二进制约 0.97 MB**。
+该入口执行格式、Clippy、单元/集成测试、Rust 行覆盖率（最低 80%）、依赖审计、许可证策略、秘密扫描、发布体积和仓库契约检查。正式版 1.0 验证基线为 **67 个 Python 测试通过、Rust 行覆盖率 80.32%、release 验证二进制约 0.97 MB**。
 
 ### AX6S / AArch64 交叉构建
 
@@ -209,11 +201,13 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
   --out-dir "$PWD/dist/runtime/x86_64"
 
 ./scripts/openwrt/build-release-packages.sh \
-  --version 0.1.0 \
-  --release 3 \
+  --version 1.0.0 \
+  --release 1 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
   --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \
+  --gateway-ipk /absolute/path/luci-app-wificalling-gateway_1.7.3-1_all.ipk \
+  --gateway-sha256 <verified-sha256> \
   --out-dir "$PWD/dist/openwrt-release"
 ```
 
@@ -288,4 +282,4 @@ docs/                        API、安全、部署、测试和双语用户教程
 
 本项目采用 [MIT License](LICENSE)。第三方依赖及外部项目仍分别遵循其自身许可证；MIT 授权不改变 [clean-room 边界 ADR](docs/adr/0001-license-boundary.md) 中对外部 AGPL 实现材料的隔离要求。
 
-Wi‑Fi Calling Gateway 1.7 是独立版本、独立仓库的项目，本仓库不复制或 vendor 其稳定代码库。
+Wi‑Fi Calling Gateway 1.7 仍由独立仓库维护。本仓库不 vendor 它的源码；正式包构建只接受经过身份、版本和 SHA-256 校验的已发布 IPK，并在构建时组合为单一安装包。

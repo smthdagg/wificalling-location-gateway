@@ -16,7 +16,7 @@ As an AX6S administrator, I can install one architecture-specific IPK that resto
 - Command: `./tests/scripts/test-standalone-ax6s-package.sh`
 - Result: `standalone AX6S package tests passed`
 - Full command: `./scripts/ci/verify.sh`
-- Result: repository gates passed; 67 Python tests passed; Rust line coverage 80.25%; audit, deny, secret scan, release-size, shell and packaging gates passed.
+- Result: repository gates passed; 67 Python tests passed; Rust line coverage 80.32%; audit, deny, secret scan, release-size, shell and packaging gates passed.
 
 ## Guarantees
 
@@ -31,5 +31,13 @@ As an AX6S administrator, I can install one architecture-specific IPK that resto
 | A mismatched Gateway package digest stops the build | Negative SHA-256 test |
 
 ## Scope and gap
+
+The formal release artifact is
+`wificalling-location-gateway_1.0.0-1_aarch64_cortex-a53.ipk`. Its product
+binaries were rebuilt from the version 1.0.0 source with the pinned mt7622
+toolchain: `wloc-service` is a static AArch64 ELF of 1,904,800 bytes and
+`wloc-ctl` is a static AArch64 ELF of 462,792 bytes. The package SHA-256 is
+`6d2db7a89cb0c9577ec66582e5ecc6707643678fab35df7130e386d7c661c9de`
+and is also recorded in the release `SHA256SUMS`.
 
 This evidence verifies package construction, metadata, payload and the complete repository test suite. Router installation remains a separate real-device step because LuCI login is required. The single package still depends on normal OpenWrt system facilities such as LuCI, rpcd, sing-box, nftables and firewall4; “standalone” means no separately installed Wi-Fi Calling Gateway or WLOC application package.

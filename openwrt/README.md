@@ -1,7 +1,8 @@
-# OpenWrt deployment scaffolding
+# OpenWrt packaging and runtime integration
 
-This directory holds the packaging scaffold for the WLOC service control
-daemon on OpenWrt 24.10 (Redmi AX6S / mt7622, AArch64).
+This directory contains the production OpenWrt integration for release 1.0:
+the Rust daemon/control client, procd/UCI lifecycle, precise WLOC network
+helpers, rpcd/LuCI UI, and package definitions.
 
 ## Layout
 
@@ -11,21 +12,24 @@ daemon on OpenWrt 24.10 (Redmi AX6S / mt7622, AArch64).
 - `files/etc/config/wloc-service` — UCI configuration skeleton. `enabled`,
   `node_ref`, `assigned_device`, `probe_interval`, and `geo_provider` are
   consumed by the runtime adapters as they land.
-- `Makefile` — OpenWrt package definition. The Rust binary is produced by
+- `Makefile` — component package definition for feed development. The Rust binary is produced by
   `scripts/ci/verify-rust-openwrt.sh` against the pinned OpenWrt 24.10
   toolchain and installed from `$(BIN_DIR)`.
 
-## Deployment steps (on a prepared OpenWrt build host)
+## Release packaging
 
-1. Build the AArch64 binary with the pinned cross-build script.
-2. Copy the binary to `$(BIN_DIR)/wloc-service`.
-3. `make package/wloc-service/compile` then `make package/wloc-service/install`.
-4. Install the resulting `.ipk` on the router and start the service:
-   `service wloc-service start`.
+End users install one architecture-specific package named
+`wificalling-location-gateway`. AX6S uses
+`wificalling-location-gateway_1.0.0-1_aarch64_cortex-a53.ipk`; x86-64 24.x
+uses the integrated IPK and 25.x uses the native APK v3. Both UCI paths are
+declared as conffiles, so direct upgrade/reinstall preserves configuration.
+
+The release builder composes a pinned, verified Gateway 1.7 IPK at build time;
+the source repository remains isolated and does not vendor the Gateway source.
 
 ## Hard gates
 
-- The daemon only serves the control API; no WLOC response patching, CA
-  installation, traffic interception, or nftables redirect is implemented
-  here. Those require the Phase 0 fixture and license gates to close.
+- Interception is restricted to the assigned test device, exact authorized
+  Apple hosts, and TCP 443. UDP 500/4500 and the Gateway nftables table are
+  outside the WLOC data plane.
 - The socket is root-only (0600); no TCP management listener exists.
