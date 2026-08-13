@@ -1,5 +1,6 @@
 'use strict';
 'require view';
+'require wificalling-location-gateway.i18n as wlocI18n';
 
 // FAQ：Wi-Fi Calling 与 WLOC 定位的使用步骤和注意事项（中英双语）。
 
@@ -100,6 +101,7 @@ function notesCard(title, notes) {
 
 return view.extend({
 	render: function() {
+		wlocI18n.localizeTabs();
 		// Follow the LuCI interface language automatically (the body class
 		// is `lang_en` on this firmware, `lang-en` on others).
 		var cls = document.body.className;

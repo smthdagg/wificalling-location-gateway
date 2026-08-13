@@ -23,6 +23,22 @@ const WAN_V4: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
 const EXIT_A: IpAddr = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8));
 const EXIT_B: IpAddr = IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9));
 
+#[test]
+fn coordinate_mode_switch_is_local_only_and_never_waits_for_reverse_geocoding() {
+    let source = include_str!("../src/app.rs");
+    let block = source
+        .split("pub fn set_manual_location")
+        .nth(1)
+        .expect("manual location implementation")
+        .split("pub fn clear_manual_location")
+        .next()
+        .expect("manual location function boundary");
+    assert!(
+        !block.contains("reverse_geocode("),
+        "a fixed-coordinate mode switch must update locally without blocking the control socket"
+    );
+}
+
 fn limits() -> ProbeLimits {
     ProbeLimits {
         max_observation_age: Duration::from_secs(60),
@@ -458,13 +474,13 @@ fn status_file_and_target_events_are_written() {
         status["geo"]["latitude"].is_number(),
         "status file must carry GPS"
     );
-    // A manual preset is the effective target: the status file shows the
-    // manual coordinates. Country/city may come from a best-effort reverse
-    // geocode (network) or be null when it fails - coordinates are the
-    // authoritative part.
+    // A manual preset is the effective target. The control operation is
+    // deliberately local-only, so optional place metadata remains null.
     assert_eq!(status["geo"]["latitude"], 51.5074);
     assert_eq!(status["geo"]["longitude"], -0.1278);
-    assert!(status["geo"]["country_code"].is_null() || status["geo"]["country_code"].is_string());
+    assert!(status["geo"]["country_code"].is_null());
+    assert!(status["geo"]["city"].is_null());
+    assert!(status["geo"]["timezone"].is_null());
 
     let events_text = std::fs::read_to_string(&events_path).unwrap();
     assert!(

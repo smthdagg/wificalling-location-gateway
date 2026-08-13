@@ -189,10 +189,22 @@ return baseclass.extend({
 	// Replace the top tab labels with the current UI language.
 	localizeTabs: function() {
 		var self = this;
-		document.querySelectorAll('#tabmenu a, .tabs a').forEach(function(a) {
-			var mapped = self.t(a.textContent.trim());
-			if (mapped !== a.textContent)
-				a.textContent = mapped;
-		});
+		var apply = function() {
+			document.querySelectorAll('#tabmenu a, .tabs a').forEach(function(a) {
+				var mapped = self.t(a.textContent.trim());
+				if (mapped !== a.textContent)
+					a.textContent = mapped;
+			});
+		};
+		apply();
+		// LuCI replaces the tab bar after a view's render() returns. Repeat
+		// after the next two paints so the final DOM, including FAQ, keeps
+		// the selected interface language.
+		if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+			window.requestAnimationFrame(function() {
+				apply();
+				window.requestAnimationFrame(apply);
+			});
+		}
 	}
 });

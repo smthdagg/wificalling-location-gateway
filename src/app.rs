@@ -350,10 +350,11 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             latitude,
             longitude,
         };
-        // Best-effort reverse geocode so the monitor page can show country/
-        // city/timezone for the manual preset. Failure keeps the previous
-        // place info (or none) - the coordinates themselves are authoritative.
-        self.manual_geo = crate::georesolver::geocode::reverse_geocode(latitude, longitude).ok();
+        // A coordinate mode switch is a local control operation and must not
+        // block the root-only control socket on an external reverse-geocode
+        // request. The coordinates are authoritative; optional place metadata
+        // is cleared until an independently bounded refresh can populate it.
+        self.manual_geo = None;
         self.publish_patch_target();
         self.refresh_state_file();
         Ok(())

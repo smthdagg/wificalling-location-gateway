@@ -467,6 +467,68 @@ mod tests {
     }
 
     #[test]
+    fn reverse_geocode_at_parses_a_mock_http_response_off_the_control_path() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut buf = [0_u8; 1024];
+            let count = sock.read(&mut buf).unwrap();
+            let request = String::from_utf8_lossy(&buf[..count]);
+            assert!(request.starts_with("GET /reverse?lat=51.5074&lon=-0.1278"));
+            let body = br#"{"display_name":"London, UK","address":{"city":"London","country_code":"gb"},"timezone":"Europe/London"}"#;
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            sock.write_all(head.as_bytes()).unwrap();
+            sock.write_all(body).unwrap();
+        });
+
+        let result = reverse_geocode_at("127.0.0.1", port, 51.5074, -0.1278).unwrap();
+        assert_eq!(result.city, "London");
+        assert_eq!(result.country_code, "GB");
+        assert_eq!(result.timezone, "Europe/London");
+    }
+
+    #[test]
+    fn reverse_geocode_at_rejects_malformed_and_oversized_http_responses() {
+        use std::io::{Read, Write};
+
+        fn serve_once(response: Vec<u8>) -> u16 {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            std::thread::spawn(move || {
+                let (mut sock, _) = listener.accept().unwrap();
+                let mut request = [0_u8; 1024];
+                let _ = sock.read(&mut request).unwrap();
+                sock.write_all(&response).unwrap();
+            });
+            port
+        }
+
+        let malformed_port = serve_once(b"HTTP/1.1 200 OK\r\nmissing separator".to_vec());
+        assert_eq!(
+            reverse_geocode_at("127.0.0.1", malformed_port, 1.0, 2.0),
+            Err(GeocodeError::InvalidData)
+        );
+
+        let body = vec![b'x'; MAX_RESPONSE_BYTES + 1];
+        let head = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        let mut oversized = head.into_bytes();
+        oversized.extend_from_slice(&body);
+        let oversized_port = serve_once(oversized);
+        assert_eq!(
+            reverse_geocode_at("127.0.0.1", oversized_port, 1.0, 2.0),
+            Err(GeocodeError::InvalidData)
+        );
+    }
+
+    #[test]
     fn geocode_at_mock_empty_is_not_found() {
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

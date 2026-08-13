@@ -81,14 +81,9 @@ call)
 				exit 1
 				;;
 			esac
-			if [ "$(uci -q get wloc-service.main.enabled)" = "1" ]; then
-				ctl_live enable || {
-					json_init
-					json_add_string error "$out"
-					json_dump
-					exit 1
-				}
-			fi
+			# Apply the location directly. Re-enabling an already intercepting
+			# daemon returns invalid_config and prevents the mode change.
+			# ctl_live already restarts the daemon if its socket is unavailable.
 			if [ "$mode_method" = "geo-set" ]; then
 				ctl_live geo-set --lat "$lat" --lon "$lon"
 			else
