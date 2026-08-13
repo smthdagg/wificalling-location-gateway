@@ -4,7 +4,12 @@ set -eu
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 builder="$repo_root/scripts/build-luci-ipk.sh"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-standalone-package-test.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+built_output=
+cleanup() {
+	rm -rf "$tmp"
+	[ -z "$built_output" ] || rm -f "$built_output"
+}
+trap cleanup EXIT HUP INT TERM
 
 fail() {
 	printf 'FAIL: %s\n' "$*" >&2
@@ -42,6 +47,7 @@ output=$(
 	GATEWAY_IPK_SHA256="$gateway_sha" \
 	"$builder" "$version" ax6s-standalone
 )
+built_output=$output
 [ -f "$output" ] || fail 'standalone builder did not create an IPK'
 
 mkdir -p "$tmp/result"

@@ -111,7 +111,7 @@ flowchart LR
 
 Redmi AX6S 使用单一的架构专用集成包：
 
-- `luci-app-wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk`
+- `wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk`
 
 该包内含 Wi‑Fi Calling Gateway 1.7、WLOC 服务、控制工具和统一 LuCI，不依赖另行安装 `luci-app-wificalling-gateway` 或 `wloc-service`。重新安装或升级时，opkg 会保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
 
@@ -125,7 +125,7 @@ Redmi AX6S 使用单一的架构专用集成包：
 ### 2. Redmi AX6S（单一集成 IPK）
 
 ```sh
-opkg install /tmp/luci-app-wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk
+opkg install /tmp/wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk
 ```
 
 不要先执行 `opkg remove`；直接安装即可恢复缺失组件并保留现有配置。安装后按“验证服务”一节检查两个服务。

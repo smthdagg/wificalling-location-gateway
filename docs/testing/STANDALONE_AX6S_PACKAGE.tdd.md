@@ -9,6 +9,7 @@ As an AX6S administrator, I can install one architecture-specific IPK that resto
 - Command: `./tests/scripts/test-standalone-ax6s-package.sh`
 - Result before implementation: `unsupported dependency mode: ax6s-standalone`
 - A second boundary test then failed because the first implementation incorrectly retained an `all` architecture filename and metadata while carrying AArch64 executables.
+- The naming refinement produced RED with `FAIL: standalone package filename must use the project name and identify the AX6S architecture` before the complete product package was renamed.
 
 ## GREEN
 
@@ -21,6 +22,7 @@ As an AX6S administrator, I can install one architecture-specific IPK that resto
 
 | Guarantee | Evidence |
 |---|---|
+| The complete product package is named `wificalling-location-gateway`, matching the project instead of looking like a LuCI-only component | Filename and control package-name assertions |
 | The output identifies the AX6S runtime as `aarch64_cortex-a53`, not `all` | Package filename and control metadata assertions |
 | The integrated package has no dependency on separate Gateway or WLOC packages | Exact `Depends` and negative dependency assertions |
 | Gateway 1.7.x input has the expected identity and pinned SHA-256 | Identity/version and digest rejection tests |

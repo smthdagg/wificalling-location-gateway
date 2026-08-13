@@ -8,8 +8,12 @@ package=luci-app-wificalling-location-gateway
 source_dir="$root/openwrt/$package/files"
 out_dir="$root/dist"
 architecture=all
-[ "$dependency_mode" = ax6s-standalone ] && architecture=aarch64_cortex-a53
-out="$out_dir/${package}_${version}_${architecture}.ipk"
+output_package=$package
+if [ "$dependency_mode" = ax6s-standalone ]; then
+	architecture=aarch64_cortex-a53
+	output_package=wificalling-location-gateway
+fi
+out="$out_dir/${output_package}_${version}_${architecture}.ipk"
 stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-luci-ipk.XXXXXX")
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
 
@@ -93,8 +97,8 @@ case "$dependency_mode" in
 			# Gateway views after the verified Gateway payload is merged.
 			cp -R "$source_dir/." "$stage/data/"
 			depends='luci-base, rpcd-mod-rpcsys, sing-box, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full'
-			provides='luci-app-wificalling-gateway, wloc-service'
-			replaces='luci-app-wificalling-gateway, wloc-service'
+			provides='luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
+			replaces='luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
 		else
 			depends='luci-app-wificalling-gateway, luci-base, rpcd-mod-rpcsys'
 			rm -f "$stage/data/www/luci-static/resources/view/wificalling-gateway/overview.js"
@@ -160,7 +164,7 @@ POSTINST
 esac
 
 printf '%s\n' \
-	"Package: $package" \
+	"Package: $output_package" \
 	"Version: $version" \
 	"Architecture: $architecture" \
 	'Maintainer: wificalling-location-gateway maintainers' \
