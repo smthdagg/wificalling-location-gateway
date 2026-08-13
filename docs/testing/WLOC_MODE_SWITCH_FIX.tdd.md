@@ -19,15 +19,17 @@ The handler now serializes:
 
 1. save `geo_source` to UCI;
 2. wait for LuCI changes to apply;
-3. call `geo-set` for Manual or `geo-clear` for Auto;
-4. return the complete Promise and convert rejected operations into one user-visible error.
+3. let the restarted daemon load Auto or Manual from UCI;
+4. return the complete Promise and convert rejected save/apply operations into one user-visible error.
+
+The UI deliberately does not call `geo-set` or `geo-clear` after apply. LuCI apply restarts the service, and calling the old control socket in that restart window produces `Connection refused`. Startup already reads `geo_source`, `manual_lat`, and `manual_lon`, so a second runtime request is both redundant and unsafe.
 
 Manual mode without stored coordinates is rejected before persistence with an actionable message.
 
 | Guarantee | Test | Result |
 |---|---|---|
-| Manual switch waits for save and apply before `geo-set` | `verifyManualSwitch` | PASS |
-| Auto switch uses the same ordering before `geo-clear` | `verifyAutoSwitch` | PASS |
+| Manual switch saves and applies without racing the restarted control socket | `verifyManualSwitch` | PASS |
+| Auto switch saves and applies without calling the stale control socket | `verifyAutoSwitch` | PASS |
 | Missing manual coordinates do not persist or reach runtime control | `verifyManualSwitchWithoutCoordinates` | PASS |
 | Both OpenWrt source and LuCI package copies behave identically | test source matrix | PASS |
 

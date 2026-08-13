@@ -126,9 +126,8 @@ async function verifyManualSwitch(sourcePath) {
 
 	harness.applyGate.resolve();
 	await result;
-	assert.deepStrictEqual(harness.calls.ctl, [
-		['geo-set', null, '51.5074', '-0.1278']
-	]);
+	assert.deepStrictEqual(harness.calls.ctl, [],
+		'mode apply restarts the daemon, so the UI must not race its control socket');
 	assert.strictEqual(harness.calls.notifications.length, 0);
 }
 
@@ -139,7 +138,8 @@ async function verifyAutoSwitch(sourcePath) {
 	await tick();
 	harness.applyGate.resolve();
 	await result;
-	assert.deepStrictEqual(harness.calls.ctl, [['geo-clear', null, null, null]]);
+	assert.deepStrictEqual(harness.calls.ctl, [],
+		'auto apply must let the restarted daemon load UCI instead of calling a stale socket');
 }
 
 async function verifyManualSwitchWithoutCoordinates(sourcePath) {
