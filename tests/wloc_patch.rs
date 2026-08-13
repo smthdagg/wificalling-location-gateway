@@ -321,7 +321,12 @@ fn synthesize_response_from_request_without_upstream() {
     let request = wloc10_envelope(&root_payload());
     let synthesized = synthesize_wloc_response(&request, &target()).unwrap();
     assert_eq!(&synthesized[..6], &[0x00, 0x01, 0x00, 0x00, 0x00, 0x01]);
-    let new_len = u32::from_be_bytes([synthesized[6], synthesized[7], synthesized[8], synthesized[9]]) as usize;
+    let new_len = u32::from_be_bytes([
+        synthesized[6],
+        synthesized[7],
+        synthesized[8],
+        synthesized[9],
+    ]) as usize;
     assert_eq!(synthesized.len(), 10 + new_len);
     let fields = fields_of(&synthesized[10..10 + new_len]);
     let wifi = fields

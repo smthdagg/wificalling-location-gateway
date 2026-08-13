@@ -429,7 +429,6 @@ fn extract_envelope(response: &[u8]) -> Option<Envelope<'_>> {
     None
 }
 
-
 /// Patch a WLOC response in place, preserving the envelope shape and all
 /// bytes outside the payload. **Fail-open**: any error returns the original
 /// response unchanged.
@@ -517,11 +516,7 @@ fn try_patch_wloc_response(response: &[u8], target: &PatchTarget) -> Result<Vec<
 /// the length field so the byte layout stays valid for locationd.
 fn wrap_envelope(envelope: Envelope<'_>, payload: &[u8]) -> Result<Vec<u8>, WlocError> {
     match envelope {
-        Envelope::Synthetic {
-            prefix,
-            suffix,
-            ..
-        } => {
+        Envelope::Synthetic { prefix, suffix, .. } => {
             let length = u16::try_from(payload.len()).map_err(|_| WlocError::Oversized)?;
             let mut out = Vec::with_capacity(prefix.len() + 2 + payload.len() + suffix.len());
             out.extend_from_slice(prefix);
@@ -531,10 +526,7 @@ fn wrap_envelope(envelope: Envelope<'_>, payload: &[u8]) -> Result<Vec<u8>, Wloc
             Ok(out)
         }
         Envelope::Marker {
-            pre,
-            suffix,
-            kind,
-            ..
+            pre, suffix, kind, ..
         } => {
             let length = u16::try_from(payload.len()).map_err(|_| WlocError::Oversized)?;
             let mut out = Vec::with_capacity(pre.len() + 8 + payload.len() + suffix.len());
@@ -545,11 +537,7 @@ fn wrap_envelope(envelope: Envelope<'_>, payload: &[u8]) -> Result<Vec<u8>, Wloc
             out.extend_from_slice(suffix);
             Ok(out)
         }
-        Envelope::Wloc10 {
-            header,
-            suffix,
-            ..
-        } => {
+        Envelope::Wloc10 { header, suffix, .. } => {
             let length = u32::try_from(payload.len()).map_err(|_| WlocError::Oversized)?;
             let mut out_header = [0_u8; 10];
             out_header.copy_from_slice(header);
@@ -635,7 +623,10 @@ mod unit_tests {
         let out = synthesize_wloc_response(&request, &target()).unwrap();
         // Envelope is preserved with the recomputed block length.
         let envelope = extract_envelope(&out).expect("synthesized response envelope");
-        let Envelope::Wloc10 { header, payload, .. } = envelope else {
+        let Envelope::Wloc10 {
+            header, payload, ..
+        } = envelope
+        else {
             panic!("expected Wloc10 envelope");
         };
         // The response header is the fixed gs-loc framing, not an echo of the
@@ -720,8 +711,7 @@ mod unit_tests {
 
         let out = synthesize_wloc_response(&request, &target()).unwrap();
         assert_eq!(&out[..6], &[0x00, 0x01, 0x00, 0x00, 0x00, 0x03]);
-        let block_len =
-            u32::from_be_bytes([out[6], out[7], out[8], out[9]]) as usize;
+        let block_len = u32::from_be_bytes([out[6], out[7], out[8], out[9]]) as usize;
         assert_eq!(block_len, 0, "empty BlockBSSIDApple");
         assert_eq!(out.len(), 10);
     }
@@ -733,13 +723,19 @@ mod unit_tests {
         let request = wloc10_request();
         let patched = try_patch_wloc_response(&request, &target()).unwrap();
         let synthesized = synthesize_wloc_response(&request, &target()).unwrap();
-        let Envelope::Wloc10 { header: p_h, payload: p_p, .. } =
-            extract_envelope(&patched).unwrap()
+        let Envelope::Wloc10 {
+            header: p_h,
+            payload: p_p,
+            ..
+        } = extract_envelope(&patched).unwrap()
         else {
             panic!("patched envelope");
         };
-        let Envelope::Wloc10 { header: s_h, payload: s_p, .. } =
-            extract_envelope(&synthesized).unwrap()
+        let Envelope::Wloc10 {
+            header: s_h,
+            payload: s_p,
+            ..
+        } = extract_envelope(&synthesized).unwrap()
         else {
             panic!("synthesized envelope");
         };

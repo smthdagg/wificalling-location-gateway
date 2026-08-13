@@ -182,8 +182,8 @@ impl MitmProxy {
                 let request_body = request_body.clone();
                 match crate::wloc::synthesize_wloc_response(&request_body, target) {
                     Ok(patched) => {
-                        let (kind, payload) = crate::wloc::synthesized_parts(&patched)
-                            .unwrap_or((1, &[][..]));
+                        let (kind, payload) =
+                            crate::wloc::synthesized_parts(&patched).unwrap_or((1, &[][..]));
                         if payload.is_empty() {
                             // Coordinate query (kind 3): answer with the last
                             // known visible devices instead of an empty block,
