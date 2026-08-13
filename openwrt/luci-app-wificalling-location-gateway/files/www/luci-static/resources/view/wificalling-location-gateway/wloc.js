@@ -128,19 +128,28 @@ return view.extend({
 		mode.value('manual', wlocI18n.t('Manual location'));
 		mode.onchange = function(ev, section_id, value) {
 			var main = uci.get('wloc-service', 'main');
+			var manualLat = main && main.manual_lat;
+			var manualLon = main && main.manual_lon;
+			if (value === 'manual' && (!manualLat || !manualLon)) {
+				notify(wlocI18n.t('Mode switch failed'),
+					wlocI18n.t('Enter and apply manual coordinates first.'));
+				return Promise.resolve(false);
+			}
 			uci.set('wloc-service', 'main', 'geo_source', value);
-			uci.save('wloc-service');
-			ui.changes.apply(true);
-			if (value === 'auto') {
-				callCtl('geo-clear', null, null, null).then(function(r) {
-					if (r.error) notify(wlocI18n.t('Mode switch failed'), r.error);
-				});
-			}
-			else if (main && main.manual_lat && main.manual_lon) {
-				callCtl('geo-set', null, main.manual_lat, main.manual_lon).then(function(r) {
-					if (r.error) notify(wlocI18n.t('Mode switch failed'), r.error);
-				});
-			}
+			return uci.save('wloc-service').then(function() {
+				return ui.changes.apply(true);
+			}).then(function() {
+				return value === 'auto'
+					? callCtl('geo-clear', null, null, null)
+					: callCtl('geo-set', null, manualLat, manualLon);
+			}).then(function(r) {
+				if (r && r.error)
+					notify(wlocI18n.t('Mode switch failed'), r.error);
+				return !(r && r.error);
+			}).catch(function(e) {
+				notify(wlocI18n.t('Mode switch failed'), String(e));
+				return false;
+			});
 		};
 
 		so.option(form.Value, 'manual_lat', wlocI18n.t('Manual latitude'));

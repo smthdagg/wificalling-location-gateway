@@ -139,6 +139,9 @@ msgstr "切换失败"
 msgid "Mode switch failed"
 msgstr "模式切换失败"
 
+msgid "Enter and apply manual coordinates first."
+msgstr "请先输入并应用手动坐标。"
+
 msgid "Search failed"
 msgstr "搜索失败"
 

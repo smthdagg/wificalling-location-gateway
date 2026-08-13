@@ -142,6 +142,17 @@ async function verifyAutoSwitch(sourcePath) {
 	assert.deepStrictEqual(harness.calls.ctl, [['geo-clear', null, null, null]]);
 }
 
+async function verifyManualSwitchWithoutCoordinates(sourcePath) {
+	const harness = await loadModeHandler(sourcePath, '', '');
+	const result = harness.handler(null, 'main', 'manual');
+	assert(result && typeof result.then === 'function', 'rejected mode switch must return a Promise');
+	assert.strictEqual(await result, false);
+	assert.strictEqual(harness.calls.save, 0, 'invalid manual mode must not be persisted');
+	assert.strictEqual(harness.calls.apply, 0, 'invalid manual mode must not be applied');
+	assert.deepStrictEqual(harness.calls.ctl, [], 'invalid manual mode must not reach runtime control');
+	assert.strictEqual(harness.calls.notifications.length, 1, 'the user must receive one actionable error');
+}
+
 async function main() {
 	const root = path.resolve(__dirname, '..', '..');
 	const sources = [
@@ -152,6 +163,7 @@ async function main() {
 		const sourcePath = path.join(root, relative);
 		await verifyManualSwitch(sourcePath);
 		await verifyAutoSwitch(sourcePath);
+		await verifyManualSwitchWithoutCoordinates(sourcePath);
 	}
 	console.log('wloc mode switch tests passed');
 }

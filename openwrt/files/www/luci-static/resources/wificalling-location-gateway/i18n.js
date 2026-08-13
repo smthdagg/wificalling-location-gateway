@@ -63,6 +63,7 @@ var ZH = {
 	'Apply failed': '应用失败',
 	'Switch failed': '切换失败',
 	'Mode switch failed': '模式切换失败',
+	'Enter and apply manual coordinates first.': '请先输入并应用手动坐标。',
 	'Regenerate failed': '重新生成失败',
 	'Profile ready': '描述文件已就绪',
 	'On the iPhone open Safari and visit %s, then enable full trust in Settings > General > About > Certificate Trust Settings.':
