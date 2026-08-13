@@ -53,6 +53,7 @@ case "$arch" in
 	all|noarch) fail 'runtime architecture must not be all or noarch' ;;
 	''|*[!0-9A-Za-z_+-]*) fail 'invalid runtime architecture' ;;
 esac
+[ "$arch" = x86_64 ] || fail 'this SDK matrix currently supports x86_64 only'
 [ -n "$service_bin" ] || fail '--service-bin is required'
 [ -n "$ctl_bin" ] || fail '--ctl-bin is required'
 [ -x "$service_bin" ] || fail "service binary is not executable: $service_bin"

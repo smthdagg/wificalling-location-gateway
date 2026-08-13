@@ -8,7 +8,9 @@ Rust ELF executables, so the runtime package must name the real OpenWrt CPU
 architecture. Marking an AArch64 or x86-64 ELF as `all` is invalid and can
 install an unusable binary on another router.
 
-The release therefore contains two layers for each package-manager generation:
+The release therefore contains two layers for each package-manager generation.
+The Docker release builder in this document is deliberately limited to
+`x86_64`; it refuses an AArch64 label because its SDKs are x86-64 targets:
 
 - `wloc-service`: architecture-specific daemon plus `wloc-ctl`, procd init,
   UCI configuration, and network helpers;

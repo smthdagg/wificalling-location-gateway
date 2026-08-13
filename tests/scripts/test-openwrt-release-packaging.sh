@@ -48,6 +48,11 @@ if "$builder" --plan --arch all --service-bin "$tmp/wloc-service" --ctl-bin "$tm
 fi
 grep -F 'runtime architecture must not be all or noarch' "$tmp/err" >/dev/null ||
 	fail 'architecture rejection must be explicit'
+if "$builder" --plan --arch aarch64_cortex-a53 --service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl" >"$tmp/out" 2>"$tmp/err"; then
+	fail 'x86_64 SDK must reject an AArch64 package label'
+fi
+grep -F 'this SDK matrix currently supports x86_64 only' "$tmp/err" >/dev/null ||
+	fail 'unsupported SDK architecture rejection must be explicit'
 if "$builder" --out-dir /tmp --arch x86_64 --service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl" >"$tmp/out" 2>"$tmp/err"; then
 	fail 'broad release output directory must be rejected'
 fi
