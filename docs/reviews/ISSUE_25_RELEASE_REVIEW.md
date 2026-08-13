@@ -8,4 +8,7 @@
 - Remediation: Docker selects only the exactly three `SHA256SUMS` entries and
   rejects unlisted matching packages. The exact final AX6S asset preserved
   both UCI hashes and passed service, LuCI, and mode-switch validation.
-- Final verdict: pending re-review.
+- Re-review found one P2 builder/verifier mismatch: the builder wrote `./`
+  paths while the verifier correctly requires basenames. The builder now emits
+  basename-only entries and its regression test forbids the incompatible form.
+- Final verdict: pending confirmation of this last remediation.

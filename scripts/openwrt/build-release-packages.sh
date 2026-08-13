@@ -194,6 +194,6 @@ find "$stage/output" -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp {} "$
 count=$(find "$out_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk' \
 	-o -name 'wificalling-location-gateway*.apk' \) | wc -l | tr -d ' ')
 [ "$count" -eq 2 ] || fail "expected two integrated packages, found $count"
-(cd "$out_dir" && shasum -a 256 ./wificalling-location-gateway*.ipk \
-	./wificalling-location-gateway*.apk > SHA256SUMS)
+(cd "$out_dir" && shasum -a 256 wificalling-location-gateway*.ipk \
+	wificalling-location-gateway*.apk > SHA256SUMS)
 printf 'release packages: %s\n' "$out_dir"

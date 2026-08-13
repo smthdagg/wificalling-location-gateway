@@ -34,6 +34,9 @@ grep -F 'manifest_entries=' "$matrix" >/dev/null ||
 	fail 'Docker verification must select install artifacts from the checksum manifest'
 grep -F 'unexpected release package not listed in SHA256SUMS' "$matrix" >/dev/null ||
 	fail 'Docker verification must reject unlisted matching release packages'
+if grep -F 'shasum -a 256 ./wificalling-location-gateway' "$builder" >/dev/null; then
+	fail 'release builder must write basename-only SHA256SUMS entries'
+fi
 
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"
