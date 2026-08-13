@@ -23,21 +23,18 @@ chmod 0755 "$tmp/wloc-service" "$tmp/wloc-ctl"
 
 plan=$(
 	"$builder" --plan \
-		--version 0.1.0 \
-		--release 3 \
 		--arch x86_64 \
 		--service-bin "$tmp/wloc-service" \
 		--ctl-bin "$tmp/wloc-ctl"
 )
 
-printf '%s\n' "$plan" | grep -F 'wloc-service_0.1.0-r3_x86_64.ipk' >/dev/null ||
-	fail '24.10 runtime IPK must be architecture-specific'
-printf '%s\n' "$plan" | grep -F 'luci-app-wificalling-location-gateway_0.1.0-r3_all.ipk' >/dev/null ||
-	fail '24.10 LuCI IPK must remain architecture-independent'
-printf '%s\n' "$plan" | grep -F 'wloc-service-0.1.0-r3.apk' >/dev/null ||
-	fail '25.12 runtime APK must be planned'
-printf '%s\n' "$plan" | grep -F 'luci-app-wificalling-location-gateway-0.1.0-r3.apk' >/dev/null ||
-	fail '25.12 LuCI APK must be planned'
+printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway_1.0.0-r1_x86_64.ipk' >/dev/null ||
+	fail '24.10 must produce one architecture-specific integrated IPK'
+printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway-1.0.0-r1.apk (arch: x86_64)' >/dev/null ||
+	fail '25.12 must produce one architecture-specific integrated APK'
+if printf '%s\n' "$plan" | grep -E 'wloc-service[_-]|luci-app-wificalling-location-gateway[_-]' >/dev/null; then
+	fail 'formal 1.0.0 plan must not expose split component packages'
+fi
 printf '%s\n' "$plan" | grep -F 'ghcr.io/openwrt/sdk:x86_64-24.10.8@sha256:b28d5e4087dbd3f815a8bf5440a11e54e6bbd3d7400c3729d872e7940a4a77c1' >/dev/null ||
 	fail '24.10 SDK image must be immutable'
 printf '%s\n' "$plan" | grep -F 'ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35bebb77b3f6d9523fd68873fab78a1bd19cc123cd0f' >/dev/null ||
