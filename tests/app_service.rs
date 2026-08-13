@@ -39,6 +39,56 @@ fn coordinate_mode_switch_is_local_only_and_never_waits_for_reverse_geocoding() 
     );
 }
 
+#[test]
+fn dispatch_geo_set_and_clear_drive_the_real_service() {
+    // The RPC bridge routes geo.set/geo.clear through the real dispatch
+    // implementation: coordinates publish a manual target, clearing returns
+    // to automatic node-following (regression for the mode-switch fix).
+    use serde_json::json;
+    use wificalling_location_gateway::service::api::{decode_request, SERVICE_API_ID};
+    use wificalling_location_gateway::service::dispatch::dispatch;
+
+    let now = 1_000_000;
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        fresh_probe(),
+        fresh_geo(now),
+    );
+
+    let set = decode_request(
+        &serde_json::to_vec(&json!({
+            "api_version": SERVICE_API_ID,
+            "request_id": "req-set",
+            "method": "geo.set",
+            "params": { "latitude": 22.3193, "longitude": 114.1694 }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let response = dispatch(&set, &mut service).unwrap();
+    let parsed: serde_json::Value = serde_json::from_slice(&response).unwrap();
+    assert_eq!(parsed["result"], json!({}));
+    assert_eq!(service.status_at(now).unwrap()["geo_source"], "manual");
+
+    let clear = decode_request(
+        &serde_json::to_vec(&json!({
+            "api_version": SERVICE_API_ID,
+            "request_id": "req-clear",
+            "method": "geo.clear",
+            "params": {}
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let response = dispatch(&clear, &mut service).unwrap();
+    let parsed: serde_json::Value = serde_json::from_slice(&response).unwrap();
+    assert_eq!(parsed["result"], json!({}));
+    assert_eq!(service.status_at(now).unwrap()["geo_source"], "auto");
+}
+
 fn limits() -> ProbeLimits {
     ProbeLimits {
         max_observation_age: Duration::from_secs(60),

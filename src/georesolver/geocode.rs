@@ -387,6 +387,47 @@ mod tests {
     }
 
     #[test]
+    fn fallback_utc_offset_covers_all_three_sign_branches() {
+        // The longitude-derived timezone fallback is used when reverse
+        // geocoding returns no known country mapping: zero rounds to plain
+        // UTC, positive longitudes become UTC+N, negative become UTC-N.
+        assert_eq!(fallback_utc_offset(0.0), "UTC");
+        assert_eq!(fallback_utc_offset(75.0), "UTC+5");
+        assert_eq!(fallback_utc_offset(-30.0), "UTC-2");
+    }
+
+    #[test]
+    fn geocode_error_display_messages() {
+        assert_eq!(GeocodeError::NotFound.to_string(), "place not found");
+        assert_eq!(
+            GeocodeError::InvalidData.to_string(),
+            "geocoder returned invalid data"
+        );
+        assert_eq!(
+            GeocodeError::Unreachable.to_string(),
+            "geocoder unreachable"
+        );
+    }
+
+    #[test]
+    fn parse_lat_lon_rejects_missing_or_malformed_longitude() {
+        // A lon field that is absent or not parseable must fail as invalid
+        // data rather than silently defaulting to longitude 0.
+        assert_eq!(
+            parse_lat_lon(&serde_json::from_str(r#"{"lat":"10.0"}"#).unwrap()),
+            Err(GeocodeError::InvalidData)
+        );
+        assert_eq!(
+            parse_lat_lon(&serde_json::from_str(r#"{"lat":"10.0","lon":"not-a-number"}"#).unwrap()),
+            Err(GeocodeError::InvalidData)
+        );
+        assert_eq!(
+            parse_lat_lon(&serde_json::from_str(r#"{"lat":"95","lon":"10"}"#).unwrap()),
+            Err(GeocodeError::InvalidData)
+        );
+    }
+
+    #[test]
     fn parse_response_with_name_extracts_display_name() {
         let body = br#"[{"lat":"35.6768601","lon":"139.7638947","display_name":"Tokyo, Japan"}]"#;
         let result = parse_geocode_response_with_name(body).unwrap();
