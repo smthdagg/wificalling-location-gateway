@@ -37,7 +37,7 @@ The formal release artifact is
 binaries were rebuilt from the version 1.0.0 source with the pinned mt7622
 toolchain: `wloc-service` is a static AArch64 ELF of 1,904,800 bytes and
 `wloc-ctl` is a static AArch64 ELF of 462,792 bytes. The package SHA-256 is
-`8a687b5c7fed81b25c104777b862b397b340503d738d1cf7b9bddbdffed23f0d`
+`7565a77ae36917ce1898134b6f1a7e7c7b50790335f1a39ff2f89745148f8f0f`
 and is also recorded in the release `SHA256SUMS`.
 
 The exact final asset was installed over the authorized ImmortalWrt 24.10.6
