@@ -9,9 +9,11 @@ source_dir="$root/openwrt/$package/files"
 out_dir="$root/dist"
 architecture=all
 output_package=$package
+description='Unified LuCI UI for Wi-Fi Calling and WLOC location controls.'
 if [ "$dependency_mode" = ax6s-standalone ]; then
 	architecture=aarch64_cortex-a53
 	output_package=wificalling-location-gateway
+	description='Complete Wi-Fi Calling Gateway 1.7 and WLOC service with unified LuCI.'
 fi
 out="$out_dir/${output_package}_${version}_${architecture}.ipk"
 stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-luci-ipk.XXXXXX")
@@ -172,7 +174,7 @@ printf '%s\n' \
 	'Section: luci' \
 	'Priority: optional' \
 	'License: MIT' \
-	'Description: Unified LuCI UI for Wi-Fi Calling and WLOC location controls.' \
+	"Description: $description" \
 	> "$stage/control/control"
 [ -z "$provides" ] || printf 'Provides: %s\n' "$provides" >> "$stage/control/control"
 [ -z "$replaces" ] || printf 'Replaces: %s\n' "$replaces" >> "$stage/control/control"

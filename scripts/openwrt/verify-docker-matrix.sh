@@ -44,22 +44,6 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-docker-matrix.XXXXXX")
 trap 'for name in $containers; do docker rm -f "$name" >/dev/null 2>&1 || true; done; rm -rf "$tmp"' EXIT HUP INT TERM
 containers=
 : > "$tmp/report"
-mkdir -p "$tmp/empty" "$tmp/stub-output"
-chmod 0777 "$tmp/stub-output"
-
-# The rootfs smoke test is deliberately offline. Generate one test-only APK
-# provider for dependencies that are absent from the minimal image; this APK
-# is never copied into the release directory.
-apk_sdk='ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35bebb77b3f6d9523fd68873fab78a1bd19cc123cd0f'
-docker image inspect "$apk_sdk" >/dev/null 2>&1 || fail "missing Docker image: $apk_sdk"
-docker run --rm --pull never --platform linux/amd64 --network none \
-	-v "$tmp:/state" --entrypoint /bin/sh "$apk_sdk" -ec '
-		/builder/staging_dir/host/bin/apk mkpkg \
-			--info "name:wloc-docker-smoke-deps" \
-			--info "version:1-r1" --info "arch:noarch" --info "license:MIT" \
-			--info "provides:firewall4 ip-full nftables sing-box luci-base rpcd-mod-rpcsys kmod-nft-tproxy kmod-nft-socket" \
-			--files /state/empty --output /state/stub-output/wloc-docker-smoke-deps.apk
-	'
 
 run_case() {
 	name=$1
@@ -71,7 +55,6 @@ run_case() {
 	docker image inspect "$image" >/dev/null 2>&1 || fail "missing Docker image: $image"
 	docker run -d --rm --privileged --pull never --platform linux/amd64 \
 		--name "$container" -v "$dist_dir:/packages:ro" \
-		-v "$tmp/stub-output:/smoke:ro" \
 		--entrypoint /sbin/init "$image" >/dev/null
 
 	ready=0
@@ -99,7 +82,6 @@ run_case() {
 	else
 		docker exec "$container" apk add --allow-untrusted --no-network \
 			--force-missing-repositories --repositories-file /dev/null \
-			/smoke/wloc-docker-smoke-deps.apk \
 			"/packages/${apk_package##*/}" >/dev/null
 	fi
 

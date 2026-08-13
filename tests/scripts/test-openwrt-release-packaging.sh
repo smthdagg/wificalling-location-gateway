@@ -17,6 +17,12 @@ fail() {
 [ -x "$matrix" ] || fail "missing executable $matrix"
 [ -x "$runtime_builder" ] || fail "missing executable $runtime_builder"
 
+grep -F '\$\$required' "$builder" >/dev/null ||
+	fail 'package post-install must preserve the full prerequisite path through Make'
+if grep -F 'wloc-docker-smoke-deps' "$matrix" >/dev/null; then
+	fail 'Docker verification must use real 25.x rootfs prerequisites, not conflicting fake providers'
+fi
+
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"
 chmod 0755 "$tmp/wloc-service" "$tmp/wloc-ctl"

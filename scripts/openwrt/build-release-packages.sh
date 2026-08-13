@@ -129,7 +129,6 @@ define Package/wificalling-location-gateway
   SECTION:=net
   CATEGORY:=Network
   TITLE:=Integrated Wi-Fi Calling and WLOC Location Gateway
-  DEPENDS:=+firewall4 +ip-full +nftables +sing-box +luci-base +rpcd-mod-rpcsys +kmod-nft-tproxy +kmod-nft-socket
   PROVIDES:=wloc-service luci-app-wificalling-location-gateway luci-app-wificalling-gateway
 endef
 define Package/wificalling-location-gateway/description
@@ -147,6 +146,9 @@ endef
 define Package/wificalling-location-gateway/postinst
 #!/bin/sh
 [ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+for required in /usr/bin/sing-box /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd; do
+  [ -e "\$\$required" ] || echo "wificalling-location-gateway: prerequisite missing: \$\$required" >&2
+done
 /etc/init.d/wificalling-gateway enable >/dev/null 2>&1 || true
 /etc/init.d/wloc-service enable >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || true
