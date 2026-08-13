@@ -139,13 +139,10 @@ return view.extend({
 			return uci.save('wloc-service').then(function() {
 				return ui.changes.apply(true);
 			}).then(function() {
-				return value === 'auto'
-					? callCtl('geo-clear', null, null, null)
-					: callCtl('geo-set', null, manualLat, manualLon);
-			}).then(function(r) {
-				if (r && r.error)
-					notify(wlocI18n.t('Mode switch failed'), r.error);
-				return !(r && r.error);
+				// Applying UCI restarts wloc-service. Startup reads geo_source and
+				// the persisted manual coordinates, so a control call here would
+				// race the socket while the daemon is being replaced.
+				return true;
 			}).catch(function(e) {
 				notify(wlocI18n.t('Mode switch failed'), String(e));
 				return false;

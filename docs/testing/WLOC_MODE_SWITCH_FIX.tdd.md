@@ -37,7 +37,7 @@ Manual mode without stored coordinates is rejected before persistence with an ac
 
 - `./scripts/ci/verify.sh`: PASS.
 - Python discovery: 46 tests, PASS.
-- Rust line coverage: 80.32%.
+- Rust line coverage: 80.25%.
 - JavaScript syntax checks: PASS.
 - Secret scan and dependency policy checks: PASS.
 
