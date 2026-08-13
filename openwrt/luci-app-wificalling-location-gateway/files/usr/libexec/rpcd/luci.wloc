@@ -11,6 +11,23 @@
 CTL=/usr/sbin/wloc-ctl
 EXPORT=/usr/sbin/export-mobileconfig.sh
 
+ctl_live() {
+	out="$("$CTL" "$@" 2>&1)" && return 0
+	# A pre-package hand deployment may leave an untracked process holding
+	# port 8443 after its control socket dies.  Remove only this service's
+	# process before handing lifecycle ownership back to procd.
+	killall -q wloc-service >/dev/null 2>&1 || true
+	rm -f /var/run/wloc-service/control.sock
+	/etc/init.d/wloc-service restart >/dev/null 2>&1 || return 1
+	retry=0
+	while [ "$retry" -lt 10 ]; do
+		sleep 1
+		out="$("$CTL" "$@" 2>&1)" && return 0
+		retry=$((retry + 1))
+	done
+	return 1
+}
+
 case "$1" in
 list)
 	json_init
@@ -40,8 +57,50 @@ call)
 		json_get_var lon lon
 
 		case "$method" in
-		status|enable|disable|reload|geo-clear)
+		status|disable|reload|geo-clear)
 			out="$("$CTL" "$method" 2>&1)"
+			;;
+		enable)
+			ctl_live enable
+			;;
+		mode-set)
+			case "$query" in
+			auto)
+				mode_method=geo-clear
+				;;
+			manual)
+				if [ -z "$lat" ] || [ "$lat" = "null" ] \
+				   || [ -z "$lon" ] || [ "$lon" = "null" ]; then
+					echo '{"error":"manual mode requires latitude and longitude"}'
+					exit 1
+				fi
+				mode_method=geo-set
+				;;
+			*)
+				echo '{"error":"mode must be auto or manual"}'
+				exit 1
+				;;
+			esac
+			if [ "$(uci -q get wloc-service.main.enabled)" = "1" ]; then
+				ctl_live enable || {
+					json_init
+					json_add_string error "$out"
+					json_dump
+					exit 1
+				}
+			fi
+			if [ "$mode_method" = "geo-set" ]; then
+				ctl_live geo-set --lat "$lat" --lon "$lon"
+			else
+				ctl_live geo-clear
+			fi
+			if [ "$?" -eq 0 ]; then
+				uci -q set "wloc-service.main.geo_source=$query" \
+					&& { [ "$query" != "manual" ] \
+						|| { uci -q set "wloc-service.main.manual_lat=$lat" \
+							&& uci -q set "wloc-service.main.manual_lon=$lon"; }; } \
+					&& uci -q commit wloc-service
+			fi
 			;;
 		geo-search)
 			if [ -n "$query" ] && [ "$query" != "null" ]; then

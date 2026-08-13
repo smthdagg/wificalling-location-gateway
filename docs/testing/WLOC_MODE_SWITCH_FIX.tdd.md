@@ -13,23 +13,37 @@ As a LuCI administrator, I can switch WLOC between Auto and Manual without a rac
 
 The reproducer also showed that the old handler called `ui.changes.apply()` and `geo-set` before the asynchronous UCI save completed.
 
+AX6S validation exposed two additional RED cases that the browser-only test did
+not model: the LuCI apply restarted the daemon after the control request, and a
+pre-package hand deployment left an orphan process holding the proxy port while
+its control socket refused connections.
+
 ## GREEN evidence
 
-The handler now serializes:
+The handler now sends one `mode-set` operation through the already-authorized
+`luci.wloc/ctl` bridge. The server-side operation:
 
-1. save `geo_source` to UCI;
-2. wait for LuCI changes to apply;
-3. let the restarted daemon load Auto or Manual from UCI;
-4. return the complete Promise and convert rejected save/apply operations into one user-visible error.
+1. validates `auto` or `manual` and requires both manual coordinates;
+2. applies `geo-set` or `geo-clear` to the live daemon without a browser-side
+   UCI apply or restart;
+3. commits `geo_source` and manual coordinates only from the root-side bridge;
+4. if the control socket is unavailable, removes only an orphaned
+   `wloc-service`, returns lifecycle ownership to `procd`, and retries for at
+   most 10 seconds;
+5. returns the complete Promise and reports an exhausted recovery as one
+   user-visible error.
 
-The UI deliberately does not call `geo-set` or `geo-clear` after apply. LuCI apply restarts the service, and calling the old control socket in that restart window produces `Connection refused`. Startup already reads `geo_source`, `manual_lat`, and `manual_lon`, so a second runtime request is both redundant and unsafe.
+This removes the competing browser save/apply/restart sequence that caused the
+stale-socket race. The AX6S package installs the current static AArch64 service
+and control binaries, preserves `/etc/config/wloc-service` as a conffile, and
+starts the service under `procd`.
 
 Manual mode without stored coordinates is rejected before persistence with an actionable message.
 
 | Guarantee | Test | Result |
 |---|---|---|
-| Manual switch saves and applies without racing the restarted control socket | `verifyManualSwitch` | PASS |
-| Auto switch saves and applies without calling the stale control socket | `verifyAutoSwitch` | PASS |
+| Manual switch uses one atomic root-side `mode-set` operation | `verifyManualSwitch` | PASS |
+| Auto switch uses the same bounded root-side operation | `verifyAutoSwitch` | PASS |
 | Missing manual coordinates do not persist or reach runtime control | `verifyManualSwitchWithoutCoordinates` | PASS |
 | Both OpenWrt source and LuCI package copies behave identically | test source matrix | PASS |
 
@@ -41,4 +55,13 @@ Manual mode without stored coordinates is rejected before persistence with an ac
 - JavaScript syntax checks: PASS.
 - Secret scan and dependency policy checks: PASS.
 
-Browser/device validation on the AX6S remains the deployment follow-up; the regression test exercises the real LuCI page source with controlled asynchronous save and apply operations.
+## AX6S validation
+
+- Target: Redmi AX6S, ImmortalWrt 24.10.6, MediaTek MT7622/AArch64.
+- Installed package: `0.1.0-2-ax6s14` (full LuCI + static service + control
+  binaries).
+- Reproduced the original Auto-to-Manual journey from the real LuCI page.
+- No `Mode switch failed` notification and no `Connection refused` response.
+- Final monitor state: `intercepting`, `Manual`, GPS
+  `22.319300 / 114.169400`, Geo `fresh`.
+- The router was left in that original manual-location state.

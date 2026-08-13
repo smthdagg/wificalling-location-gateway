@@ -55,7 +55,6 @@ var verifyFingerprint = rpc.declare({
 var STATUS_FILE = '/var/run/wloc-service/status.json';
 var EVENTS_FILE = '/var/run/wloc-service/events.jsonl';
 var PROFILE_URL = 'http://192.168.31.1/wloc-ca.mobileconfig';
-
 function fmtTime(unix) {
 	if (!unix) return '-';
 	return new Date(unix * 1000).toLocaleString();
@@ -135,13 +134,14 @@ return view.extend({
 					wlocI18n.t('Enter and apply manual coordinates first.'));
 				return Promise.resolve(false);
 			}
-			uci.set('wloc-service', 'main', 'geo_source', value);
-			return uci.save('wloc-service').then(function() {
-				return ui.changes.apply(true);
-			}).then(function() {
-				// Applying UCI restarts wloc-service. Startup reads geo_source and
-				// the persisted manual coordinates, so a control call here would
-				// race the socket while the daemon is being replaced.
+			return callCtl('mode-set', value,
+				value === 'manual' ? manualLat : null,
+				value === 'manual' ? manualLon : null).then(function(response) {
+				if (response && response.error) {
+					notify(wlocI18n.t('Mode switch failed'), response.error);
+					return false;
+				}
+				uci.set('wloc-service', 'main', 'geo_source', value);
 				return true;
 			}).catch(function(e) {
 				notify(wlocI18n.t('Mode switch failed'), String(e));

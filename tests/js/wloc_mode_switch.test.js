@@ -4,25 +4,9 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-function deferred() {
-	let resolve;
-	let reject;
-	const promise = new Promise((res, rej) => {
-		resolve = res;
-		reject = rej;
-	});
-	return { promise, resolve, reject };
-}
-
-function tick() {
-	return new Promise((resolve) => setImmediate(resolve));
-}
-
-async function loadModeHandler(sourcePath, manualLat, manualLon) {
+async function loadModeHandler(sourcePath, manualLat, manualLon, ctlResults) {
 	const source = fs.readFileSync(sourcePath, 'utf8');
-	const saveGate = deferred();
-	const applyGate = deferred();
-	const calls = { save: 0, apply: 0, ctl: [], notifications: [] };
+	const calls = { save: 0, apply: 0, restart: 0, ctl: [], notifications: [] };
 	let modeOption;
 
 	const section = {
@@ -53,7 +37,7 @@ async function loadModeHandler(sourcePath, manualLat, manualLon) {
 		set: function() {},
 		save: function() {
 			calls.save += 1;
-			return saveGate.promise;
+			return Promise.resolve();
 		},
 		sections: function() { return []; },
 		delete: function() {},
@@ -75,7 +59,16 @@ async function loadModeHandler(sourcePath, manualLat, manualLon) {
 			if (spec.method === 'ctl') {
 				return function(method, query, lat, lon) {
 					calls.ctl.push([method, query, lat, lon]);
-					return Promise.resolve({ result: {} });
+					var result = ctlResults && ctlResults.length
+						? ctlResults.shift()
+						: { result: {} };
+					return Promise.resolve(result);
+				};
+			}
+			if (spec.method === 'restart_service') {
+				return function() {
+					calls.restart += 1;
+					return Promise.resolve({ ok: true });
 				};
 			}
 			return function() { return Promise.resolve({}); };
@@ -107,7 +100,7 @@ async function loadModeHandler(sourcePath, manualLat, manualLon) {
 	);
 	await page.render(['{}', '', null, null, {}, '{}']);
 	assert(modeOption && typeof modeOption.onchange === 'function', 'location mode handler not found');
-	return { handler: modeOption.onchange, calls, saveGate, applyGate };
+	return { handler: modeOption.onchange, calls };
 }
 
 async function verifyManualSwitch(sourcePath) {
@@ -115,31 +108,24 @@ async function verifyManualSwitch(sourcePath) {
 	const result = harness.handler(null, 'main', 'manual');
 
 	assert(result && typeof result.then === 'function', 'mode switch must return its Promise');
-	assert.strictEqual(harness.calls.save, 1, 'mode change must save once');
-	assert.strictEqual(harness.calls.apply, 0, 'apply must wait for save');
-	assert.deepStrictEqual(harness.calls.ctl, [], 'runtime switch must wait for save and apply');
-
-	harness.saveGate.resolve();
-	await tick();
-	assert.strictEqual(harness.calls.apply, 1, 'saved change must be applied once');
-	assert.deepStrictEqual(harness.calls.ctl, [], 'runtime switch must wait for apply');
-
-	harness.applyGate.resolve();
 	await result;
-	assert.deepStrictEqual(harness.calls.ctl, [],
-		'mode apply restarts the daemon, so the UI must not race its control socket');
+	assert.deepStrictEqual(harness.calls.ctl, [
+		['mode-set', 'manual', '51.5074', '-0.1278']
+	], 'manual mode must use the atomic backend mode operation');
+	assert.strictEqual(harness.calls.save, 0, 'the browser must not start a competing UCI apply');
+	assert.strictEqual(harness.calls.apply, 0, 'the browser must not restart the service');
+	assert.strictEqual(harness.calls.restart, 0, 'the browser must not restart the service');
 	assert.strictEqual(harness.calls.notifications.length, 0);
 }
 
 async function verifyAutoSwitch(sourcePath) {
 	const harness = await loadModeHandler(sourcePath, '51.5074', '-0.1278');
 	const result = harness.handler(null, 'main', 'auto');
-	harness.saveGate.resolve();
-	await tick();
-	harness.applyGate.resolve();
 	await result;
-	assert.deepStrictEqual(harness.calls.ctl, [],
-		'auto apply must let the restarted daemon load UCI instead of calling a stale socket');
+	assert.deepStrictEqual(harness.calls.ctl, [
+		['mode-set', 'auto', null, null]
+	], 'auto mode must use the atomic backend mode operation');
+	assert.strictEqual(harness.calls.restart, 0);
 }
 
 async function verifyManualSwitchWithoutCoordinates(sourcePath) {
