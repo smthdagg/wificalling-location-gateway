@@ -79,7 +79,7 @@ run_case() {
 		--entrypoint /sbin/init "$image" >/dev/null
 
 	ready=0
-	for attempt in 1 2 3 4 5 6 7 8 9 10; do
+	for _attempt in 1 2 3 4 5 6 7 8 9 10; do
 		if docker exec "$container" /bin/sh -c 'ubus list system >/dev/null 2>&1'; then
 			ready=1
 			break
@@ -110,7 +110,7 @@ run_case() {
 	docker exec "$container" /etc/init.d/wloc-service enable
 	docker exec "$container" /etc/init.d/wloc-service restart
 	socket_ready=0
-	for attempt in 1 2 3 4 5 6 7 8 9 10; do
+	for _attempt in 1 2 3 4 5 6 7 8 9 10; do
 		if docker exec "$container" test -S /var/run/wloc-service/control.sock; then
 			socket_ready=1
 			break

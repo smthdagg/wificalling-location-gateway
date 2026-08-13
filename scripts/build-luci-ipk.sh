@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 version=${1:-0.1.0-2}
 dependency_mode=${2:-production}
 package=luci-app-wificalling-location-gateway
@@ -12,10 +12,22 @@ stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-luci-ipk.XXXXXX")
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
 
 tar_format=gnutar
-tar_owner_options='--uid 0 --gid 0 --uname root --gname root'
 case "$(tar --version 2>/dev/null | head -n 1)" in
-	*GNU*) tar_format=gnu; tar_owner_options='--owner=0 --group=0' ;;
+	*GNU*) tar_format=gnu ;;
 esac
+
+make_archive() {
+	archive_dir=$1
+	archive_path=$2
+	shift 2
+	if [ "$tar_format" = gnu ]; then
+		(cd "$archive_dir" && COPYFILE_DISABLE=1 tar --format "$tar_format" \
+			--owner=0 --group=0 -czf "$archive_path" "$@")
+	else
+		(cd "$archive_dir" && COPYFILE_DISABLE=1 tar --format "$tar_format" \
+			--uid 0 --gid 0 --uname root --gname root -czf "$archive_path" "$@")
+	fi
+}
 
 mkdir -p "$stage/control" "$stage/data" "$out_dir"
 cp -R "$source_dir/." "$stage/data/"
@@ -95,9 +107,9 @@ printf '%s\n' \
 	> "$stage/control/control"
 printf '2.0\n' > "$stage/debian-binary"
 
-(cd "$stage/control" && COPYFILE_DISABLE=1 tar --format "$tar_format" $tar_owner_options -czf "$stage/control.tar.gz" .)
-(cd "$stage/data" && COPYFILE_DISABLE=1 tar --format "$tar_format" $tar_owner_options -czf "$stage/data.tar.gz" .)
+make_archive "$stage/control" "$stage/control.tar.gz" .
+make_archive "$stage/data" "$stage/data.tar.gz" .
 rm -f "$out"
-(cd "$stage" && COPYFILE_DISABLE=1 tar --format "$tar_format" $tar_owner_options -czf "$out" debian-binary data.tar.gz control.tar.gz)
+make_archive "$stage" "$out" debian-binary data.tar.gz control.tar.gz
 
 echo "$out"
