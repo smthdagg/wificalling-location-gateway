@@ -86,6 +86,8 @@ runtime_line=$(printf '%s\n' "$postinst" | grep -n -F 'mkdir -p /var/run/wifical
 restart_line=$(printf '%s\n' "$postinst" | grep -n -F '/etc/init.d/wificalling-gateway restart' | cut -d: -f1)
 [ "$runtime_line" -lt "$restart_line" ] ||
 	fail 'standalone post-install must create the Gateway runtime directory before restart'
+printf '%s\n' "$postinst" | grep -F 'rm -f /tmp/luci-indexcache.*' >/dev/null ||
+	fail 'standalone post-install must invalidate every LuCI menu cache variant'
 for member in \
 	'./etc/config/wificalling-gateway' \
 	'./etc/init.d/wificalling-gateway' \
