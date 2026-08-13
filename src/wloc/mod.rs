@@ -288,13 +288,18 @@ fn patch_cell_response(payload: &[u8], target: &PatchTarget) -> Result<Vec<u8>, 
     Ok(parts)
 }
 
-/// Patch the root AppleWLoc payload: WifiDevice (2), CellResponse (22/24),
-/// dropping root fields 3/4/33 and preserving everything else.
+/// Patch the root AppleWLoc payload: a top-level Location (1), WifiDevice
+/// (2) and CellResponse (22/24) locations are replaced; root fields 3/4/33
+/// are dropped and everything else is preserved.
 pub fn patch_payload(payload: &[u8], target: &PatchTarget) -> Result<Vec<u8>, WlocError> {
     let fields = parse_fields(payload)?;
     let mut parts = Vec::with_capacity(payload.len() + 64);
     for field in &fields {
         match (field.field_number, field.wire_type) {
+            (1, 2) => parts.extend(encode_length_delimited_field(
+                1,
+                &patch_location(field.value_bytes, target)?,
+            )),
             (2, 2) => parts.extend(encode_length_delimited_field(
                 2,
                 &patch_wifi_device(field.value_bytes, target)?,

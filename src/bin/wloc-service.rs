@@ -324,6 +324,18 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             std::env::var("WLOC_EVENTS_FILE")
                 .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into()),
         ));
+    // The upstream connection must use the real Apple IP (the DNS hijack
+    // would otherwise point it back at this router). Prefer the first
+    // nft-set address; fall back to DNS-only resolution when the set is
+    // empty (e.g. rules not yet installed).
+    let proxy = match upstream_apple_ips().into_iter().next() {
+        Some(apple_ip) => {
+            eprintln!("wloc-service: upstream apple ip override {apple_ip}:443");
+            proxy.with_upstream_override(apple_ip, 443)
+        }
+        None => proxy,
+    };
+    let proxy = std::sync::Arc::new(proxy);
     let proxy_port: u16 = env_or("WLOC_PROXY_PORT", 8443_u16);
 
     let patch_state = std::sync::Arc::new(std::sync::Mutex::new(None::<PatchTarget>));
@@ -435,6 +447,48 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
+/// Read the real Apple WLOC IPs from the nft apple_hosts set. The DNS
+/// hijack forces the devices to connect locally, but the proxy's own
+/// upstream connection must reach the real Apple server - resolving the
+/// hostname through dnsmasq would loop back to this router.
+fn upstream_apple_ips() -> Vec<String> {
+    let output = std::process::Command::new("nft")
+        .args(["list", "set", "inet", "wloc_service", "apple_hosts"])
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    parse_apple_ips(&output)
+}
+
+/// Extract IPv4 addresses from the `nft list set` output (elements line).
+fn parse_apple_ips(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with("elements") {
+                Some(trimmed)
+            } else {
+                None
+            }
+        })
+        .flat_map(|line| {
+            line.split(['{', '}', ',', ' '])
+                .map(str::trim)
+                .filter(|token| {
+                    !token.is_empty()
+                        && token.chars().all(|c| c.is_ascii_digit() || c == '.')
+                        && token.matches('.').count() == 3
+                        && *token != "192.168.31.1"
+                        && *token != "127.0.0.1"
+                })
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 /// Read the persisted CA info JSON (fingerprint/issued_at/expires_at).
 fn read_ca_info(path: &Path) -> Result<serde_json::Value, Box<dyn Error + Send + Sync>> {
     let text = std::fs::read_to_string(path)?;
@@ -465,4 +519,29 @@ fn pem_decode(pem: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
         .take_while(|line| !line.starts_with("-----END CERTIFICATE-----"))
         .collect::<String>();
     Ok(base64::engine::general_purpose::STANDARD.decode(body)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_apple_ips_from_nft_output() {
+        let output = "\nelements = { 59.82.17.33, 140.205.31.96 }\n";
+        assert_eq!(
+            parse_apple_ips(output),
+            vec!["59.82.17.33", "140.205.31.96"]
+        );
+    }
+
+    #[test]
+    fn empty_nft_output_yields_no_ips() {
+        assert!(parse_apple_ips("table inet wloc_service {\n}").is_empty());
+    }
+
+    #[test]
+    fn ignores_non_ip_tokens() {
+        let output = "elements = { 59.82.17.33, hostname, 10.0.0.1/8 }\n";
+        assert_eq!(parse_apple_ips(output), vec!["59.82.17.33"]);
+    }
 }

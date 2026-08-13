@@ -27,6 +27,23 @@ ips=$(uci -q show wificalling-gateway \
     exit 1
 }
 
+# DNS hijack: force the Apple WLOC hostnames to this router so the
+# devices always connect to an address our rules match, regardless of
+# CDN IP rotation (the Apple names resolve to different aliyun/akamai
+# ranges per client, so a fixed-IP set alone keeps missing them).
+HOSTS_MARKER='# wloc-service DNS hijack (do not edit)'
+# dnsmasq reads addn-hosts from the /tmp/hosts directory on this build;
+# /etc/hosts is kept as a fallback.
+mkdir -p /tmp/hosts
+for hosts_file in /etc/hosts /tmp/hosts/wloc-hosts; do
+    sed -i "/$HOSTS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
+    cat >> "$hosts_file" <<EOF
+$HOSTS_MARKER
+192.168.31.1 gs-loc.apple.com gs-loc-cn.apple.com bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com
+# wloc-service end
+EOF
+done
+
 # TPROXY plumbing: marked packets are routed back to the local stack.
 ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
 ip route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
@@ -43,9 +60,11 @@ nft delete chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
 nft "add chain inet $TABLE $CHAIN { type filter hook prerouting priority mangle; }"
 
 # Rebuild only the rules; the apple_hosts set content is untouched.
+# Match both the DNS-set Apple IPs and the hijacked local address.
 nft flush chain inet "$TABLE" "$CHAIN"
 for ip in $ips; do
     nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr @apple_hosts meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
+    nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr 192.168.31.1 meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
 done
 
 echo "wloc-redirect-sync: tproxy $ips -> :$PROXY_PORT (mark $FWMARK, table $ROUTE_TABLE)"

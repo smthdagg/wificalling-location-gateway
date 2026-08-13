@@ -292,6 +292,27 @@ fn missing_wifi_location_is_appended() {
 // --- Root payload ---
 
 #[test]
+fn root_location_field_is_patched() {
+    // A top-level Location (field 1) must be replaced, matching the
+    // structure some clients (e.g. newer iOS) use for their location.
+    let root_location = location_payload(coord_to_int(10.0), coord_to_int(20.0));
+    let mut payload = Vec::new();
+    payload.extend(encode_length_delimited_field(1, &root_location));
+    payload.extend(encode_varint_field(3, 999)); // dropped field
+
+    let patched = patch_payload(&payload, &target()).unwrap();
+    let fields = fields_of(&patched);
+    let root = fields
+        .iter()
+        .find(|(number, _, _)| *number == 1)
+        .expect("root Location field must remain");
+    let location = location_of_field(&root.2);
+    assert_eq!(location.0, coord_to_int(LAT));
+    assert_eq!(location.1, coord_to_int(LON));
+    assert!(!fields.iter().any(|(number, _, _)| *number == 3));
+}
+
+#[test]
 fn root_drop_fields_are_removed_and_others_preserved() {
     let patched = patch_payload(&root_payload(), &target()).unwrap();
     let fields = fields_of(&patched);
