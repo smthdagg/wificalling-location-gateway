@@ -2,7 +2,9 @@
 
 Private, security-gated development repository for an isolated OpenWrt WLOC location-gateway proof of concept. The component is designed to follow the real exit location of the sing-box node assigned by Wi-Fi Calling Gateway 1.7 without modifying the stable Gateway repository.
 
-This repository is currently in Phase 0. It contains the architecture and multi-Agent control plane; it does **not** yet contain a production WLOC interception engine.
+The `main` branch remains the security-gated integration baseline. The standalone daemon/UI work is developed on the Issue 17 branch and is not a claim of production readiness until its pull request and device gates are accepted.
+
+For the integrated AX6S test workflow, see the bilingual [Wi‑Fi Calling + WLOC tutorial](docs/WIFICALLING_WLOC_TUTORIAL_ZH_EN.md). The tutorial documents the Issue 17 development/AX6S deployment branch; merge and release status is tracked by the GitHub pull request.
 
 ## Multi-Agent task graph
 
