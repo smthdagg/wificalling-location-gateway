@@ -20,6 +20,8 @@ Ship the standalone Wi-Fi Calling Location Gateway 1.0 release as one project-na
 - Preserved both Gateway and WLOC UCI paths as package conffiles.
 - Passed pinned AArch64 OpenWrt 24.10.5, x86-64 OpenWrt 24.10.8, iStoreOS 24.10.5, and OpenWrt 25.12.3 Docker install/start/socket/status checks, covering every release asset.
 - Updated README, deployment instructions, packaging evidence, changelog, and release notes.
+- Installed the exact final AX6S asset; both UCI hashes, services, restored Wi-Fi Calling settings, and LuCI Manual → Auto → Manual passed.
+- Fixed the clean-install runtime-directory and suffixed LuCI-cache defects found during real-device validation.
 
 ## Verification
 
@@ -37,10 +39,8 @@ Ship the standalone Wi-Fi Calling Location Gateway 1.0 release as one project-na
 
 ## Next executable steps
 
-1. Log into the authorized AX6S through the local LuCI session.
-2. Back up the router and hash both UCI conffiles without exposing their contents.
-3. Install the exact 1.0.0 AArch64 package directly and verify configuration retention, services, socket/status, LuCI, and Auto-to-Manual switching.
-4. Obtain independent review, mark the PR ready, merge after CI, then tag and publish v1.0.0 with the three packages and `SHA256SUMS`.
+1. Obtain independent re-review of the release-integrity fix.
+2. Mark the PR ready, merge after CI, then tag and publish v1.0.0 with the three packages and `SHA256SUMS`.
 
 ## Capabilities required for the next Agent
 

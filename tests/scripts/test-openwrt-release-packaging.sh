@@ -30,6 +30,10 @@ if grep -F 'wloc-docker-smoke-deps' "$matrix" >/dev/null; then
 fi
 grep -F 'SHA256SUMS' "$matrix" >/dev/null ||
 	fail 'Docker verification must bind tested packages to the release checksum manifest'
+grep -F 'manifest_entries=' "$matrix" >/dev/null ||
+	fail 'Docker verification must select install artifacts from the checksum manifest'
+grep -F 'unexpected release package not listed in SHA256SUMS' "$matrix" >/dev/null ||
+	fail 'Docker verification must reject unlisted matching release packages'
 
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"

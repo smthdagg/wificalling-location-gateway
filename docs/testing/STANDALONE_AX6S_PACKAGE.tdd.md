@@ -37,7 +37,11 @@ The formal release artifact is
 binaries were rebuilt from the version 1.0.0 source with the pinned mt7622
 toolchain: `wloc-service` is a static AArch64 ELF of 1,904,800 bytes and
 `wloc-ctl` is a static AArch64 ELF of 462,792 bytes. The package SHA-256 is
-`6d2db7a89cb0c9577ec66582e5ecc6707643678fab35df7130e386d7c661c9de`
+`8a687b5c7fed81b25c104777b862b397b340503d738d1cf7b9bddbdffed23f0d`
 and is also recorded in the release `SHA256SUMS`.
 
-This evidence verifies package construction, metadata, payload and the complete repository test suite. Router installation remains a separate real-device step because LuCI login is required. The single package still depends on normal OpenWrt system facilities such as LuCI, rpcd, sing-box, nftables and firewall4; “standalone” means no separately installed Wi-Fi Calling Gateway or WLOC application package.
+The exact final asset was installed over the authorized ImmortalWrt 24.10.6
+AX6S. Both UCI hashes remained unchanged, both services ran, the restored
+Wi-Fi Calling settings rendered existing policies, and LuCI Manual → Auto →
+Manual completed without a socket error. “Standalone” means no separate
+Gateway or WLOC application package; normal OpenWrt facilities remain required.

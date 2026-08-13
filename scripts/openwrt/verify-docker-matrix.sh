@@ -43,12 +43,30 @@ else
 	(cd "$dist_dir" && shasum -a 256 -c SHA256SUMS)
 fi
 
-ax6s_package=$(find "$dist_dir" -maxdepth 1 -type f -name 'wificalling-location-gateway*_aarch64_cortex-a53.ipk' -print -quit)
-ipk_package=$(find "$dist_dir" -maxdepth 1 -type f -name 'wificalling-location-gateway*_x86_64.ipk' -print -quit)
-apk_package=$(find "$dist_dir" -maxdepth 1 -type f -name 'wificalling-location-gateway*.apk' -print -quit)
-[ -n "$ax6s_package" ] || fail 'integrated AX6S AArch64 IPK not found'
-[ -n "$ipk_package" ] || fail 'integrated x86_64 IPK not found'
-[ -n "$apk_package" ] || fail 'integrated x86_64 APK not found'
+manifest_entries=$(awk 'NF == 2 { print $2 }' "$dist_dir/SHA256SUMS")
+[ "$(printf '%s\n' "$manifest_entries" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 3 ] ||
+	fail 'SHA256SUMS must list exactly the three release packages'
+case "$manifest_entries" in *'/'*) fail 'SHA256SUMS package names must be basenames' ;; esac
+
+select_manifest_package() {
+	pattern=$1
+	label=$2
+	selected=$(printf '%s\n' "$manifest_entries" | grep -E "$pattern" || true)
+	[ "$(printf '%s\n' "$selected" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1 ] ||
+		fail "SHA256SUMS must list exactly one $label"
+	printf '%s/%s\n' "$dist_dir" "$selected"
+}
+
+ax6s_package=$(select_manifest_package '^wificalling-location-gateway.*_aarch64_cortex-a53\.ipk$' 'AX6S AArch64 IPK')
+ipk_package=$(select_manifest_package '^wificalling-location-gateway.*_x86_64\.ipk$' 'x86_64 IPK')
+apk_package=$(select_manifest_package '^wificalling-location-gateway.*\.apk$' 'x86_64 APK')
+
+find "$dist_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk' -o -name 'wificalling-location-gateway*.apk' \) -print |
+	while IFS= read -r candidate; do
+		basename=${candidate##*/}
+		printf '%s\n' "$manifest_entries" | grep -Fx "$basename" >/dev/null ||
+			fail "unexpected release package not listed in SHA256SUMS: $basename"
+	done
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-docker-matrix.XXXXXX")
 trap 'for name in $containers; do docker rm -f "$name" >/dev/null 2>&1 || true; done; rm -rf "$tmp"' EXIT HUP INT TERM
