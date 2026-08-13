@@ -3,6 +3,8 @@ name = "wificalling-location-gateway"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.90"
+license = "MIT"
+repository = "https://github.com/smthdagg/wificalling-location-gateway"
 publish = false
 
 [lib]

@@ -1,5 +1,12 @@
 # ADR-0001: License and clean-room implementation boundary
 
+> Repository license update (2026-08-13): the repository owner subsequently
+> granted the original project work under the MIT License by committing the
+> root [`LICENSE`](../../LICENSE). The historical wording below records the
+> license state when this ADR was accepted; this ADR itself remains a boundary
+> decision and is not the instrument that grants the license. The clean-room,
+> provenance, quarantine, and third-party-license requirements remain in force.
+
 - Status: Proposed for offline-scaffolding acceptance; independent protocol and security sign-off pending
 - Date: 2026-08-11
 - Decision owners: protocol and security roles
