@@ -98,6 +98,7 @@ case "$dependency_mode" in
 			# The integrated LuCI views intentionally replace the standalone
 			# Gateway views after the verified Gateway payload is merged.
 			cp -R "$source_dir/." "$stage/data/"
+			rm -f "$stage/data/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"
 			depends='luci-base, rpcd-mod-rpcsys, sing-box, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full'
 			provides='luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
 			replaces='luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'

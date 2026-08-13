@@ -37,6 +37,8 @@ grep -F 'unexpected release package not listed in SHA256SUMS' "$matrix" >/dev/nu
 if grep -F 'shasum -a 256 ./wificalling-location-gateway' "$builder" >/dev/null; then
 	fail 'release builder must write basename-only SHA256SUMS entries'
 fi
+grep -F 'luci-app-wificalling-gateway.json' "$builder" >/dev/null ||
+	fail 'integrated release builder must remove the standalone Gateway LuCI menu'
 
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"

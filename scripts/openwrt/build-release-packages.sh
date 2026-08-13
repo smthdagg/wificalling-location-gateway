@@ -107,6 +107,7 @@ tar -xzf "$stage/gateway/data.tar.gz" -C "$package_dir/files"
 
 # Overlay the integrated UI, then the architecture-specific WLOC runtime.
 cp -R "$repo_root/openwrt/luci-app-wificalling-location-gateway/files/." "$package_dir/files/"
+rm -f "$package_dir/files/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"
 mkdir -p "$package_dir/files/usr/sbin" "$package_dir/files/etc/init.d" "$package_dir/files/etc/config"
 cp "$service_bin" "$package_dir/files/usr/sbin/wloc-service"
 cp "$ctl_bin" "$package_dir/files/usr/sbin/wloc-ctl"

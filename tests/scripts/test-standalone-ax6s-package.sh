@@ -17,7 +17,8 @@ fail() {
 }
 
 mkdir -p "$tmp/gateway/control" "$tmp/gateway/data/etc/config" \
-	"$tmp/gateway/data/etc/init.d" "$tmp/gateway/data/www/luci-static/resources/view/wificalling-gateway"
+	"$tmp/gateway/data/etc/init.d" "$tmp/gateway/data/www/luci-static/resources/view/wificalling-gateway" \
+	"$tmp/gateway/data/usr/share/luci/menu.d"
 cat > "$tmp/gateway/control/control" <<'EOF'
 Package: luci-app-wificalling-gateway
 Version: 1.7.3-1
@@ -28,6 +29,8 @@ printf '%s\n' '/etc/config/wificalling-gateway' > "$tmp/gateway/control/conffile
 printf '%s\n' 'config main main' > "$tmp/gateway/data/etc/config/wificalling-gateway"
 printf '%s\n' '#!/bin/sh' > "$tmp/gateway/data/etc/init.d/wificalling-gateway"
 printf '%s\n' "'use strict';" > "$tmp/gateway/data/www/luci-static/resources/view/wificalling-gateway/overview.js"
+printf '%s\n' '{"admin/services/wificalling-gateway":{"title":"Wi-Fi Calling Gateway"}}' > \
+	"$tmp/gateway/data/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"
 chmod 0755 "$tmp/gateway/data/etc/init.d/wificalling-gateway"
 printf '2.0\n' > "$tmp/gateway/debian-binary"
 (cd "$tmp/gateway/control" && tar -czf "$tmp/gateway/control.tar.gz" .)
@@ -98,6 +101,9 @@ for member in \
 	printf '%s\n' "$data_members" | grep -Fx "$member" >/dev/null ||
 		fail "standalone package is missing $member"
 done
+if printf '%s\n' "$data_members" | grep -Fx './usr/share/luci/menu.d/luci-app-wificalling-gateway.json' >/dev/null; then
+	fail 'integrated package must not expose the standalone Gateway LuCI menu'
+fi
 
 if GATEWAY_IPK="$tmp/gateway.ipk" GATEWAY_IPK_SHA256=deadbeef \
 	WLOC_SERVICE_BIN="$tmp/wloc-service" WLOC_CTL_BIN="$tmp/wloc-ctl" \
