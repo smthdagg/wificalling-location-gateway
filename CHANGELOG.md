@@ -13,8 +13,8 @@ All notable changes are documented here. Versions follow Semantic Versioning.
 - Automatic node-following and manual location modes, CA/profile lifecycle,
   bounded TLS-over-HTTP/2 handling, exit/Geo resolution, and status logging.
 - Reproducible pinned builds, SHA-256 release manifests, dependency/license
-  auditing, secret scanning, coverage gates, and three-platform Docker smoke
-  verification.
+  auditing, secret scanning, coverage gates, and four-environment Docker smoke
+  verification covering every release asset.
 
 ### Fixed
 

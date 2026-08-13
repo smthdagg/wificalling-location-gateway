@@ -91,13 +91,13 @@ flowchart LR
 
 | 平台 | 架构 | 包管理器 | 当前证据 | 状态 |
 |---|---:|---|---|---|
-| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | 实机安装、procd、LuCI、自动/手动切换、证书和 iPhone WLOC 链路 | **真机通过** |
+| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | 官方 AArch64 OpenWrt 24.10.5 Docker 安装/启动矩阵；另有实机 procd、LuCI、自动/手动切换、证书和 iPhone WLOC 链路 | **Docker + 真机通过** |
 | OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker 中启动 init/ubus、安装集成包、启动服务、Socket 与 v1 状态检查 | **安装矩阵通过** |
 | iStoreOS 24.10.5 | x86_64 | opkg / IPK | 同上 | **安装矩阵通过** |
 | OpenWrt 25.12.3 | x86_64 | apk / APK v3 | 同上，使用原生 APK v3，非改名 IPK | **安装矩阵通过** |
 | 其他 OpenWrt / ImmortalWrt 版本或 CPU | — | — | 尚无对应设备/SDK证据 | **未验证** |
 
-运行时包包含 Rust ELF，**必须与路由器 CPU 架构一致**；LuCI 包才是 `all`/`noarch`。当前 Docker 发布脚本只构建 x86_64，AX6S 使用单独的 AArch64 `cortex-a53` 交叉构建链。Docker 矩阵验证的是安装与启动，不等同于 nftables、DNS、真实运营商或 iPhone 端到端测试。
+运行时包包含 Rust ELF，**必须与路由器 CPU 架构一致**；LuCI 包才是 `all`/`noarch`。x86_64 包由固定 SDK 构建，AX6S 使用单独的 AArch64 `cortex-a53` 交叉构建链；正式 Docker 矩阵会安装全部三个发布资产。Docker 验证的是安装与启动，不等同于 nftables、DNS、真实运营商或 iPhone 端到端测试。
 
 ## 安装
 
@@ -211,11 +211,11 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
   --out-dir "$PWD/dist/openwrt-release"
 ```
 
-### 三平台 Docker 安装与启动矩阵
+### 全部发布包的四环境 Docker 安装与启动矩阵
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir "$PWD/dist/openwrt-release"
+  --dist-dir "$PWD/dist/v1.0.0"
 ```
 
 构建使用固定摘要的官方 OpenWrt SDK；依赖准备之后，产品编译采用 locked/offline、只读源码和禁网容器。完整边界和结果见 [OpenWrt 发布打包与 Docker 矩阵](docs/testing/OPENWRT_PACKAGE_DOCKER_MATRIX.md)。

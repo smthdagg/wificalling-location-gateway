@@ -54,25 +54,27 @@ one native APK v3 package, and `SHA256SUMS`. The Gateway input is rejected
 unless its package identity is `luci-app-wificalling-gateway`, its version is
 1.7.x, its archive paths are safe, and its digest matches the explicit pin.
 
-## Three-platform Docker verification
+## Every release asset: four-environment Docker verification
 
-The matrix is intentionally the same family of environments used by the
-Wi-Fi Calling Gateway release process:
+The matrix installs every release package. It uses:
 
-1. OpenWrt 24.10.8 x86-64 with `opkg`;
-2. OpenWrt 25.12.3 x86-64 with `apk`;
-3. iStoreOS 24.10.5 x86-64 with `opkg`.
+1. official OpenWrt 24.10.5 AArch64 rootfs with the AX6S/cortex-a53 IPK;
+2. OpenWrt 24.10.8 x86-64 with the 24.x IPK;
+3. OpenWrt 25.12.3 x86-64 with the native APK;
+4. iStoreOS 24.10.5 x86-64 with the same 24.x IPK.
 
 Run:
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir /absolute/path/dist/openwrt-release
+  --dist-dir /absolute/path/dist/v1.0.0
 ```
 
 For each environment the verifier boots `/sbin/init`, waits for ubus, installs
 the single integrated package, enables and restarts the procd service, checks the Unix
 control socket, and requires a valid `wloc.service/v1` status response. The
+verifier first validates every package against the release `SHA256SUMS`, binding
+the Docker evidence to the exact files intended for upload. The
 rootfs images do not contain the full dependency feeds used by a router, so
 the isolated install test bypasses unresolved optional dependencies; it does
 not claim that sing-box, nftables interception, DNS behavior, Wi-Fi Calling,
@@ -85,6 +87,7 @@ has these exact x86-64 assets:
 The formal 1.0 verification result was:
 
 ```text
+Redmi AX6S / OpenWrt 24.10.5|OpenWrt 24.10.5 aarch64_generic|installed|started|socket-ok|status-ok
 OpenWrt 24.10.8|OpenWrt 24.10.8 x86_64|installed|started|socket-ok|status-ok
 OpenWrt 25.12.3|OpenWrt 25.12.3 x86_64|installed|started|socket-ok|status-ok
 iStoreOS 24.10.5|iStoreOS 24.10.5 x86_64|installed|started|socket-ok|status-ok

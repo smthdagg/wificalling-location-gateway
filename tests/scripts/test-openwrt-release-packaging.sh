@@ -22,6 +22,8 @@ grep -F '\$\$required' "$builder" >/dev/null ||
 if grep -F 'wloc-docker-smoke-deps' "$matrix" >/dev/null; then
 	fail 'Docker verification must use real 25.x rootfs prerequisites, not conflicting fake providers'
 fi
+grep -F 'SHA256SUMS' "$matrix" >/dev/null ||
+	fail 'Docker verification must bind tested packages to the release checksum manifest'
 
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"
@@ -64,12 +66,15 @@ grep -F 'dedicated openwrt-release directory' "$tmp/err" >/dev/null ||
 
 matrix_plan=$("$matrix" --plan --dist-dir "$tmp")
 for expected in \
+	'Redmi AX6S / OpenWrt 24.10.5|opkg|ghcr.io/openwrt/rootfs:aarch64_generic-24.10.5' \
 	'OpenWrt 24.10.8|opkg|ghcr.io/openwrt/rootfs:x86_64-24.10.8' \
 	'OpenWrt 25.12.3|apk|ghcr.io/openwrt/rootfs:x86_64-25.12.3' \
 	'iStoreOS 24.10.5|opkg|wukongdaily/openwrt-istoreos:amd64-latest'; do
 	printf '%s\n' "$matrix_plan" | grep -F "$expected" >/dev/null ||
 		fail "missing Docker matrix row: $expected"
 done
+printf '%s\n' "$matrix_plan" | grep -F 'sha256:93f980c266b9b68e3085f3eee7909c04f1dc4061047558e18a9ef12aec43efa9' >/dev/null ||
+	fail 'AX6S-compatible AArch64 rootfs image must be immutable'
 printf '%s\n' "$matrix_plan" | grep -F 'sha256:9972a4b4747cd136abd597475d7b88c51a49fd849d0d53f069a2f4bf446061b9' >/dev/null ||
 	fail '24.10 rootfs image must be immutable'
 printf '%s\n' "$matrix_plan" | grep -F 'sha256:af882e0583954fc2ceac6b081a9d214fc739cfea36a29b48795a5f15563aa3b5' >/dev/null ||

@@ -6,7 +6,7 @@
 - Capabilities used: rust,openwrt,ci,test,docs,release
 - Branch: codex/issue-25-release-1-0
 - Checkpoint parent: c7818330cab7c2ebfcd3c37f474258d760ea394e
-- Updated at (UTC): 2026-08-13T10:53:47Z
+- Updated at (UTC): 2026-08-13T11:02:39Z
 - Credentials included: no
 
 ## Objective
@@ -18,7 +18,7 @@ Ship the standalone Wi-Fi Calling Location Gateway 1.0 release as one project-na
 - Froze version 1.0.0 across Cargo, OpenWrt metadata, builders, tests, and documentation.
 - Built a complete AX6S AArch64 IPK and integrated x86-64 IPK/APK assets.
 - Preserved both Gateway and WLOC UCI paths as package conffiles.
-- Passed pinned OpenWrt 24.10.8, iStoreOS 24.10.5, and OpenWrt 25.12.3 Docker install/start/socket/status checks.
+- Passed pinned AArch64 OpenWrt 24.10.5, x86-64 OpenWrt 24.10.8, iStoreOS 24.10.5, and OpenWrt 25.12.3 Docker install/start/socket/status checks, covering every release asset.
 - Updated README, deployment instructions, packaging evidence, changelog, and release notes.
 
 ## Verification
@@ -26,7 +26,7 @@ Ship the standalone Wi-Fi Calling Location Gateway 1.0 release as one project-na
 | Command | Result | Evidence |
 |---|---|---|
 | `./scripts/ci/verify.sh` | Passed | 67 Python tests, complete Rust suite, 80.32% line coverage, audit/deny and secret scan |
-| `./scripts/openwrt/verify-docker-matrix.sh --dist-dir "$PWD/dist/openwrt-release"` | Passed | All three platforms installed, started, created the socket, and returned v1 status |
+| `./scripts/openwrt/verify-docker-matrix.sh --dist-dir "$PWD/dist/v1.0.0"` | Passed | All three release assets across four environments installed, started, created the socket, and returned v1 status |
 | AX6S package inspection | Passed | Project package name, AArch64 architecture, complete payload, system-only dependencies, and two conffiles |
 | Release SHA-256 generation | Passed | Three architecture/package-manager assets recorded in `SHA256SUMS` |
 
