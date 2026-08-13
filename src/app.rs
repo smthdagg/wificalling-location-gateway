@@ -67,6 +67,17 @@ pub struct WlocServiceConfig {
     /// LAN IP of the device whose node binding the location follows
     /// (shown in the monitor page).
     pub assigned_device: Option<String>,
+    /// Reverse-geocode endpoint used to fill in country/city/timezone for a
+    /// manual coordinate switch. `None` disables the background lookup
+    /// (tests). Production uses the public Nominatim TLS endpoint.
+    pub reverse_geo_lookup: Option<(String, u16)>,
+}
+
+/// One reverse-geocode lookup in flight: the generation it was started for
+/// and the outcome once the worker thread lands (`None` while running).
+struct ManualGeoLookup {
+    generation: u64,
+    outcome: Option<Result<crate::georesolver::geocode::ReverseGeoResult, ()>>,
 }
 
 /// Production composition of the control API, runtime adapters, exit probe,
@@ -93,6 +104,16 @@ pub struct WlocService<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRun
     /// Reverse-geocoded place info for the manual preset (country/city/
     /// timezone), so the status file can show them without an auto probe.
     manual_geo: Option<crate::georesolver::geocode::ReverseGeoResult>,
+    /// Bumped on every manual coordinate change; background lookups carry the
+    /// generation they were started for and stale outcomes are dropped.
+    geo_generation: u64,
+    /// In-flight reverse-geocode lookup for the current manual target. The
+    /// worker thread (never the control path) writes the outcome here; the
+    /// next status/refresh cycle applies it.
+    manual_geo_pending: std::sync::Arc<std::sync::Mutex<Option<ManualGeoLookup>>>,
+    /// Reverse-geocode endpoint for manual place-info lookups (production:
+    /// Nominatim TLS; tests: mock port or `None` to disable).
+    reverse_geo_lookup: Option<(String, u16)>,
     /// LAN IP of the device whose node binding the location follows.
     assigned_device: Option<String>,
     /// Root-local status JSON written on every status snapshot (includes GPS
@@ -132,6 +153,9 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             patch_sink: None,
             geo_source: GeoSource::Auto,
             manual_geo: None,
+            geo_generation: 0,
+            manual_geo_pending: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            reverse_geo_lookup: config.reverse_geo_lookup,
             status_file: None,
             events_file: None,
         }
@@ -353,20 +377,103 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
         // A coordinate mode switch is a local control operation and must not
         // block the root-only control socket on an external reverse-geocode
         // request. The coordinates are authoritative; optional place metadata
-        // is cleared until an independently bounded refresh can populate it.
+        // is cleared and refilled by a background lookup with a strict
+        // timeout (never on this path).
         self.manual_geo = None;
+        self.geo_generation += 1;
+        self.spawn_manual_geo_lookup(latitude, longitude);
         self.publish_patch_target();
         self.refresh_state_file();
         Ok(())
+    }
+
+    /// Start a background reverse-geocode lookup for the current manual
+    /// coordinates. The worker thread does all network I/O with a strict
+    /// timeout and writes only its own generation, so a late result can
+    /// never overwrite a newer target.
+    fn spawn_manual_geo_lookup(&self, latitude: f64, longitude: f64) {
+        let generation = self.geo_generation;
+        let slot = std::sync::Arc::clone(&self.manual_geo_pending);
+        *slot.lock().expect("manual geo slot lock") = Some(ManualGeoLookup {
+            generation,
+            outcome: None,
+        });
+        let Some((host, port)) = &self.reverse_geo_lookup else {
+            return;
+        };
+        let host = host.clone();
+        let port = *port;
+        std::thread::spawn(move || {
+            let outcome =
+                crate::georesolver::geocode::reverse_geocode_at(&host, port, latitude, longitude)
+                    .map_err(|_| ());
+            if let Ok(mut slot) = slot.lock() {
+                if let Some(pending) = slot.as_mut() {
+                    if pending.generation == generation {
+                        pending.outcome = Some(outcome);
+                    }
+                }
+            }
+        });
+    }
+
+    /// Apply a completed background lookup if it still matches the current
+    /// manual target, then refresh the status file. Called from the status
+    /// and periodic-refresh paths only - never from the control path.
+    fn consume_pending_manual_geo(&mut self) {
+        let completed = match self.manual_geo_pending.lock() {
+            Ok(mut slot) => match slot.as_mut() {
+                Some(pending) => pending
+                    .outcome
+                    .take()
+                    .map(|outcome| (pending.generation, outcome)),
+                None => None,
+            },
+            Err(_) => None,
+        };
+        if let Some((generation, outcome)) = completed {
+            if generation == self.geo_generation {
+                self.manual_geo = outcome.ok();
+                self.refresh_state_file();
+            }
+        }
     }
 
     /// Return to automatic node-following location.
     pub fn clear_manual_location(&mut self) -> Result<(), crate::service::dispatch::DispatchError> {
         self.geo_source = GeoSource::Auto;
         self.manual_geo = None;
+        self.geo_generation += 1;
+        if let Ok(mut slot) = self.manual_geo_pending.lock() {
+            *slot = None;
+        }
         self.publish_patch_target();
         self.refresh_state_file();
         Ok(())
+    }
+
+    /// The generation of the current manual target (test hook).
+    #[doc(hidden)]
+    pub fn manual_geo_generation(&self) -> u64 {
+        self.geo_generation
+    }
+
+    /// Test hook: simulate the background worker writing its outcome for
+    /// `generation`. Mirrors the worker's stale-guard: an outcome for an old
+    /// generation is not stored.
+    #[doc(hidden)]
+    pub fn finish_manual_geo_lookup(
+        &mut self,
+        generation: u64,
+        outcome: Result<crate::georesolver::geocode::ReverseGeoResult, ()>,
+    ) {
+        if let Ok(mut slot) = self.manual_geo_pending.lock() {
+            if let Some(pending) = slot.as_mut() {
+                if pending.generation == generation {
+                    pending.outcome = Some(outcome);
+                }
+            }
+        }
     }
 
     /// Refresh the root-local status file immediately so the LuCI UI sees a
@@ -453,6 +560,10 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
     for WlocService<R, P, G>
 {
     fn status(&mut self) -> Result<Value, DispatchError> {
+        // The LuCI monitor polls status; applying a completed background
+        // lookup here refills country/city/timezone without any network on
+        // the control path.
+        self.consume_pending_manual_geo();
         self.status_at(current_unix())
     }
 
@@ -507,6 +618,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
     }
 
     fn refresh_periodic(&mut self) {
+        self.consume_pending_manual_geo();
         self.refresh_evidence_at(current_unix());
         self.refresh_state_file();
     }

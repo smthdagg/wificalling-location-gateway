@@ -12,6 +12,7 @@ use std::time::Duration;
 use wificalling_location_gateway::app::{WlocService, WlocServiceConfig};
 use wificalling_location_gateway::exitprobe::runtime::{ExitProbeRuntime, ProbeFailure};
 use wificalling_location_gateway::exitprobe::{NodeRef, ProbeLimits};
+use wificalling_location_gateway::georesolver::geocode::ReverseGeoResult;
 use wificalling_location_gateway::georesolver::runtime::{GeoProviderRuntime, ProviderFailure};
 use wificalling_location_gateway::georesolver::ProviderRef;
 use wificalling_location_gateway::service::api::RequestParams;
@@ -87,6 +88,153 @@ fn dispatch_geo_set_and_clear_drive_the_real_service() {
     let parsed: serde_json::Value = serde_json::from_slice(&response).unwrap();
     assert_eq!(parsed["result"], json!({}));
     assert_eq!(service.status_at(now).unwrap()["geo_source"], "auto");
+}
+
+#[test]
+fn manual_mode_fills_place_info_after_background_lookup() {
+    // Regression: a manual coordinate switch must take effect immediately
+    // (no network in the control path) and the country/city/timezone must
+    // be filled back in once the background reverse-geocode lookup lands.
+    let now = 1_000_000;
+    let dir = std::env::temp_dir();
+    let status_path = dir.join(format!("wloc-test-fill-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&status_path);
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        fresh_probe(),
+        fresh_geo(now),
+    )
+    .with_state_files(status_path.clone(), dir.join("wloc-test-fill-events.jsonl"));
+
+    let params = RequestParams {
+        query: None,
+        latitude: Some(22.3193),
+        longitude: Some(114.1694),
+    };
+    service.set_manual_location(&params).unwrap();
+    service.status().unwrap();
+
+    // Coordinates are effective immediately; place info is pending.
+    let status = read_status_json(&status_path);
+    assert_eq!(status["geo_source"], "manual");
+    assert_eq!(status["geo"]["latitude"], 22.3193);
+    assert!(status["geo"]["country_code"].is_null());
+
+    // The background lookup completes successfully; the next status cycle
+    // must expose country/city/timezone again.
+    let generation = service.manual_geo_generation();
+    service.finish_manual_geo_lookup(
+        generation,
+        Ok(crate_geo_result("Hong Kong", "HK", "Asia/Hong_Kong")),
+    );
+    service.status().unwrap();
+    let status = read_status_json(&status_path);
+    assert_eq!(status["geo"]["country_code"], "HK");
+    assert_eq!(status["geo"]["city"], "Hong Kong");
+    assert_eq!(status["geo"]["timezone"], "Asia/Hong_Kong");
+    assert_eq!(status["geo"]["latitude"], 22.3193);
+    let _ = std::fs::remove_file(&status_path);
+}
+
+#[test]
+fn stale_lookup_result_is_discarded_after_coordinate_change() {
+    // A lookup started for coordinates A must not overwrite the place info
+    // of a newer manual target B when it completes late.
+    let now = 1_000_000;
+    let dir = std::env::temp_dir();
+    let status_path = dir.join(format!("wloc-test-stale-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&status_path);
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        fresh_probe(),
+        fresh_geo(now),
+    )
+    .with_state_files(
+        status_path.clone(),
+        dir.join("wloc-test-stale-events.jsonl"),
+    );
+
+    let set_a = RequestParams {
+        query: None,
+        latitude: Some(22.3193),
+        longitude: Some(114.1694),
+    };
+    service.set_manual_location(&set_a).unwrap();
+    let generation_a = service.manual_geo_generation();
+
+    let set_b = RequestParams {
+        query: None,
+        latitude: Some(51.5074),
+        longitude: Some(-0.1278),
+    };
+    service.set_manual_location(&set_b).unwrap();
+    assert_ne!(generation_a, service.manual_geo_generation());
+
+    // The worker for A completes late; its outcome must be dropped.
+    service.finish_manual_geo_lookup(
+        generation_a,
+        Ok(crate_geo_result("Hong Kong", "HK", "Asia/Hong_Kong")),
+    );
+    service.status().unwrap();
+    let status = read_status_json(&status_path);
+    assert_eq!(status["geo"]["latitude"], 51.5074);
+    assert!(
+        status["geo"]["country_code"].is_null(),
+        "stale lookup must not populate the newer target"
+    );
+    let _ = std::fs::remove_file(&status_path);
+}
+
+#[test]
+fn failed_lookup_keeps_coordinates_without_place_info() {
+    // A failed or timed-out background lookup must never block the control
+    // path and must leave the coordinates active with empty place info.
+    let now = 1_000_000;
+    let dir = std::env::temp_dir();
+    let status_path = dir.join(format!("wloc-test-fail-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&status_path);
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        fresh_probe(),
+        fresh_geo(now),
+    )
+    .with_state_files(status_path.clone(), dir.join("wloc-test-fail-events.jsonl"));
+    let params = RequestParams {
+        query: None,
+        latitude: Some(22.3193),
+        longitude: Some(114.1694),
+    };
+    service.set_manual_location(&params).unwrap();
+    let generation = service.manual_geo_generation();
+
+    service.finish_manual_geo_lookup(generation, Err(()));
+    service.status().unwrap();
+    let status = read_status_json(&status_path);
+    assert_eq!(status["geo_source"], "manual");
+    assert_eq!(status["geo"]["latitude"], 22.3193);
+    assert!(status["geo"]["country_code"].is_null());
+    let _ = std::fs::remove_file(&status_path);
+}
+
+fn read_status_json(path: &std::path::Path) -> serde_json::Value {
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+fn crate_geo_result(city: &str, country: &str, tz: &str) -> ReverseGeoResult {
+    ReverseGeoResult {
+        city: city.to_owned(),
+        country_code: country.to_owned(),
+        timezone: tz.to_owned(),
+    }
 }
 
 fn limits() -> ProbeLimits {
@@ -195,6 +343,9 @@ fn build(
             ipv6_ready: true,
             assigned_device_configured: true,
             assigned_device: Some("192.168.31.176".to_owned()),
+            // Unit tests drive the lookup via finish_manual_geo_lookup; no
+            // real network I/O.
+            reverse_geo_lookup: None,
         },
     )
 }
@@ -281,6 +432,9 @@ fn status_reports_uncertain_when_geo_conflicts() {
             ipv6_ready: true,
             assigned_device_configured: true,
             assigned_device: Some("192.168.31.176".to_owned()),
+            // Unit tests drive the lookup via finish_manual_geo_lookup; no
+            // real network I/O.
+            reverse_geo_lookup: None,
         },
     );
 

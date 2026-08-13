@@ -260,6 +260,10 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             } else {
                 Some(uci.assigned_device.clone())
             },
+            // Background manual place-info lookups use the public Nominatim
+            // TLS endpoint; a strict connect/read timeout keeps them off the
+            // control path.
+            reverse_geo_lookup: Some(("nominatim.openstreetmap.org".to_owned(), 443)),
         },
     );
 

@@ -302,8 +302,20 @@ pub fn geocode_at(host: &str, port: u16, query: &str) -> Result<(f64, f64), Geoc
     parse_geocode_response(&body)
 }
 
+/// Connect with a strict timeout so a background reverse-geocode lookup
+/// can never hang the caller (the read side is bounded by REQUEST_TIMEOUT
+/// as well).
+fn connect_with_timeout(host: &str, port: u16) -> Result<TcpStream, GeocodeError> {
+    use std::net::ToSocketAddrs;
+    let mut addrs = (host, port)
+        .to_socket_addrs()
+        .map_err(|_| GeocodeError::Unreachable)?;
+    let addr = addrs.next().ok_or(GeocodeError::Unreachable)?;
+    TcpStream::connect_timeout(&addr, REQUEST_TIMEOUT).map_err(|_| GeocodeError::Unreachable)
+}
+
 fn http_get(host: &str, port: u16, path: &str) -> Result<Vec<u8>, GeocodeError> {
-    let mut stream = TcpStream::connect((host, port)).map_err(|_| GeocodeError::Unreachable)?;
+    let mut stream = connect_with_timeout(host, port)?;
     stream
         .set_read_timeout(Some(REQUEST_TIMEOUT))
         .map_err(|_| GeocodeError::Unreachable)?;
@@ -333,7 +345,7 @@ fn https_get(host: &str, path: &str) -> Result<Vec<u8>, GeocodeError> {
     let connection = ClientConnection::new(Arc::new(config), server_name)
         .map_err(|_| GeocodeError::Unreachable)?;
 
-    let sock = TcpStream::connect((host, 443)).map_err(|_| GeocodeError::Unreachable)?;
+    let sock = connect_with_timeout(host, 443)?;
     sock.set_read_timeout(Some(REQUEST_TIMEOUT))
         .map_err(|_| GeocodeError::Unreachable)?;
     let mut tls = StreamOwned::new(connection, sock);
@@ -566,6 +578,38 @@ mod tests {
         assert_eq!(
             reverse_geocode_at("127.0.0.1", oversized_port, 1.0, 2.0),
             Err(GeocodeError::InvalidData)
+        );
+    }
+
+    #[test]
+    fn reverse_geocode_at_mock_timeout_is_unreachable() {
+        // A server that accepts but never responds must fail after the
+        // strict read timeout instead of hanging the caller (the background
+        // manual lookup depends on this bound).
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut buf = [0_u8; 1024];
+            let _ = sock.read(&mut buf);
+            std::thread::sleep(REQUEST_TIMEOUT + std::time::Duration::from_secs(1));
+        });
+        assert_eq!(
+            reverse_geocode_at("127.0.0.1", port, 1.0, 2.0),
+            Err(GeocodeError::Unreachable)
+        );
+    }
+
+    #[test]
+    fn reverse_geocode_at_connect_timeout_is_unreachable() {
+        // Connecting to a non-listening local port must fail fast through
+        // the strict connect timeout rather than the OS default (minutes).
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener); // nothing listens on this port anymore
+        assert_eq!(
+            reverse_geocode_at("127.0.0.1", port, 1.0, 2.0),
+            Err(GeocodeError::Unreachable)
         );
     }
 
