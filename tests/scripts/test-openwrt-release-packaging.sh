@@ -19,8 +19,10 @@ fail() {
 
 grep -F '\$\$required' "$builder" >/dev/null ||
 	fail 'package post-install must preserve the full prerequisite path through Make'
-grep -F 'install -d -m 0700 /var/run/wificalling-gateway' "$builder" >/dev/null ||
+grep -F 'mkdir -p /var/run/wificalling-gateway' "$builder" >/dev/null ||
 	fail 'release post-install must create the volatile Gateway runtime directory before restart'
+grep -F 'chmod 0700 /var/run/wificalling-gateway' "$builder" >/dev/null ||
+	fail 'release post-install must restrict the Gateway runtime directory'
 if grep -F 'wloc-docker-smoke-deps' "$matrix" >/dev/null; then
 	fail 'Docker verification must use real 25.x rootfs prerequisites, not conflicting fake providers'
 fi
