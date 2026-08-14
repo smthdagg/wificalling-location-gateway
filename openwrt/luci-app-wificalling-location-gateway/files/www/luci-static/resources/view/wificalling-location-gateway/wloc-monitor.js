@@ -74,7 +74,7 @@ return view.extend({
 		function refreshIpBtn() {
 			var label = refreshingIp ? wlocI18n.t('Refreshing…') : wlocI18n.t('Refresh IP');
 			return E('button', {
-				class: 'btn',
+				class: 'cbi-button cbi-button-apply',
 				disabled: refreshingIp ? true : undefined,
 				title: wlocI18n.t('Re-probe the followed node exit IP now'),
 				click: function() {
