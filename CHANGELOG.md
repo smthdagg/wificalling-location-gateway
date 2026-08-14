@@ -11,6 +11,39 @@ All notable changes are documented here. Versions follow Semantic Versioning.
   (no third-party service, no token in the repository); README embeds the
   committed chart instead of the star-history.com embed.
 
+## [1.0.2] - 2026-08-15
+
+Router package update (v1.0.2-2) fixing node-switch follow-up and adding a
+manual refresh for the WLOC monitor.
+
+### Added
+
+- **Manual refresh IP button** on the WLOC Monitor page, next to the followed
+  device: it discards cached probe evidence, re-probes the followed node
+  immediately, and rewrites the status file so the exit IP updates on the spot
+  (new `control.refresh` control command wired through `wloc-ctl` and the
+  `luci.wloc` rpcd bridge; a failed probe shows the reason without restarting
+  the daemon).
+- The monitor page ships under a versioned LuCI view name like the settings
+  page, so an updated page is never served from the browser cache.
+
+### Fixed
+
+- **Node switches are now followed within seconds.** Previously the service
+  only re-probed on its 600s housekeeping tick and the config fingerprint
+  covered only the running `sing-box.json`, which the Gateway does not
+  necessarily rewrite on a binding change - the monitor kept showing the old
+  exit IP for up to ten minutes.
+  - The fingerprint now also covers the device-policy UCI file
+    (`/etc/config/wificalling-gateway`), so any binding change triggers an
+    immediate re-probe.
+  - The probe selects the node from the UCI device policy first (the user's
+    source of truth) instead of trusting possibly stale sing-box route rules.
+  - Housekeeping runs every 10 seconds; the probe itself still only runs when
+    the fingerprint changed or cached evidence is stale.
+- The packaged UI no longer lags the repository copy: probe failure reasons
+  and the newer translation table were missing from earlier release packages.
+
 ## [1.0.1] - 2026-08-14
 
 ### Fixed
@@ -49,5 +82,6 @@ All notable changes are documented here. Versions follow Semantic Versioning.
 - WLOC interception remains isolated from UDP 500/4500 and the Gateway table.
 - Invalid Geo/protocol/TLS state never produces a default fake coordinate.
 
+[1.0.2]: https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.0.2
 [1.0.1]: https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.0.1
 [1.0.0]: https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.0.0
