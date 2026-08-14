@@ -33,8 +33,17 @@ jobs:
             echo "chart unchanged; nothing to commit"
             exit 0
           fi
+          # main is branch-protected (PRs required), so publish the chart
+          # on the dedicated star-chart branch instead.
+          git fetch origin star-chart 2>/dev/null || true
+          if git rev-parse --verify -q origin/star-chart >/dev/null; then
+            git checkout -B star-chart origin/star-chart
+          else
+            git checkout -b star-chart
+          fi
+          python3 scripts/star-history.py
           git config user.name "$BOT_NAME"
           git config user.email "$BOT_EMAIL"
           git add docs/images/star-history.svg
           git commit -m "chore: refresh star history chart"
-          git push
+          git push origin star-chart
