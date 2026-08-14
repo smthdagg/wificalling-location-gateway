@@ -74,6 +74,10 @@ var ZH = {
 	'Cancel': '取消',
 	'Save': '保存',
 	'Follow device': '定位跟随设备',
+	'Refresh IP': '刷新 IP',
+	'Refreshing…': '刷新中…',
+	'Re-probe the followed node exit IP now': '立即重新探测跟随节点的出口 IP',
+	'IP refresh failed: ': 'IP 刷新失败：',
 	'The device whose bound node the WLOC location follows (its exit IP drives auto mode).':
 		'WLOC 定位跟随的设备：自动模式按其绑定节点的出口 IP 定位。',
 	'Device saved. WLOC now follows its node.': '已保存。WLOC 定位将跟随该设备的节点。',

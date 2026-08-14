@@ -444,10 +444,12 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     eprintln!("wloc-service listening on {socket_path}");
     let server = ControlServer::new(service);
-    runtime.block_on(server.serve(
-        listener,
-        std::time::Duration::from_secs(uci.probe_interval_secs),
-    ));
+    // Housekeeping runs every 10s so a node switch in the Gateway settings
+    // is followed within seconds. The probe itself only runs when the
+    // config fingerprint changed or cached evidence is stale (the check is
+    // a cheap file read + hash); the observation age is still governed by
+    // probe_interval_secs.
+    runtime.block_on(server.serve(listener, std::time::Duration::from_secs(10)));
     Ok(())
 }
 

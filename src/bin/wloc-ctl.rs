@@ -37,7 +37,7 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
         }
     };
     let params = match method {
-        "status" | "enable" | "disable" | "geo-clear" | "reload" => {
+        "status" | "enable" | "disable" | "geo-clear" | "reload" | "refresh" => {
             serde_json::json!({})
         }
         "geo-search" => match parse_geo_set(&args[1..]) {
@@ -165,6 +165,7 @@ fn map_wire_method(method: &str) -> Option<&'static str> {
         "geo-set" => Some("geo.set"),
         "geo-clear" => Some("geo.clear"),
         "geo-search" => Some("geo.search"),
+        "refresh" => Some("control.refresh"),
         _ => None,
     }
 }
@@ -318,6 +319,7 @@ mod tests {
             ("geo-set", "geo.set"),
             ("geo-clear", "geo.clear"),
             ("geo-search", "geo.search"),
+            ("refresh", "control.refresh"),
         ];
         for (cli, wire) in cases {
             assert_eq!(map_wire_method(cli), Some(wire), "mapping for {cli}");

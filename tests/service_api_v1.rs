@@ -20,6 +20,7 @@ fn supported_control_methods_are_explicit_and_finite() {
         ("control.enable", ApiMethod::ControlEnable),
         ("control.disable", ApiMethod::ControlDisable),
         ("control.reload", ApiMethod::ControlReload),
+        ("control.refresh", ApiMethod::Refresh),
     ] {
         let payload = format!(
             r#"{{"api_version":"wloc.service/v1","request_id":"req-2","method":"{wire_method}","params":{{}}}}"#

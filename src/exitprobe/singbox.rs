@@ -102,6 +102,22 @@ pub fn device_bound_node_tag(uci_text: &str, device_ip: IpAddr) -> Option<String
     None
 }
 
+/// Resolve the outbound tag bound to `device_ip`: the UCI device-policy
+/// binding first (the user's source of truth - the running sing-box rules
+/// may lag a node switch), then the sing-box route rule.
+pub fn select_node_tag(
+    document: &Value,
+    uci_text: Option<&str>,
+    device_ip: IpAddr,
+) -> Option<String> {
+    if let Some(uci_text) = uci_text {
+        if let Some(tag) = device_bound_node_tag(uci_text, device_ip) {
+            return Some(tag);
+        }
+    }
+    select_outbound_tag(document, device_ip)
+}
+
 /// Extract the quoted value of a UCI `option`/`list` line, e.g.
 /// `option node 'cfg1146ab'` -> `cfg1146ab`.
 fn option_value(line: &str, keyword: &str) -> Option<String> {
@@ -256,25 +272,16 @@ impl SingBoxProbe {
         let document: Value = serde_json::from_str(&text).map_err(|_| ProbeFailure::InvalidData)?;
         let config = parse_singbox_config(&document);
 
-        // 1. The outbound the Gateway's route rules bind to the assigned
-        //    device (enabled policies).
-        let rule_tag = select_outbound_tag(&document, self.device_ip);
-        if let Some(tag) = rule_tag {
+        // 1. The node bound to the device policy in UCI - the source of
+        //    truth. The Gateway regenerates its sing-box route rules at its
+        //    own pace, so a fresh UCI binding must win over a stale rule.
+        let uci_text = std::fs::read_to_string(&self.uci_config_path).ok();
+        if let Some(tag) = select_node_tag(&document, uci_text.as_deref(), self.device_ip) {
             if config.outbounds.iter().any(|o| o.tag == tag) {
                 return Ok(tag);
             }
         }
-        // 2. The node bound to the device policy, even when the policy is
-        //    disabled and has no route rule - follow-device must report that
-        //    node's exit.
-        if let Ok(uci_text) = std::fs::read_to_string(&self.uci_config_path) {
-            if let Some(tag) = device_bound_node_tag(&uci_text, self.device_ip) {
-                if config.outbounds.iter().any(|o| o.tag == tag) {
-                    return Ok(tag);
-                }
-            }
-        }
-        // 3. Fall back to the first non-direct outbound.
+        // 2. Fall back to the first non-direct outbound.
         config
             .outbounds
             .iter()
@@ -384,18 +391,31 @@ impl ExitProbeRuntime for SingBoxProbe {
         Ok(addresses)
     }
 
-    /// FNV-1a over the Gateway config bytes: a different node binding (or a
-    /// regenerated rule set) changes the fingerprint, which triggers an
-    /// immediate re-probe even while cached evidence is still fresh.
+    /// FNV-1a over the Gateway sing-box config AND the device-policy UCI
+    /// text: a node switch can change either the running rule set or the
+    /// UCI binding, and both must trigger an immediate re-probe even while
+    /// cached evidence is still fresh.
     fn config_fingerprint(&mut self) -> Option<u64> {
-        let bytes = std::fs::read(&self.config_path).ok()?;
-        let mut hash = 0xcbf29ce484222325_u64;
-        for byte in &bytes {
-            hash ^= u64::from(*byte);
-            hash = hash.wrapping_mul(0x100000001b3);
+        let mut hash = fnv1a(&std::fs::read(&self.config_path).ok()?);
+        if let Ok(uci_bytes) = std::fs::read(&self.uci_config_path) {
+            hash = fnv1a_continue(hash, &uci_bytes);
         }
         Some(hash)
     }
+}
+
+/// FNV-1a over `bytes`.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    fnv1a_continue(0xcbf29ce484222325, bytes)
+}
+
+/// Continue an FNV-1a hash over `bytes`.
+fn fnv1a_continue(mut hash: u64, bytes: &[u8]) -> u64 {
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
 }
 
 #[allow(dead_code)]
@@ -551,6 +571,80 @@ config device
             device_bound_node_tag("", IpAddr::V4(Ipv4Addr::new(192, 168, 31, 176))),
             None
         );
+    }
+
+    #[test]
+    fn select_node_tag_prefers_uci_binding_over_route_rules() {
+        // The route rule binds the device to node-a, but the UCI policy
+        // binds it to node-cfg0b. The UCI binding is the user's source of
+        // truth and must win: the Gateway regenerates its sing-box rules
+        // at its own pace, so a stale rule must not override a fresh
+        // binding (regression for node-switch not being followed).
+        let doc = json!({
+            "outbounds": [
+                {"type": "vless", "tag": "node-a", "server": "1.2.3.4", "server_port": 443},
+                {"type": "vless", "tag": "node-cfg0b", "server": "5.6.7.8", "server_port": 443},
+                {"type": "direct", "tag": "direct"}
+            ],
+            "route": {"rules": [
+                {"source_ip_cidr": ["192.168.31.175/32"], "action": "route", "outbound": "node-a"}
+            ]}
+        });
+        let ip = IpAddr::V4(Ipv4Addr::new(192, 168, 31, 175));
+        let uci = "config device\n\toption label 'iPhone12'\n\toption node 'cfg0b'\n\tlist source_ip '192.168.31.175'\n";
+        assert_eq!(
+            select_node_tag(&doc, Some(uci), ip),
+            Some("node-cfg0b".to_owned())
+        );
+        // Without a UCI binding the route rule is used.
+        assert_eq!(select_node_tag(&doc, None, ip), Some("node-a".to_owned()));
+        // A UCI binding for a different device does not shadow the rule.
+        let other = "config device\n\toption label 'iPhone17'\n\toption node 'cfg0c'\n\tlist source_ip '192.168.31.176'\n";
+        assert_eq!(
+            select_node_tag(&doc, Some(other), ip),
+            Some("node-a".to_owned())
+        );
+    }
+
+    #[test]
+    fn config_fingerprint_changes_when_the_uci_binding_changes() {
+        // The fingerprint must cover the device-policy UCI text as well as
+        // the sing-box config: a node switch that only rewrites the binding
+        // (without regenerating the running rule set) still triggers an
+        // immediate re-probe.
+        let dir = std::env::temp_dir();
+        let config_path = dir.join("wloc-singbox-fp.json");
+        let uci_path = dir.join("wloc-singbox-fp.uci");
+        std::fs::write(&config_path, sample_document().to_string()).unwrap();
+        let mut probe = SingBoxProbe::new(
+            config_path.clone(),
+            IpAddr::V4(Ipv4Addr::new(192, 168, 31, 175)),
+            18_082,
+            dir.join("wloc-singbox-fp-work"),
+        );
+        probe.uci_config_path = uci_path.clone();
+
+        std::fs::write(
+            &uci_path,
+            "config device\n\toption node 'cfg0a46ab'\n\tlist source_ip '192.168.31.175'\n",
+        )
+        .unwrap();
+        let first = probe.config_fingerprint();
+        std::fs::write(
+            &uci_path,
+            "config device\n\toption node 'cfg1146ab'\n\tlist source_ip '192.168.31.175'\n",
+        )
+        .unwrap();
+        let second = probe.config_fingerprint();
+        assert!(first.is_some() && second.is_some());
+        assert_ne!(first, second);
+
+        // The sing-box config alone still produces a fingerprint when the
+        // UCI file is missing.
+        std::fs::remove_file(&uci_path).unwrap();
+        assert!(probe.config_fingerprint().is_some());
+        std::fs::remove_file(&config_path).unwrap();
+        let _ = std::fs::remove_dir_all(dir.join("wloc-singbox-fp-work"));
     }
 
     #[test]

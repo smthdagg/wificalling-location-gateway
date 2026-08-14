@@ -87,6 +87,11 @@ pub trait ServiceDispatch {
     /// status file so the monitor page stays fresh without API traffic.
     /// The default is a no-op so lightweight handlers are unaffected.
     fn refresh_periodic(&mut self) {}
+    /// Force an immediate exit/geo re-probe, discarding cached evidence.
+    /// The default is a no-op so handlers without a probe are unaffected.
+    fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
+        Ok(())
+    }
 }
 
 /// Route a decoded request to its handler and return an encoded response frame.
@@ -134,6 +139,10 @@ pub fn dispatch(
                 }
             }
             _ => encode_dispatch_error(request_id, DispatchError::InvalidLocation),
+        },
+        ApiMethod::Refresh => match service.refresh_evidence() {
+            Ok(()) => empty(),
+            Err(error) => encode_dispatch_error(request_id, error),
         },
     }
 }

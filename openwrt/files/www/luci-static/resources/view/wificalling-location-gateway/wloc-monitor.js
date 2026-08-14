@@ -6,12 +6,22 @@
 'require dom';
 'require ui';
 'require uci';
+'require rpc';
 
 // WLOC 监控与日志：当前生效定位信息（含 GPS）+ 定位替换事件日志。
 // 定位拦截设置见 "WLOC 设置" 页。
 
 var STATUS_FILE = '/var/run/wloc-service/status.json';
 var EVENTS_FILE = '/var/run/wloc-service/events.jsonl';
+
+// 手动刷新按钮的忙碌状态；轮询重渲染表格时据此保持按钮为“刷新中”。
+var refreshingIp = false;
+
+var callCtl = rpc.declare({
+	object: 'luci.wloc',
+	method: 'ctl',
+	params: [ 'method', 'query', 'lat', 'lon' ]
+});
 
 function fmtTime(unix) {
 	if (!unix) return '-';
@@ -59,6 +69,36 @@ return view.extend({
 
 		/* ---------- 当前定位 ---------- */
 		var geoBody = E('tbody', {}, []);
+		// 手动刷新 IP：通知守护进程丢弃缓存的出口探测结果并立即重新
+		// 探测（切换设备节点后无需等待周期巡检），完成后重读状态文件。
+		function refreshIpBtn() {
+			var label = refreshingIp ? wlocI18n.t('Refreshing…') : wlocI18n.t('Refresh IP');
+			return E('button', {
+				class: 'btn',
+				disabled: refreshingIp ? true : undefined,
+				title: wlocI18n.t('Re-probe the followed node exit IP now'),
+				click: function() {
+					if (refreshingIp) return;
+					refreshingIp = true;
+					renderGeo(status);
+					callCtl('refresh', null, null, null).then(function() {
+						// The daemon re-probes and rewrites status.json
+						// before replying; read it once so the rows update
+						// immediately instead of on the next poll tick.
+						return L.resolveDefault(fs.read(STATUS_FILE), '{}');
+					}).then(function(text) {
+						var fresh;
+						try { fresh = JSON.parse(text); } catch (e) { fresh = status; }
+						refreshingIp = false;
+						renderGeo(fresh);
+					}).catch(function(err) {
+						refreshingIp = false;
+						renderGeo(status);
+						ui.addNotification(null, E('p', {}, wlocI18n.t('IP refresh failed: ') + ' ' + (err.message || err)), 'error');
+					});
+				}
+			}, label);
+		}
 		function geoRows(s) {
 			var g = s.geo || {};
 			var deviceLabel = '-';
@@ -71,7 +111,7 @@ return view.extend({
 			}
 			return [
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Service phase')), E('td', { class: 'td' }, phaseLabel(s.service_phase))]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Follow device')), E('td', { class: 'td' }, deviceLabel)]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Follow device')), E('td', { class: 'td' }, deviceLabel), E('td', { class: 'td right' }, refreshIpBtn())]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Location mode')), E('td', { class: 'td' }, sourceLabel(s.geo_source))]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Country')), E('td', { class: 'td' }, g.country_code || '-')]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('City')), E('td', { class: 'td' }, g.city || '-')]),

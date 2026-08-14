@@ -13,6 +13,7 @@ struct RecordedDispatch {
     enable_result: Result<(), DispatchError>,
     disable_result: Result<(), DispatchError>,
     reload_result: Result<(), DispatchError>,
+    refresh_result: Result<(), DispatchError>,
     calls: Vec<&'static str>,
 }
 
@@ -23,6 +24,7 @@ impl RecordedDispatch {
             enable_result: Ok(()),
             disable_result: Ok(()),
             reload_result: Ok(()),
+            refresh_result: Ok(()),
             calls: Vec::new(),
         }
     }
@@ -57,6 +59,11 @@ impl ServiceDispatch for RecordedDispatch {
     fn search_location(&mut self, query: &str) -> Result<Value, DispatchError> {
         self.calls.push("geo.search");
         Ok(serde_json::json!({ "city": query, "latitude": 1.0, "longitude": 2.0 }))
+    }
+
+    fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
+        self.calls.push("refresh");
+        self.refresh_result
     }
 }
 
@@ -94,6 +101,7 @@ fn control_methods_route_to_their_handlers_with_an_empty_result() {
         ("control.enable", "enable"),
         ("control.disable", "disable"),
         ("control.reload", "reload"),
+        ("control.refresh", "refresh"),
     ] {
         let mut service = RecordedDispatch::ok_status();
         let response = dispatch(&decoded(method), &mut service).unwrap();

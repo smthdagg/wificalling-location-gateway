@@ -509,6 +509,77 @@ fn fresh_evidence_is_cached_and_stale_evidence_refreshes() {
 }
 
 #[test]
+fn control_refresh_forces_an_immediate_reprobe_of_fresh_evidence() {
+    // Regression: switching the followed device's node in the Gateway
+    // settings must be reflected in the exit IP without waiting for the
+    // periodic housekeeping tick. The manual refresh command discards
+    // cached evidence and probes again even though the first observation
+    // is still fresh; the status file the monitor reads shows the new IP.
+    use serde_json::json;
+    use wificalling_location_gateway::service::api::{decode_request, SERVICE_API_ID};
+    use wificalling_location_gateway::service::dispatch::dispatch;
+
+    let now = 1_000_000;
+    let dir = std::env::temp_dir();
+    let status_path = dir.join(format!("wloc-test-refresh-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&status_path);
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        SequenceProbe {
+            results: vec![Ok(EXIT_A), Ok(EXIT_B)],
+            index: 0,
+        },
+        SequenceGeo {
+            results: vec![
+                Ok(Some((EXIT_A, record(now, 37.77, -122.41)))),
+                Ok(Some((EXIT_B, record(now, 22.32, 114.17)))),
+            ],
+            index: 0,
+        },
+    )
+    .with_state_files(
+        status_path.clone(),
+        dir.join("wloc-test-refresh-events.jsonl"),
+    );
+
+    // First probe observes EXIT_A.
+    service.status_at(now).unwrap();
+    let first = read_status_json(&status_path);
+    assert_eq!(first["exit"]["ip"], json!(EXIT_A.to_string()));
+
+    // The monitor's refresh command re-probes immediately.
+    let refresh = decode_request(
+        &serde_json::to_vec(&json!({
+            "api_version": SERVICE_API_ID,
+            "request_id": "req-refresh",
+            "method": "control.refresh",
+            "params": {}
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let response = dispatch(&refresh, &mut service).unwrap();
+    let parsed: serde_json::Value = serde_json::from_slice(&response).unwrap();
+    assert_eq!(parsed["result"], json!({}));
+
+    // The status file now carries the new exit IP. (The forced probe runs
+    // against the real clock while the test records use a fake clock, so
+    // the geo record expires and geo is unavailable - the exit IP is the
+    // contract under test.)
+    let refreshed = read_status_json(&status_path);
+    assert_eq!(refreshed["exit"]["ip"], json!(EXIT_B.to_string()));
+
+    // The refreshed evidence is fresh: a follow-up status call does not
+    // probe a third time (the sequence probe would run out of results).
+    let again = service.status_at(now).unwrap();
+    assert_eq!(again["exit"]["state"], "verified");
+    let _ = std::fs::remove_file(&status_path);
+}
+
+#[test]
 fn enable_success_drives_state_to_intercepting() {
     let now = 1_000_000;
     let mut service = build(

@@ -111,9 +111,10 @@ pub struct WlocService<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRun
     /// worker thread (never the control path) writes the outcome here; the
     /// next status/refresh cycle applies it.
     manual_geo_pending: std::sync::Arc<std::sync::Mutex<Option<ManualGeoLookup>>>,
-    /// Fingerprint of the probe config (Gateway sing-box.json) at the last
-    /// successful probe. A change means the followed device's node was
-    /// switched; fresh evidence is then re-probed immediately.
+    /// Fingerprint of the probe configuration (Gateway sing-box.json plus
+    /// the device-policy UCI file) at the last successful probe. A change
+    /// means the followed device's node was switched; fresh evidence is
+    /// then re-probed immediately.
     last_probe_fingerprint: Option<u64>,
     /// Last probe failure reason (shown in the monitor when the exit IP is
     /// unknown); cleared on a successful probe.
@@ -466,6 +467,18 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
         Ok(())
     }
 
+    /// Force an immediate re-probe of the followed node, discarding cached
+    /// evidence. Used by the monitor's manual refresh: the probe runs
+    /// inline (bounded by the probe timeout), then the status file is
+    /// rewritten so the UI shows the new exit IP without waiting for the
+    /// periodic housekeeping tick.
+    pub fn force_evidence_refresh(&mut self) {
+        self.exit_evidence = ExitEvidence::None;
+        self.last_probe_fingerprint = None;
+        self.refresh_evidence_at(current_unix());
+        self.refresh_state_file();
+    }
+
     /// The generation of the current manual target (test hook).
     #[doc(hidden)]
     pub fn manual_geo_generation(&self) -> u64 {
@@ -635,6 +648,11 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
         self.consume_pending_manual_geo();
         self.refresh_evidence_at(current_unix());
         self.refresh_state_file();
+    }
+
+    fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
+        self.force_evidence_refresh();
+        Ok(())
     }
 }
 
