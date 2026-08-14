@@ -26,6 +26,7 @@ jobs:
 
       - name: Commit chart when the star timeline changed
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           BOT_NAME: github-actions[bot]
           BOT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
