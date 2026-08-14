@@ -292,9 +292,9 @@ docs/                        API、安全、部署、测试和双语用户教程
 
 ## Star 增长
 
-[![Star History Chart](https://api.star-history.com/svg?repos=smthdagg/wificalling-location-gateway&type=Date)](https://www.star-history.com/#smthdagg/wificalling-location-gateway&Date)
+[![Star History](https://raw.githubusercontent.com/smthdagg/wificalling-location-gateway/main/docs/images/star-history.svg)](https://github.com/smthdagg/wificalling-location-gateway/stargazers)
 
-> Star History 依赖公开的 GitHub 仓库数据；仓库保持 Private 时图表可能为空，公开后会自动读取并更新历史数据。
+> 图表由 `star-history-chart` 工作流每日自动更新（也可在 Actions 页面手动运行）：用 GitHub 自动注入的 token 读取官方 star 时间线并本地生成 SVG，token 不写入仓库任何文件，也不经过第三方服务。首次生成前的 star 历史（GitHub 未开放时间线访问的时期）不会出现在图中。
 
 如果这个项目对你的 OpenWrt / Wi‑Fi Calling 实验有帮助，欢迎 Star、提交可复现的问题报告，或在 [LINUX.DO](https://linux.do/) 社区交流使用经验。请勿在公开内容中发布个人位置、证书或代理凭据。
 

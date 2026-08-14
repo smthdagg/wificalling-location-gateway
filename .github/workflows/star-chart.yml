@@ -1,0 +1,40 @@
+name: star-history-chart
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: star-history-chart
+  cancel-in-progress: true
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Regenerate star history chart
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/star-history.py
+
+      - name: Commit chart when the star timeline changed
+        env:
+          BOT_NAME: github-actions[bot]
+          BOT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          if git diff --quiet -- docs/images/star-history.svg; then
+            echo "chart unchanged; nothing to commit"
+            exit 0
+          fi
+          git config user.name "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
+          git add docs/images/star-history.svg
+          git commit -m "chore: refresh star history chart"
+          git push

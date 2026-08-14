@@ -2,6 +2,15 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [Unreleased]
+
+### Added
+
+- `star-history-chart` workflow regenerates `docs/images/star-history.svg` daily
+  from the official GitHub stargazer API using the auto-injected Actions token
+  (no third-party service, no token in the repository); README embeds the
+  committed chart instead of the star-history.com embed.
+
 ## [1.0.1] - 2026-08-14
 
 ### Fixed
