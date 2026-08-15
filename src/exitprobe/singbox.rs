@@ -319,12 +319,21 @@ impl SingBoxProbe {
         // 1. The node bound to the device policy in UCI - the source of
         //    truth. The Gateway regenerates its sing-box route rules at its
         //    own pace, so a fresh UCI binding must win over a stale rule.
-        //    The node may be a regular outbound or a wireguard endpoint.
+        //    The node may be a regular outbound, or a wireguard endpoint
+        //    which the Gateway compiler names `wg-<section>` (sing-box
+        //    1.11+), while the UCI binding resolves to `node-<section>`.
         let uci_text = std::fs::read_to_string(&self.uci_config_path).ok();
         if let Some(tag) = select_node_tag(&document, uci_text.as_deref(), self.device_ip) {
-            if config.outbounds.iter().any(|o| o.tag == tag)
-                || config.endpoints.iter().any(|e| e.tag == tag)
-            {
+            if config.outbounds.iter().any(|o| o.tag == tag) {
+                return Ok(tag);
+            }
+            if let Some(section) = tag.strip_prefix("node-") {
+                let endpoint_tag = format!("wg-{section}");
+                if config.endpoints.iter().any(|e| e.tag == endpoint_tag) {
+                    return Ok(endpoint_tag);
+                }
+            }
+            if config.endpoints.iter().any(|e| e.tag == tag) {
                 return Ok(tag);
             }
         }
@@ -573,10 +582,11 @@ mod tests {
     #[test]
     fn uci_wireguard_binding_resolves_to_an_endpoint_tag() {
         // A device bound to a wireguard node has no matching outbound, but
-        // the endpoint must be selected for the follow-device probe.
+        // the endpoint (named `wg-<section>` by the Gateway compiler) must
+        // be selected for the follow-device probe.
         let doc = json!({
             "outbounds": [{"type": "direct", "tag": "direct"}],
-            "endpoints": [{"type": "wireguard", "tag": "node-wgtest", "address": ["10.0.0.1/24"]}]
+            "endpoints": [{"type": "wireguard", "tag": "wg-wgtest", "address": ["10.0.0.1/24"]}]
         });
         let dir = std::env::temp_dir();
         let config_path = dir.join("wloc-singbox-wg-endpoint.json");
@@ -597,7 +607,7 @@ mod tests {
         // Selection resolves to the wireguard endpoint tag; the sing-box
         // spawn then fails on this host, which maps to Unreachable - the
         // important assertion is that load_outbound_tag() does not give up.
-        assert_eq!(probe.load_outbound_tag(), Ok("node-wgtest".to_owned()));
+        assert_eq!(probe.load_outbound_tag(), Ok("wg-wgtest".to_owned()));
         std::fs::remove_file(&config_path).unwrap();
         std::fs::remove_file(&uci_path).unwrap();
         let _ = std::fs::remove_dir_all(dir.join("wloc-singbox-wg-endpoint-work"));
