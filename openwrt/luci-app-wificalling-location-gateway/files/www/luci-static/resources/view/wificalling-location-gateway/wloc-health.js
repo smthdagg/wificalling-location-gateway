@@ -14,18 +14,17 @@ var getHealth = rpc.declare({
 	method: 'health'
 });
 
-function yesNo(v) {
-	return v ? wlocI18n.t('Yes') : wlocI18n.t('No');
-}
-
-function stateBadge(ok, text) {
-	return E('span', { 'class': ok ? 'alert-message success' : 'alert-message error' }, text);
-}
-
-function ageText(seconds) {
-	if (seconds == null || seconds < 0) return '-';
-	if (seconds <= 120) return wlocI18n.t('Fresh');
-	return wlocI18n.t('Stale (%d s ago)').format(seconds);
+// Compact status: a small colored dot plus short text.
+function statusDot(ok, text) {
+	return E('span', { 'class': 'wloc-health-dot' }, [
+		E('span', {
+			'class': 'dot',
+			style: 'display:inline-block;width:8px;height:8px;border-radius:50%;' +
+				(ok ? 'background:#16a34a;' : 'background:#dc2626;') +
+				'margin-right:6px;vertical-align:middle'
+		}),
+		E('span', { style: 'vertical-align:middle' }, text)
+	]);
 }
 
 return view.extend({
@@ -37,16 +36,15 @@ return view.extend({
 		wlocI18n.localizeTabs();
 		var health = data || {};
 
-		/* ---------- 服务状态 ---------- */
 		var wlocBody = E('tbody', {}, []);
 		var gwBody = E('tbody', {}, []);
-		var patchBody = E('tbody', {}, []);
+		var extraBody = E('tbody', {}, []);
 		var logBody = E('tbody', {}, []);
 
 		function renderHealth(h) {
 			wlocBody.innerHTML = '';
 			gwBody.innerHTML = '';
-			patchBody.innerHTML = '';
+			extraBody.innerHTML = '';
 			logBody.innerHTML = '';
 
 			var s = h.services || {};
@@ -57,68 +55,62 @@ return view.extend({
 
 			function row(tbody, label, value) {
 				tbody.appendChild(E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td' }, label),
-					E('td', { 'class': 'td' }, value)
+					E('td', { 'class': 'td', style: 'white-space:nowrap;padding:2px 10px 2px 0;color:#666' }, label),
+					E('td', { 'class': 'td', style: 'padding:2px 0' }, value)
 				]));
-			}
-			function patchRow(tbody, label, ok) {
-				row(tbody, label, stateBadge(ok, ok ? wlocI18n.t('Installed') : wlocI18n.t('Missing')));
 			}
 
 			// wloc-service
-			row(wlocBody, wlocI18n.t('Daemon process'),
-				stateBadge(!!w.running, w.running ? wlocI18n.t('Running') : wlocI18n.t('Stopped')));
-			row(wlocBody, wlocI18n.t('Control socket'), yesNo(!!w.socket));
-			row(wlocBody, wlocI18n.t('Status file fresh'),
-				stateBadge(!!w.status_fresh, w.status_fresh ? wlocI18n.t('Fresh') : wlocI18n.t('Stale')));
-			row(wlocBody, wlocI18n.t('Service phase'), w.phase || '-');
-			row(wlocBody, wlocI18n.t('Exit probe'), w.exit || '-');
-			row(wlocBody, wlocI18n.t('Geo resolution'), w.geo || '-');
-			if (w.last_error && w.last_error !== 'null') {
-				row(wlocBody, wlocI18n.t('Last error'), E('span', { 'class': 'alert-message error' }, w.last_error));
-			}
+			row(wlocBody, wlocI18n.t('Daemon'), statusDot(!!w.running, w.running ? wlocI18n.t('Running') : wlocI18n.t('Stopped')));
+			row(wlocBody, wlocI18n.t('Socket'), yesNo(!!w.socket));
+			row(wlocBody, wlocI18n.t('Status file'), statusDot(!!w.status_fresh, w.status_fresh ? wlocI18n.t('Fresh') : wlocI18n.t('Stale')));
+			row(wlocBody, wlocI18n.t('Phase'), w.phase || '-');
+			row(wlocBody, wlocI18n.t('Exit probe'), statusDot(w.exit === 'verified', w.exit || '-'));
+			row(wlocBody, wlocI18n.t('Geo'), statusDot(w.geo === 'fresh', w.geo || '-'));
 
 			// gateway
-			row(gwBody, wlocI18n.t('Monitor loop'),
-				stateBadge(!!g.running, g.running ? wlocI18n.t('Running') : wlocI18n.t('Stopped')));
-			row(gwBody, wlocI18n.t('sing-box proxy'),
-				stateBadge(!!g.singbox, g.singbox ? wlocI18n.t('Running') : wlocI18n.t('Stopped')));
-			row(gwBody, wlocI18n.t('Proxy config'),
-				stateBadge(!!g.config_present, g.config_present ? wlocI18n.t('Present') : wlocI18n.t('Missing')));
-			row(gwBody, wlocI18n.t('Config valid'),
-				stateBadge(!!g.config_valid, g.config_valid ? wlocI18n.t('Valid') : wlocI18n.t('Invalid')));
+			row(gwBody, wlocI18n.t('Monitor'), statusDot(!!g.running, g.running ? wlocI18n.t('Running') : wlocI18n.t('Stopped')));
+			row(gwBody, wlocI18n.t('sing-box'), statusDot(!!g.singbox, g.singbox ? wlocI18n.t('Running') : wlocI18n.t('Stopped')));
+			row(gwBody, wlocI18n.t('Proxy config'), statusDot(!!g.config_valid, g.config_valid ? wlocI18n.t('Valid') : wlocI18n.t('Invalid')));
 			row(gwBody, wlocI18n.t('Config age'), ageText(g.config_age));
-			row(gwBody, wlocI18n.t('Normalized config fresh'),
-				stateBadge(!!g.normalized_fresh, g.normalized_fresh ? wlocI18n.t('Fresh') : wlocI18n.t('Stale')));
-			row(gwBody, wlocI18n.t('nftables rules'), String(g.nft_rules));
-			row(gwBody, wlocI18n.t('Device policies'), String(g.devices));
+			row(gwBody, wlocI18n.t('nftables'), g.nft_rules + ' ' + wlocI18n.t('rules'));
+			row(gwBody, wlocI18n.t('Devices'), g.devices + ' ' + wlocI18n.t('policies'));
 
-			// patches
-			patchRow(patchBody, wlocI18n.t('WireGuard pre-shared key'), !!patches.psk);
-			patchRow(patchBody, wlocI18n.t('WireGuard handshake check'), !!patches.handshake);
-			patchRow(patchBody, wlocI18n.t('Compact node status'), !!patches.compact);
-			patchRow(patchBody, wlocI18n.t('Stale device guard'), !!patches.device_guard);
+			// patches + node health on one compact line
+			function patchBadge(name, ok) {
+				return E('span', { 'class': 'wloc-health-dot', style: 'margin-right:12px' }, [
+					E('span', {
+						'class': 'dot',
+						style: 'display:inline-block;width:8px;height:8px;border-radius:50%;' +
+							(ok ? 'background:#16a34a;' : 'background:#dc2626;') +
+							'margin-right:4px;vertical-align:middle'
+					}),
+					E('span', { style: 'vertical-align:middle' }, name)
+				]);
+			}
+			row(extraBody, wlocI18n.t('Patches'), E('span', {}, [
+				patchBadge('PSK', !!patches.psk),
+				patchBadge('WG ' + wlocI18n.t('handshake'), !!patches.handshake),
+				patchBadge(wlocI18n.t('compact'), !!patches.compact),
+				patchBadge(wlocI18n.t('guard'), !!patches.device_guard)
+			]));
+			row(extraBody, wlocI18n.t('Nodes'), E('span', {}, [
+				statusDot(true, nodes.ok + '/' + nodes.total + ' ' + wlocI18n.t('online')),
+				' ',
+				nodes.down ? E('span', { style: 'color:#dc2626;margin-left:10px' }, nodes.down + ' ' + wlocI18n.t('offline')) : E([])
+			]));
 
-			// nodes
-			row(patchBody, wlocI18n.t('Nodes total'), String(nodes.total));
-			row(patchBody, wlocI18n.t('Nodes online'),
-				E('span', { 'class': 'alert-message success' }, String(nodes.ok)));
-			row(patchBody, wlocI18n.t('Nodes offline'),
-				E('span', { 'class': 'alert-message ' + (nodes.down ? 'error' : 'success') }, String(nodes.down)));
-			row(patchBody, wlocI18n.t('Nodes unknown'), String(nodes.unknown));
-
-			// log
+			// log lines
 			(h.log || []).forEach(function(line) {
 				logBody.appendChild(E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td' }, E('code', {}, line))
+					E('td', { 'class': 'td' }, E('code', { style: 'font-size:11px;color:#555;word-break:break-all' }, line))
 				]));
 			});
 			if (!(h.log || []).length) {
 				row(logBody, wlocI18n.t('Recent logs'), wlocI18n.t('No log lines yet'));
 			}
-
 			if (h.error) {
-				row(wlocBody, wlocI18n.t('Health check'), E('span', { 'class': 'alert-message error' }, h.error));
+				row(wlocBody, wlocI18n.t('Health check'), E('span', { style: 'color:#dc2626' }, h.error));
 			}
 		}
 
@@ -130,18 +122,33 @@ return view.extend({
 			});
 		}, 10);
 
-		function section(title, tbody) {
-			return E('div', { 'class': 'cbi-section' }, [
-				E('h3', {}, title),
-				E('table', { 'class': 'cbi-section-table' }, tbody)
-			]);
-		}
-
 		return E([], [
-			section(wlocI18n.t('WLOC service'), wlocBody),
-			section(wlocI18n.t('Wi-Fi Calling Gateway'), gwBody),
-			section(wlocI18n.t('Patches and node health'), patchBody),
-			section(wlocI18n.t('Recent logs'), logBody)
+			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
+				E('h3', { style: 'margin-top:0' }, wlocI18n.t('WLOC service')),
+				E('table', { 'class': 'cbi-section-table', style: 'width:100%' }, wlocBody)
+			]),
+			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
+				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Gateway')),
+				E('table', { 'class': 'cbi-section-table', style: 'width:100%' }, gwBody)
+			]),
+			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
+				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Patches and nodes')),
+				E('table', { 'class': 'cbi-section-table', style: 'width:100%' }, extraBody)
+			]),
+			E('div', { 'class': 'cbi-section' }, [
+				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Recent logs')),
+				E('table', { 'class': 'cbi-section-table', style: 'width:100%' }, logBody)
+			])
 		]);
 	}
 });
+
+function yesNo(v) {
+	return v ? '✓' : '✗';
+}
+
+function ageText(seconds) {
+	if (seconds == null || seconds < 0) return '-';
+	if (seconds <= 120) return wlocI18n.t('Fresh');
+	return wlocI18n.t('Stale (%d s)').format(seconds);
+}
