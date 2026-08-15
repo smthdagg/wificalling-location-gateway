@@ -51,7 +51,7 @@ Under **Device policies**:
 2. Enter a recognizable device name.
 3. Select **Independent tunnel**. **Follow gateway** does not use the plugin node.
 4. Select the node saved in the previous step.
-5. Enter the iPhone's current LAN IPv4 address.
+5. Enter the iPhone's current LAN IPv4 address. Alternatively use the **From connected devices** dropdown below: the plugin lists the LAN devices it detected (from the DHCP leases and the ARP cache, showing the real name and IP, excluding already-bound IPs and the router itself), and picking one fills in the device name and the IP automatically.
 6. Select **Save & Apply** again.
 
 ![Proxy nodes and device policies](images/wificalling-wloc/02-device-policies.png)
@@ -127,7 +127,7 @@ Open **WLOC Settings** and scroll to **Certificate (Safari install)**.
 ![Saved locations and certificate section](images/wificalling-wloc/07-wloc-saved-certificate.png)
 
 1. Review the CA fingerprint, issue time, expiry time, and certificate status.
-2. Select the displayed **Profile link**. The default is normally `http://192.168.31.1/wloc-ca.mobileconfig`; always use the address shown on the page.
+2. Select the displayed **Profile link**. The link is generated from the router's actual LAN IP (e.g. `http://192.168.31.1/wloc-ca.mobileconfig` for a 192.168.31.1 gateway, `http://192.168.1.1/wloc-ca.mobileconfig` for 192.168.1.1), so no manual editing is needed on any subnet.
 3. **Regenerate profile** only re-exports the configuration profile.
 4. Do not select **Generate new CA** unless intentional. A new CA invalidates previously installed profiles, and every test device must install and trust the new CA.
 
@@ -218,7 +218,8 @@ Open **WLOC Monitor & Log**.
 Check that:
 
 - `Service phase` is `intercepting`.
-- `Follow device` is the test iPhone.
+- `Follow device` is the test iPhone. The **Refresh IP** button next to it re-probes the followed node's exit IP immediately.
+- After you switch a device's node in the Wi‑Fi Calling settings, the monitor exit IP follows the new node automatically within about 10 seconds; click **Refresh IP** to make it immediate.
 - `Location mode` matches Auto or Manual.
 - Country, city, timezone, and coordinates match the target.
 - `Geo state` is `fresh`.
@@ -236,7 +237,7 @@ Confirm that the profile is installed, `wloc-service root CA` has full trust, in
 
 ### Auto location does not match the node
 
-Confirm that the Part One device policy is bound to the intended node, global proxies such as Passwall bypass the test device, no device VPN is running, and `Geo state` has refreshed to `fresh`.
+Confirm that the Part One device policy is bound to the intended node, global proxies such as Passwall bypass the test device, and no device VPN is running. After a node switch the monitor exit IP follows within about 10 seconds, or click **Refresh IP** for an immediate re-probe; wait for `Geo state` to become `fresh`.
 
 ### Certificate verification fails
 

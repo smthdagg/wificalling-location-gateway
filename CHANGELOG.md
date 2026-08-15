@@ -56,7 +56,7 @@ manual refresh for the WLOC monitor.
   a tappable link instead of static text. The packaged export script and the
   daemon's upstream-IP filter use the runtime LAN address as well.
 - **The shipped default config no longer pins an example device IP.** A fresh
-  install no longer ships `assigned_device 192.168.31.176`; when no follow
+  install no longer ships `assigned_device 192.168.31.X`; when no follow
   device is chosen in LuCI, the daemon follows the first device policy of the
   Gateway config, so WLOC works out of the box on any subnet.
 - The packaged UI no longer lags the repository copy: probe failure reasons

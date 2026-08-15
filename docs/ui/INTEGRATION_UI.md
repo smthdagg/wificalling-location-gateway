@@ -53,8 +53,9 @@ ucode（以 root 运行）调用，权限由 LuCI ACL 控制。
 
 ### 3.1 证书获取（Safari）
 - 页面"证书"卡片显示：证书指纹（SHA-256）、有效期、当前是否已签发。
-- 按钮"获取证书"：展示 `http://192.168.31.1/wloc-ca.mobileconfig`（已有
-  `export-mobileconfig.sh` 生成的描述文件），并可一键重新生成描述文件
+- 按钮"获取证书"：展示描述文件链接（地址按路由器实际 LAN IP 动态生成，
+  如 `http://192.168.31.1/wloc-ca.mobileconfig`，网关为 192.168.1.1 时自动
+  变为 `http://192.168.1.1/wloc-ca.mobileconfig`），并可一键重新生成描述文件
   （调用 `wloc-ctl cert-export` 或在 LuCI 后端执行 `export-mobileconfig.sh`）。
 - 提示步骤：Safari 打开链接 → 安装描述文件 → 证书信任设置开启完全信任。
 

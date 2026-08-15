@@ -36,9 +36,11 @@ Wi‑Fi Calling Location Gateway 将两个原本分离的流程组织在同一�
 ## 主要能力
 
 - Rust 静态守护进程，针对 OpenWrt 的 musl 环境和小体积发布配置优化。
-- 自动跟随设备所绑定代理节点的出口国家、城市、时区和坐标。
+- 自动跟随设备所绑定代理节点的出口国家、城市、时区和坐标；切换设备节点后约 10 秒内自动跟随，监控页也可一键“刷新 IP”立即重探测。
 - 手动地点搜索、经纬度输入和常用位置预设。
+- 证书与拦截全程适配任意局域网网段：证书链接、DNS 劫持和 TPROXY 规则按路由器实际 LAN IP 动态生成，不再写死 192.168.31.x。
 - 本地生成并持久化 WLOC 根证书，提供 iPhone `.mobileconfig` 安装入口与指纹核验。
+- “添加局域网设备”弹窗自动列出局域网内已连接设备（DHCP 租约 + ARP），选择后自动填入设备名称与真实 IP。
 - 有界 TLS、HTTP/2 和 WLOC 协议处理；上游证书与主机名验证不降级。
 - 精确到“指定设备 + 授权主机 + TCP 443”的 DNS/nftables 隔离。
 - root-only Unix Socket 控制 API，以及经 rpcd 授权的 LuCI 管理桥接。
@@ -126,7 +128,7 @@ Redmi AX6S 使用单一的架构专用集成包：
 
 ```sh
 # 导入源签名公钥（一次性）
-wget -O /etc/opkg/keys/ddf1cd5d87a4b793 \
+wget -O /etc/opkg/keys/7645a0b4ea720026 \
   https://raw.githubusercontent.com/smthdagg/wificalling-location-gateway-feed/main/wloc.pub
 # 添加源并安装
 echo "src/gz wloc https://smthdagg.github.io/wificalling-location-gateway-feed" \
@@ -153,13 +155,13 @@ opkg install /tmp/wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.0.0-r1_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.0.2-r1_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.0-r1.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.2-r1.apk
 ```
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。
