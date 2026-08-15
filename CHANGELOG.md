@@ -2,6 +2,32 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.0.9] - 2026-08-16
+
+### Added
+
+- **Dedicated "Service Status" page** (Services > Service Status): a single
+  place to see whether both services are healthy, refreshed every 10 s:
+  - WLOC service: daemon process, control socket, status-file freshness,
+    service phase, exit probe and geo resolution state, last error.
+  - Wi-Fi Calling Gateway: monitor loop and sing-box processes, proxy
+    config presence/validity/age, normalized config freshness, nftables
+    rule count, device policies.
+  - Build patches (WireGuard PSK / handshake check / compact node status /
+    stale device guard) and node health (total/online/offline/unknown).
+  - Tail of the wloc-service, gateway and sing-box logs.
+  Backed by `/usr/sbin/wloc-health.sh`, exposed through the `luci.wloc`
+  rpcd `health` method.
+
+### 中文说明
+
+- **新增**：「服务状态」专门页面（服务 > 服务状态）：集中查看两个服务是否正常，每 10 秒自动刷新：
+  - WLOC 服务：守护进程、控制套接字、状态文件新鲜度、服务阶段、出口探测与定位解析状态、最后错误。
+  - Wi-Fi 通话网关：监控循环与 sing-box 进程、代理配置是否存在/有效/生成时间、节点清单新鲜度、nftables 规则数、设备策略数。
+  - 构建补丁（WireGuard 预共享密钥 / 握手检查 / 节点状态精简 / 设备引用守卫）与节点健康（总数/在线/离线/未知）。
+  - wloc-service、网关与 sing-box 的最近日志。
+  数据由 `/usr/sbin/wloc-health.sh` 生成，经 `luci.wloc` rpcd 的 `health` 方法提供给页面。
+
 ## [1.0.8] - 2026-08-15
 
 ### Fixed
