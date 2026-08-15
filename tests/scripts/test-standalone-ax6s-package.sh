@@ -40,6 +40,14 @@ cat > "$tmp/gateway/data/usr/libexec/wificalling-gateway/compiler.sh" <<'COMPILE
       s=s ",\"peers\":[{\"address\":" q(f[4]) ",\"port\":" f[5] ",\"public_key\":" q(f[13]) ",\"allowed_ips\":[\"0.0.0.0/0\"]"
       s=s ",\"private_key\":" q(f[21]) ",\"peer_public_key\":" q(f[13]) ",\"local_address\":[" q(f[22]) "]"
 COMPILER
+cat > "$tmp/gateway/data/usr/libexec/wificalling-gateway/node-health.sh" <<'HEALTH'
+#!/bin/sh
+json_escape() {
+	printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+		[ "$first" -eq 1 ] || printf ','
+HEALTH
+chmod 0755 "$tmp/gateway/data/usr/libexec/wificalling-gateway/node-health.sh"
 cat >> "$tmp/gateway/data/etc/init.d/wificalling-gateway" <<'INITD'
 	config_get private_key "$s" private_key; config_get local_address "$s" local_address; config_get reserved "$s" reserved; config_get mtu "$s" mtu
 	printf 'node|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$s" "$protocol" "$server" "$port" "$credential" "$sni" "$insecure" "$alpn" "$auxiliary" "$congestion" "$udp_mode" "$public_key" "$short_id" "$fingerprint" "$security" "$transport" "$path" "$host" "$pin_sha256" "$private_key" "$local_address" "$reserved" "$mtu" >> "$RUNDIR/normalized.conf"
@@ -129,6 +137,11 @@ grep -F 'if (f[25]!="") s=s ",\"pre_shared_key\":" q(f[25])' \
 grep -F 'config_get pre_shared_key "$s" pre_shared_key' \
 	"$tmp/result/data/etc/init.d/wificalling-gateway" >/dev/null ||
 	fail 'standalone package must patch init.d with the pre_shared_key field'
+grep -F 'wg_handshake_test' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
+	fail 'standalone package must patch node-health.sh with the wireguard handshake test'
+[ "$(grep -c 'wg_handshake_test' "$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh")" -ge 2 ] ||
+	fail 'standalone package handshake patch must define and call wg_handshake_test'
 
 if GATEWAY_IPK="$tmp/gateway.ipk" GATEWAY_IPK_SHA256=deadbeef \
 	WLOC_SERVICE_BIN="$tmp/wloc-service" WLOC_CTL_BIN="$tmp/wloc-ctl" \

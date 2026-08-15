@@ -30,6 +30,8 @@ return view.extend({
 		}
 		function quality(n) {
 			if (!n) return '-';
+			if (n.state === 'handshake_ok') return wlocI18n.t('Good');
+			if (n.state === 'handshake_failed') return wlocI18n.t('Offline');
 			if (n.state === 'unreachable') return wlocI18n.t('Offline');
 			if (n.ping_ms == null) return wlocI18n.t('Unknown');
 			if (n.ping_ms <= 100) return wlocI18n.t('Excellent');
@@ -39,11 +41,19 @@ return view.extend({
 		}
 		function nodeState(n) {
 			if (!n) return '-';
+			if (n.state === 'handshake_ok') return wlocI18n.t('Handshake OK');
+			if (n.state === 'handshake_failed') return wlocI18n.t('Handshake failed');
 			if (n.state === 'reachable' || n.state === 'tcp_reachable') return wlocI18n.t('Alive');
 			if (n.state === 'unreachable') return wlocI18n.t('Offline');
 			return wlocI18n.t('Unknown');
 		}
-		function latency(n) { return n && n.ping_ms != null ? n.ping_ms + ' ms (' + n.measurement + ')' : '-'; }
+		function latency(n) {
+			if (!n) return '-';
+			// WireGuard handshake rows carry the verified exit IP instead
+			// of an ICMP latency.
+			if (n.measurement === 'wg_handshake') return n.ping_ms || '-';
+			return n.ping_ms != null ? n.ping_ms + ' ms (' + n.measurement + ')' : '-';
+		}
 		// Live DHCP lease map (IP -> MAC) and plugin-managed static bindings
 		// (wfc_ host sections) for the device policy status column.  dnsmasq
 		// lease lines are: expiry MAC IP hostname clientid.

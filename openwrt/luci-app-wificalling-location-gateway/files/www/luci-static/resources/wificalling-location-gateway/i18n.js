@@ -112,6 +112,8 @@ var ZH = {
 	'Add LAN device': '添加局域网设备',
 	'Add proxy node': '添加代理节点',
 	'Alive': '在线',
+	'Handshake OK': '在线（握手成功）',
+	'Handshake failed': '握手失败',
 	'Allow insecure certificate': '允许不安全证书',
 	'Bound': '已绑定',
 	'Configure proxy nodes and assign fixed LAN devices. Monitoring and logs are available from the submenu.': '配置代理节点并为局域网设备分配策略。监控与日志见子菜单。',
