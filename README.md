@@ -131,7 +131,7 @@ Two ways to install:
 
 ```sh
 # Import the feed signing key (one-time)
-wget -O /etc/opkg/keys/7645a0b4ea720026 \
+wget -O /etc/opkg/keys/e17282037d8f4768 \
   https://raw.githubusercontent.com/smthdagg/wificalling-location-gateway-feed/main/wloc.pub
 # Add the feed and install
 echo "src/gz wloc https://smthdagg.github.io/wificalling-location-gateway-feed" \
@@ -418,7 +418,7 @@ Redmi AX6S 使用单一的架构专用集成包：
 
 ```sh
 # 导入源签名公钥（一次性）
-wget -O /etc/opkg/keys/7645a0b4ea720026 \
+wget -O /etc/opkg/keys/e17282037d8f4768 \
   https://raw.githubusercontent.com/smthdagg/wificalling-location-gateway-feed/main/wloc.pub
 # 添加源并安装
 echo "src/gz wloc https://smthdagg.github.io/wificalling-location-gateway-feed" \
