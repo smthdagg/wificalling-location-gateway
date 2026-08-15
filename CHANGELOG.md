@@ -2,6 +2,22 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.0.10] - 2026-08-16
+
+### Changed
+
+- **Service Status page polished**: the menu entry moved to the end of the
+  submenu (right before Help), the bulky status badges were replaced with
+  compact colored dots, label/value rows are tight (no stretched columns),
+  and the redundant log tail was removed - the per-service monitor pages
+  already show logs.
+- README features and the in-app FAQ document the Service Status page
+  (both English and Chinese).
+
+### 中文说明
+
+- **改进**：服务状态页面打磨——菜单入口移到子菜单末尾（紧挨帮助之前）；大块状态徽章改为紧凑彩色圆点；标签与状态值紧凑排列（不再被拉宽）；删除了重复的最近日志区块（各监控页已有日志）。README 功能列表与页面内 FAQ 已补充服务状态页说明（中英双语）。
+
 ## [1.0.9] - 2026-08-16
 
 ### Added

@@ -49,6 +49,12 @@ The core boundary of the project is "**independent, precise, and revertible**": 
 - DNS/nftables isolation scoped to "designated device + authorized hosts + TCP 443".
 - Root-only Unix socket control API with an rpcd-authorized LuCI bridge.
 - Wi‑Fi Calling tunnel status, WLOC current target, and sanitized event log.
+- WireGuard nodes are fully supported: pre-shared keys, standard
+  `[Interface]`/`[Peer]` config import, real-handshake health checks, and
+  WLOC follow-device exit probing through sing-box endpoints.
+- A dedicated **Service Status** page (Services > Service Status) reports
+  both services at a glance - daemon processes, config validity, nftables
+  rules, build patches, and node health - refreshed every 10 seconds.
 - IPK (OpenWrt 24.10 / iStoreOS 24.10) and native APK v3 (OpenWrt 25.12) packaging.
 - Pinned SDK/toolchain digests, offline locked builds, dependency audit, coverage gate, and Docker boot verification.
 
@@ -158,13 +164,13 @@ Do not run `opkg remove` first; installing directly restores missing components 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.0.9-r1_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.0.10-r1_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12 (native APK v3)
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.9-r1.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.10-r1.apk
 ```
 
 `--allow-untrusted` applies only to locally built packages that are not yet signed in a repository. Formal releases use repository signing; never rename an IPK into an APK.
@@ -445,13 +451,13 @@ opkg install /tmp/wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.0.9-r1_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.0.10-r1_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.9-r1.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.10-r1.apk
 ```
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。

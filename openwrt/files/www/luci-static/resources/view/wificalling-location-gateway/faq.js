@@ -48,7 +48,8 @@ var CONTENT = {
 			'自动模式跟随节点出口 IP 的地理位置；手动模式的 GPS 只保存在路由器本地，不会外传。',
 			'定位请求由 iPhone 的应用（地图、天气等）触发；若地图未刷新，请重新触发定位或稍等片刻。',
 			'WLOC 使用日志最多显示最近 20 条，可一键清空；日志仅记录替换元数据，不记录原始 WLOC 响应内容。',
-			'配置（开关、模式、手动坐标、预设）保存在 /etc/config/wloc-service，重启后仍然生效。'
+			'配置（开关、模式、手动坐标、预设）保存在 /etc/config/wloc-service，重启后仍然生效。',
+			'「服务状态」页（服务 → 服务状态）集中显示 wloc-service 与 Wi-Fi 通话网关的进程、配置、规则、补丁与节点健康，每 10 秒自动刷新；异常项以红点标出。'
 		]
 	},
 	en: {
@@ -88,7 +89,8 @@ var CONTENT = {
 			'Auto mode follows the location of the node exit IP; manual GPS stays local to the router and is never sent out.',
 			'Location requests are triggered by iPhone apps (Maps, Weather, etc.). If maps do not refresh, re-trigger location and wait a moment.',
 			'The WLOC usage log keeps the newest 20 entries and can be cleared with one click; it only records replacement metadata, never raw WLOC responses.',
-			'Settings (switch, mode, manual coordinates, presets) are stored in /etc/config/wloc-service and survive reboots.'
+			'Settings (switch, mode, manual coordinates, presets) are stored in /etc/config/wloc-service and survive reboots.',
+			'"Service Status" (Services > Service Status) shows both services in one place: daemon processes, config validity, nftables rules, build patches and node health, refreshed every 10 seconds; anything unhealthy is marked with a red dot.'
 		]
 	}
 };
