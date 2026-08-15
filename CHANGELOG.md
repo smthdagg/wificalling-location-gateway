@@ -2,7 +2,7 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
-## [Unreleased]
+## [1.0.3] - 2026-08-15
 
 ### Added
 
@@ -15,10 +15,20 @@ All notable changes are documented here. Versions follow Semantic Versioning.
   a `pre_shared_key` UCI option is emitted into the sing-box wireguard peer
   block (endpoint and legacy styles), and the LuCI node editor gained a
   "WireGuard preshared key" field. Nodes that require a PSK now complete the
-  handshake (verified against a live node: handshake in ~1s, exit in the UK).
+  handshake (verified against live nodes: handshake in ~1s, exits in the UK).
+- **Standard WireGuard config import**: the "Import proxy node" dialog now
+  accepts a full `[Interface]`/`[Peer]` config block in addition to `wg://`
+  share links, mapping PrivateKey, Address, MTU, Reserved, peer PublicKey,
+  PresharedKey, and Endpoint onto the node fields with clear validation.
 - The README now leads with the English introduction followed by the Chinese
-  version; the 1.0.2 changelog entry and release notes are bilingual
-  (English first, Chinese after).
+  version; the release notes are bilingual (English first, Chinese after).
+
+### 中文说明
+
+- **新增**：`star-history-chart` 工作流每日用 GitHub 自动注入的 token 重新生成 `docs/images/star-history.svg`（不经过第三方服务，token 不写入仓库）；README 嵌入该图表。
+- **新增**：集成网关支持 WireGuard 预共享密钥——构建流程自动给合并的网关载荷打补丁（`compiler.sh` + `init.d`），`pre_shared_key` UCI 选项会写入 sing-box 的 wireguard peer（endpoint 与 legacy 两种格式），LuCI 节点编辑器新增「WireGuard 预共享密钥」字段；需要 PSK 的节点现在可以完成握手（已用真实节点验证：握手约 1 秒，出口在英国）。
+- **新增**：「导入代理节点」支持标准 WireGuard 配置——除了 `wg://` 分享链接，现在可以直接粘贴整段 `[Interface]`/`[Peer]` 配置块，自动提取 PrivateKey、Address、MTU、Reserved、对端 PublicKey、PresharedKey 和 Endpoint，缺字段给出明确报错。
+- **新增**：README 改为英文介绍在前、中文版本在后；发布说明双语（英文在前、中文在后）。
 
 ## [1.0.2] - 2026-08-15
 
@@ -119,6 +129,7 @@ manual refresh for the WLOC monitor.
 - WLOC interception remains isolated from UDP 500/4500 and the Gateway table.
 - Invalid Geo/protocol/TLS state never produces a default fake coordinate.
 
+[1.0.3]: https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.0.3
 [1.0.2]: https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.0.2
 [1.0.1]: https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.0.1
 [1.0.0]: https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.0.0
