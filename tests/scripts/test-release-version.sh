@@ -14,6 +14,8 @@ fail() {
 [ "$(cat "$repo_root/VERSION")" = 1.0.10 ] || fail 'canonical version must be 1.0.10'
 grep -Eq '^version = "1\.0\.10"$' "$repo_root/Cargo.toml" ||
 	fail 'Cargo package version must be 1.0.10'
+grep -F 'webpki-roots = "=1.0.9"' "$repo_root/Cargo.toml" >/dev/null ||
+	fail 'version bumps must not rewrite pinned dependency versions'
 grep -Fx 'PKG_VERSION:=1.0.10' "$repo_root/openwrt/Makefile" >/dev/null ||
 	fail 'OpenWrt runtime version must be 1.0.10'
 grep -Fx 'PKG_RELEASE:=1' "$repo_root/openwrt/Makefile" >/dev/null ||
