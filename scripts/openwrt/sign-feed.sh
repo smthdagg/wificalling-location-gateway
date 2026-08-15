@@ -23,7 +23,7 @@ feed_dir=${1:?usage: sign-feed.sh <feed-directory>}
 [ -d "$feed_dir" ] || { echo "sign-feed: not a directory: $feed_dir" >&2; exit 2; }
 [ -f "$feed_dir/Packages" ] || { echo "sign-feed: missing $feed_dir/Packages" >&2; exit 2; }
 [ -f "$feed_dir/Packages.gz" ] || { echo "sign-feed: missing $feed_dir/Packages.gz" >&2; exit 2; }
-[ -f "$SIGNING_KEY" ] || { echo "sign-feed: missing signing key $SECRET" >&2; exit 2; }
+[ -f "$SIGNING_KEY" ] || { echo "sign-feed: missing signing key $SIGNING_KEY" >&2; exit 2; }
 [ -f "$PUBLIC" ] || { echo "sign-feed: missing public key $PUBLIC" >&2; exit 2; }
 
 case "$feed_dir" in
