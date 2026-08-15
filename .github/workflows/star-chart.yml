@@ -19,6 +19,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Switch to the chart branch BEFORE generating: the chart branch's
+      # star-history.svg differs from main's, so switching after writing
+      # the file aborts with "local changes would be overwritten" (the
+      # nightly run failed for days because of this).
+      - name: Switch to the chart branch
+        run: |
+          git fetch origin star-chart 2>/dev/null || true
+          if git rev-parse --verify -q origin/star-chart >/dev/null; then
+            git checkout -B star-chart origin/star-chart
+          else
+            git checkout -b star-chart
+          fi
+
       - name: Regenerate star history chart
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -30,21 +43,12 @@ jobs:
           BOT_NAME: github-actions[bot]
           BOT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          if git diff --quiet -- docs/images/star-history.svg; then
-            echo "chart unchanged; nothing to commit"
-            exit 0
-          fi
-          # main is branch-protected (PRs required), so publish the chart
-          # on the dedicated star-chart branch instead.
-          git fetch origin star-chart 2>/dev/null || true
-          if git rev-parse --verify -q origin/star-chart >/dev/null; then
-            git checkout -B star-chart origin/star-chart
-          else
-            git checkout -b star-chart
-          fi
-          python3 scripts/star-history.py
           git config user.name "$BOT_NAME"
           git config user.email "$BOT_EMAIL"
           git add docs/images/star-history.svg
+          if git diff --cached --quiet; then
+            echo "chart unchanged; nothing to commit"
+            exit 0
+          fi
           git commit -m "chore: refresh star history chart"
           git push origin star-chart
