@@ -31,7 +31,20 @@ printf '%s\n' '#!/bin/sh' > "$tmp/gateway/data/etc/init.d/wificalling-gateway"
 printf '%s\n' "'use strict';" > "$tmp/gateway/data/www/luci-static/resources/view/wificalling-gateway/overview.js"
 printf '%s\n' '{"admin/services/wificalling-gateway":{"title":"Wi-Fi Calling Gateway"}}' > \
 	"$tmp/gateway/data/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"
-chmod 0755 "$tmp/gateway/data/etc/init.d/wificalling-gateway"
+# The Gateway payload must include the wireguard compiler targets the
+# pre_shared_key patch rewrites; the standalone builder applies the patch
+# to the merged payload (fail-closed).
+mkdir -p "$tmp/gateway/data/usr/libexec/wificalling-gateway"
+cat > "$tmp/gateway/data/usr/libexec/wificalling-gateway/compiler.sh" <<'COMPILER'
+#!/bin/sh
+      s=s ",\"peers\":[{\"address\":" q(f[4]) ",\"port\":" f[5] ",\"public_key\":" q(f[13]) ",\"allowed_ips\":[\"0.0.0.0/0\"]"
+      s=s ",\"private_key\":" q(f[21]) ",\"peer_public_key\":" q(f[13]) ",\"local_address\":[" q(f[22]) "]"
+COMPILER
+cat >> "$tmp/gateway/data/etc/init.d/wificalling-gateway" <<'INITD'
+	config_get private_key "$s" private_key; config_get local_address "$s" local_address; config_get reserved "$s" reserved; config_get mtu "$s" mtu
+	printf 'node|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$s" "$protocol" "$server" "$port" "$credential" "$sni" "$insecure" "$alpn" "$auxiliary" "$congestion" "$udp_mode" "$public_key" "$short_id" "$fingerprint" "$security" "$transport" "$path" "$host" "$pin_sha256" "$private_key" "$local_address" "$reserved" "$mtu" >> "$RUNDIR/normalized.conf"
+INITD
+chmod 0755 "$tmp/gateway/data/etc/init.d/wificalling-gateway" "$tmp/gateway/data/usr/libexec/wificalling-gateway/compiler.sh"
 printf '2.0\n' > "$tmp/gateway/debian-binary"
 (cd "$tmp/gateway/control" && tar -czf "$tmp/gateway/control.tar.gz" .)
 (cd "$tmp/gateway/data" && tar -czf "$tmp/gateway/data.tar.gz" .)
@@ -104,6 +117,18 @@ done
 if printf '%s\n' "$data_members" | grep -Fx './usr/share/luci/menu.d/luci-app-wificalling-gateway.json' >/dev/null; then
 	fail 'integrated package must not expose the standalone Gateway LuCI menu'
 fi
+# The wireguard pre_shared_key patch must have been applied to the merged
+# Gateway payload (compiler.sh endpoint + legacy branches, init.d field).
+mkdir -p "$tmp/result/data"
+tar -xzf "$tmp/result/data.tar.gz" -C "$tmp/result/data"
+grep -F 'if (f[25]!="") s=s ",\"pre_shared_key\":" q(f[25])' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/compiler.sh" >/dev/null 2>&1 ||
+	fail 'standalone package must patch compiler.sh with pre_shared_key support'
+[ "$(grep -c 'pre_shared_key' "$tmp/result/data/usr/libexec/wificalling-gateway/compiler.sh")" -eq 2 ] ||
+	fail 'standalone package must patch both wireguard compiler styles'
+grep -F 'config_get pre_shared_key "$s" pre_shared_key' \
+	"$tmp/result/data/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'standalone package must patch init.d with the pre_shared_key field'
 
 if GATEWAY_IPK="$tmp/gateway.ipk" GATEWAY_IPK_SHA256=deadbeef \
 	WLOC_SERVICE_BIN="$tmp/wloc-service" WLOC_CTL_BIN="$tmp/wloc-ctl" \

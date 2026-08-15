@@ -105,6 +105,10 @@ tar -tzf "$stage/gateway/data.tar.gz" | while IFS= read -r member; do
 done
 tar -xzf "$stage/gateway/data.tar.gz" -C "$package_dir/files"
 
+# The Gateway 1.7.x compiler has no WireGuard pre-shared key support; the
+# patch adds it (fail-closed against future Gateway versions).
+"$repo_root/scripts/openwrt/patch-wireguard-psk.sh" "$package_dir/files"
+
 # Overlay the integrated UI, then the architecture-specific WLOC runtime.
 cp -R "$repo_root/openwrt/luci-app-wificalling-location-gateway/files/." "$package_dir/files/"
 rm -f "$package_dir/files/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"

@@ -184,6 +184,7 @@ var ZH = {
 	'WebSocket path': 'WebSocket 路径',
 	'Wi-Fi Calling Gateway settings': 'Wi-Fi 通话网关设置',
 	'WireGuard MTU': 'WireGuard MTU',
+	'WireGuard preshared key': 'WireGuard 预共享密钥',
 	'WireGuard local address': 'WireGuard 本地地址',
 	'WireGuard private key': 'WireGuard 私钥',
 	'WireGuard reserved (comma-separated)': 'WireGuard reserved（逗号分隔）',

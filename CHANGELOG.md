@@ -10,6 +10,15 @@ All notable changes are documented here. Versions follow Semantic Versioning.
   from the official GitHub stargazer API using the auto-injected Actions token
   (no third-party service, no token in the repository); README embeds the
   committed chart instead of the star-history.com embed.
+- **WireGuard pre-shared key support** for the integrated Gateway: the build
+  pipeline patches the merged Gateway payload (`compiler.sh` + `init.d`) so
+  a `pre_shared_key` UCI option is emitted into the sing-box wireguard peer
+  block (endpoint and legacy styles), and the LuCI node editor gained a
+  "WireGuard preshared key" field. Nodes that require a PSK now complete the
+  handshake (verified against a live node: handshake in ~1s, exit in the UK).
+- The README now leads with the English introduction followed by the Chinese
+  version; the 1.0.2 changelog entry and release notes are bilingual
+  (English first, Chinese after).
 
 ## [1.0.2] - 2026-08-15
 
@@ -61,6 +70,16 @@ manual refresh for the WLOC monitor.
   Gateway config, so WLOC works out of the box on any subnet.
 - The packaged UI no longer lags the repository copy: probe failure reasons
   and the newer translation table were missing from earlier release packages.
+
+### 中文说明
+
+- **新增**：WLOC 监控页“定位跟随设备”旁新增“刷新 IP”按钮——立即丢弃缓存、重新探测跟随节点出口并刷新显示；探测失败显示原因且不会误重启守护进程（新增 `control.refresh` 控制命令，贯通 `wloc-ctl` 与 rpcd `luci.wloc` 桥接）。
+- **新增**：“添加局域网设备”弹窗新增“从已连接设备选择”——自动列出 DHCP 租约与 ARP 缓存检测到的局域网设备（设备名 + 真实 IP，排除已绑定 IP 与路由器自身），选择后自动填入设备名称与 IP；IP 输入占位提示改为按路由器实际网段生成，不再写死 192.168.31.x。
+- **新增**：监控页与设置页一样使用版本化 LuCI view 名称，升级后浏览器不会缓存旧页面。
+- **修复**：切换设备节点后出口 IP 秒级跟随——配置指纹纳入设备策略 UCI 文件、探测优先读取 UCI 设备绑定（而非可能过期的 sing-box 路由规则）、巡检周期缩短至 10 秒（原 600 秒）；原实现最长十分钟不更新。
+- **修复**：路由器 LAN 地址不再写死 192.168.31.1——证书链接、DNS 劫持、TPROXY 规则均从 `uci network.lan.ipaddr`（回退 `br-lan`）动态获取，LuCI 页面链接按管理员实际访问地址生成，任意网段（如 192.168.1.x）开箱即用；FAQ 证书链接改为可点击。
+- **修复**：出厂默认配置不再写死示例设备 IP（原 192.168.31.X）；未在 LuCI 选择跟随设备时，守护进程自动跟随网关设备策略中的第一台设备。
+- **修复**：发布包 UI 与仓库代码保持一致（probe 失败原因显示等此前缺失内容已补齐）。
 
 ## [1.0.1] - 2026-08-14
 

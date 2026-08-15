@@ -211,6 +211,9 @@ return view.extend({
 		s.option(form.Value, 'local_address', wlocI18n.t('WireGuard local address'));
 		s.option(form.Value, 'reserved', wlocI18n.t('WireGuard reserved (comma-separated)'));
 		s.option(form.Value, 'mtu', wlocI18n.t('WireGuard MTU'));
+		var wgPsk = s.option(form.Value, 'pre_shared_key', wlocI18n.t('WireGuard preshared key'));
+		wgPsk.password = true; wgPsk.depends('protocol', 'wireguard');
+		wgPsk.textvalue = function(id) { return this.cfgvalue(id) ? wlocI18n.t('Set') : wlocI18n.t('Not set'); };
 
 		s = m.section(form.GridSection, 'device', wlocI18n.t('Device policies'));
 		s.addremove = true; s.nodescriptions = true; s.anonymous = true; s.addbtntitle = wlocI18n.t('Add LAN device');

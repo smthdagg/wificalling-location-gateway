@@ -2,26 +2,316 @@
 
 <div align="center">
 
-**面向 OpenWrt / ImmortalWrt 的 Wi‑Fi Calling + Apple WLOC 一体化网关**
+**An all-in-one Wi‑Fi Calling + Apple WLOC gateway for OpenWrt / ImmortalWrt**
 
-在不修改 Wi‑Fi Calling Gateway 1.7 稳定数据面的前提下，以独立 Rust 服务完成出口定位、WLOC 定位响应处理、证书生命周期、精确流量隔离和 LuCI 管理。
+Without touching the stable data plane of Wi‑Fi Calling Gateway 1.7, a standalone Rust service handles exit geolocation, WLOC response rewriting, certificate lifecycle, precise traffic isolation, and LuCI management.
 
 [![CI](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.0.0)
+[![Release](https://img.shields.io/badge/release-v1.0.2-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.0.2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Rust 1.90](https://img.shields.io/badge/Rust-1.90-orange.svg?logo=rust)](Cargo.toml)
-[![OpenWrt](https://img.shields.io/badge/OpenWrt-24.10%20%7C%2025.12-00B5E2.svg?logo=openwrt)](#支持范围与验证状态)
+[![OpenWrt](https://img.shields.io/badge/OpenWrt-24.10%20%7C%2025.12-00B5E2.svg?logo=openwrt)](#support-and-validation-status)
 [![GitHub stars](https://img.shields.io/github/stars/smthdagg/wificalling-location-gateway?style=flat&logo=github)](https://github.com/smthdagg/wificalling-location-gateway/stargazers)
-[![LINUX.DO](https://img.shields.io/badge/LINUX.DO-社区-1f1f1f)](https://linux.do/)
+[![LINUX.DO](https://img.shields.io/badge/LINUX.DO-community-1f1f1f)](https://linux.do/)
 
-[中文完整教程](docs/WIFICALLING_WLOC_TUTORIAL_ZH.md) · [English Guide](docs/WIFICALLING_WLOC_TUTORIAL_EN.md) · [安全策略](SECURITY.md) · [开发与测试计划](DEVELOPMENT_TEST_PLAN.md)
+[English Guide](docs/WIFICALLING_WLOC_TUTORIAL_EN.md) · [中文完整教程](docs/WIFICALLING_WLOC_TUTORIAL_ZH.md) · [Security Policy](SECURITY.md) · [Development & Test Plan](DEVELOPMENT_TEST_PLAN.md)
 
 </div>
 
 > [!IMPORTANT]
-> 本项目用于获得授权的设备、网络与测试环境。它不能证明运营商已经开通 Wi‑Fi Calling，也不能替代真实呼入/呼出验证；WLOC 目标位置不得被视为紧急呼叫定位。请遵守当地法律、运营商条款和 Apple 设备管理要求。
+> This project is intended for authorized devices, networks, and test environments only. It does not prove that your carrier has enabled Wi‑Fi Calling, and it is not a substitute for real call verification; WLOC target locations must never be treated as emergency-call location. Follow local law, carrier terms, and Apple device-management requirements.
 
-![WLOC 设置界面](docs/images/wificalling-wloc/04-wloc-settings.png)
+![WLOC settings UI](docs/images/wificalling-wloc/04-wloc-settings.png)
+
+---
+
+## English
+
+## Introduction
+
+Wi‑Fi Calling Location Gateway brings two previously separate flows together on one router:
+
+1. **Wi‑Fi Calling Gateway 1.7** selects a sing-box node for designated LAN devices and keeps the ePDG/IPsec channel (UDP 500/4500) independent.
+2. **The WLOC service** handles only TCP 443 traffic from the designated test device to the Apple WLOC hosts. In auto mode it resolves the target region from the exit IP of the node bound to that device; in manual mode it uses administrator-chosen coordinates.
+3. **The LuCI interface** provides nodes, device policies, auto/manual location, certificate installation, runtime status, and a sanitized event log.
+
+The core boundary of the project is "**independent, precise, and revertible**": WLOC uses its own process, UCI config, Unix socket, nftables table, and logs. It never takes over the Wi‑Fi Calling Gateway 1.7 table and never intercepts UDP 500/4500. When the protocol is unknown, Geo data is invalid, or the service is unhealthy, no default fake coordinates are produced.
+
+## Features
+
+- Statically linked Rust daemon optimized for OpenWrt musl targets and small release size.
+- Auto-follows the country, city, timezone, and coordinates of the node bound to the device; after a node switch the monitor follows within about 10 seconds, and a one-click "Refresh IP" button re-probes immediately.
+- Manual place search, latitude/longitude entry, and saved location presets.
+- The certificate link, DNS hijack, and TPROXY rules are generated from the router's actual LAN IP at runtime — no more hardcoded 192.168.31.x, so any LAN subnet works out of the box.
+- Locally generated, persisted WLOC root CA with an iPhone `.mobileconfig` install entry and fingerprint verification.
+- The "Add LAN device" dialog lists connected LAN devices (DHCP leases + ARP cache); picking one fills in the device name and the real IP automatically.
+- Bounded TLS, HTTP/2, and WLOC protocol handling; upstream certificate and hostname verification is never downgraded.
+- DNS/nftables isolation scoped to "designated device + authorized hosts + TCP 443".
+- Root-only Unix socket control API with an rpcd-authorized LuCI bridge.
+- Wi‑Fi Calling tunnel status, WLOC current target, and sanitized event log.
+- IPK (OpenWrt 24.10 / iStoreOS 24.10) and native APK v3 (OpenWrt 25.12) packaging.
+- Pinned SDK/toolchain digests, offline locked builds, dependency audit, coverage gate, and Docker boot verification.
+
+## How it works
+
+```mermaid
+flowchart LR
+    I["Authorized test iPhone"] -->|"Wi‑Fi Calling · UDP 500/4500"| G["Wi‑Fi Calling Gateway 1.7"]
+    G --> N["Bound sing-box node"]
+    I -->|"Apple WLOC · TCP 443"| D["Precise DNS / nftables isolation"]
+    D --> R["wloc-service · Rust"]
+    R -->|"TLS + HTTP/2, strict upstream validation"| A["Apple WLOC"]
+    R --> P["Exit probe"]
+    P --> N
+    P --> X["Geo resolution & cache"]
+    X --> R
+    L["LuCI / rpcd"] -->|"root-only UDS API"| R
+```
+
+A location update roughly goes through these steps:
+
+1. The router feeds only the assigned test device's Apple WLOC requests into the standalone service.
+2. Auto mode probes the real exit through the device's bound sing-box node; manual mode reads locally stored coordinates.
+3. The Geo layer validates country code, coordinate ranges, timezone, expiry, and provider responses — it never fabricates a result when data is unavailable.
+4. The service rewrites a response only when the authorized protocol structure, resource limits, TLS/ALPN, and safety state all hold; otherwise it passes the original response through or withdraws the redirect.
+5. LuCI shows the target location and network evidence; raw WLOC responses, node credentials, call content, and message content are never logged.
+
+More detail: [WLOC Service API](docs/api/WLOC_SERVICE_API.md), [Threat model](docs/security/threat-model.md), and [fail-open constraints](docs/security/fail-open.md).
+
+## Implementation
+
+| Layer | Implementation | Key constraints |
+|---|---|---|
+| Service runtime | Rust 2021, Tokio, static musl ELF | Rust 1.90; release LTO, `opt-level=z`, panic abort |
+| TLS / HTTP | rustls, ring, tokio-rustls, h2 | TLS 1.2/1.3, ALPN `h2`, strict upstream cert & hostname validation |
+| WLOC protocol | standalone clean-room protocol model with bounded parsing | Unknown, malformed, or oversized content is never guessed or partially rewritten |
+| Control plane | `wloc.service/v1`, 4-byte BE framing, JSON, Unix socket | 16 KiB max frame, 2s total timeout, socket 0600, no TCP management port |
+| Exit & location | sing-box exit probe, Geo primary/fallback + cache, manual coordinates | Invalid or stale data never falls back to default coordinates |
+| OpenWrt integration | procd, UCI, rpcd, dnsmasq, firewall4/nftables | WLOC keeps its own table; never touches the Gateway table or UDP 500/4500 |
+| Admin UI | LuCI JavaScript | Auto/manual switch, certificate, status, and log; sensitive fields sanitized |
+| Build & release | OpenWrt SDK / Docker images pinned by digest | locked/offline compile, SHA-256, architecture tag cannot masquerade as `all` |
+
+## Support and validation status
+
+"Installable" is not the same as "verified with a real iPhone / Wi‑Fi Calling". The table separates the evidence levels:
+
+| Platform | Arch | Package manager | Current evidence | Status |
+|---|---:|---|---|---|
+| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | Official AArch64 OpenWrt 24.10.5 Docker install/start matrix; plus real-device procd, LuCI, auto/manual switch, certificate, and iPhone WLOC path | **Docker + real device passed** |
+| OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker boot of init/ubus, integrated package install, service start, socket and v1 status checks | **Install matrix passed** |
+| iStoreOS 24.10.5 | x86_64 | opkg / IPK | Same as above | **Install matrix passed** |
+| OpenWrt 25.12.3 | x86_64 | apk / APK v3 | Same, using native APK v3, not a renamed IPK | **Install matrix passed** |
+| Other OpenWrt / ImmortalWrt versions or CPUs | — | — | No device/SDK evidence yet | **Not verified** |
+
+The runtime packages contain a Rust ELF and **must match the router CPU architecture**; only the LuCI package is `all`/`noarch`. x86_64 packages are built with a pinned SDK; AX6S uses a separate AArch64 `cortex-a53` cross toolchain. The formal Docker matrix installs all three release assets. Docker verifies install and boot, not nftables, DNS, carrier, or iPhone end-to-end behavior.
+
+## Installation
+
+### Prerequisites
+
+- sing-box, firewall4/nftables, LuCI, and rpcd available.
+- A fixed DHCP address for the test iPhone and a correct node binding in the Gateway.
+- Router config backed up; WARP, Shadowrocket, or any other VPN on the phone stays off during router WLOC testing.
+- Install this project's CA only on the dedicated test device and verify the certificate fingerprint.
+
+### 1. Choose the right package
+
+The Redmi AX6S uses a single architecture-specific integrated package:
+
+- `wificalling-location-gateway_<version>_aarch64_cortex-a53.ipk`
+
+It bundles Wi‑Fi Calling Gateway 1.7, the WLOC service, control tools, and the unified LuCI; installing `luci-app-wificalling-gateway` or `wloc-service` separately is not required. On reinstall or upgrade, opkg preserves `/etc/config/wificalling-gateway` and `/etc/config/wloc-service`.
+
+Since the formal 1.0 line, every platform gets exactly one complete integrated package named
+`wificalling-location-gateway` — Wi‑Fi Calling Gateway 1.7, WLOC service, control tools, and unified LuCI in one; users no longer install component packages separately.
+
+Two ways to install:
+
+**Method A — package feed (recommended)**: add the signed feed and `opkg install` directly:
+
+```sh
+# Import the feed signing key (one-time)
+wget -O /etc/opkg/keys/7645a0b4ea720026 \
+  https://raw.githubusercontent.com/smthdagg/wificalling-location-gateway-feed/main/wloc.pub
+# Add the feed and install
+echo "src/gz wloc https://smthdagg.github.io/wificalling-location-gateway-feed" \
+  >> /etc/opkg/customfeeds.conf
+opkg update && opkg install wificalling-location-gateway
+```
+
+**Method B — manual download**: grab the matching file from
+[Releases](https://github.com/smthdagg/wificalling-location-gateway/releases)
+and verify it against `SHA256SUMS` from the same release directory first.
+
+Full instructions for both methods live in the
+[feed repository](https://github.com/smthdagg/wificalling-location-gateway-feed)
+(including the manual `.apk` install commands for OpenWrt 25.x).
+
+### 2. Redmi AX6S (single integrated IPK)
+
+```sh
+opkg install /tmp/wificalling-location-gateway_<version>_aarch64_cortex-a53.ipk
+```
+
+Do not run `opkg remove` first; installing directly restores missing components and keeps the existing configuration. After installing, check both services under "Verify the services" below.
+
+### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
+
+```sh
+opkg install /tmp/wificalling-location-gateway_1.0.2-r1_x86_64.ipk
+```
+
+### 4. OpenWrt 25.12 (native APK v3)
+
+```sh
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.2-r1.apk
+```
+
+`--allow-untrusted` applies only to locally built packages that are not yet signed in a repository. Formal releases use repository signing; never rename an IPK into an APK.
+
+### 5. Verify the services
+
+```sh
+test -S /var/run/wloc-service/control.sock
+/usr/sbin/wloc-ctl status
+/etc/init.d/wificalling-gateway status
+logread -e wloc-service
+```
+
+The status response must contain `"api_version":"wloc.service/v1"`. If the LuCI menu did not refresh, clear the browser cache and log back in instead of reinstalling packages for other architectures.
+
+## Usage order
+
+Configure in this order to avoid mixing network and location problems:
+
+1. Import or add nodes in **Wi‑Fi Calling Settings**, then Save & Apply.
+2. In **Device Policies**, add the test iPhone with a fixed LAN IP, routing mode, and bound node; Save & Apply again.
+3. Enable Wi‑Fi Calling on the iPhone and watch for UDP 4500 `ASSURED` in **Wi‑Fi Calling Monitor & Log**; always confirm with a real call in/out.
+4. In **WLOC Settings**, copy the router-generated profile link and install it from Safari on the iPhone.
+5. On the iPhone, enable full trust for `wloc-service root CA` under Settings → General → About → Certificate Trust Settings, and verify the fingerprint.
+6. Turn on WLOC interception and choose **Auto (follow node)** or a manual location; Save & Apply.
+7. Toggle airplane mode / Wi‑Fi or reopen Maps/Weather to trigger a location request.
+8. Check the mode, country, city, timezone, coordinates, Geo state, and update time in **WLOC Monitor & Log**.
+
+Step-by-step guides:
+
+- [Wi‑Fi Calling + WLOC Complete User Guide (English)](docs/WIFICALLING_WLOC_TUTORIAL_EN.md)
+- [Wi‑Fi Calling + WLOC 中文完整使用教程](docs/WIFICALLING_WLOC_TUTORIAL_ZH.md)
+- [AX6S deployment and real-device validation record](docs/deployment/AX6S_DEPLOYMENT.md)
+
+## Building and verifying from source
+
+### Rust quality gate
+
+```sh
+./scripts/ci/verify.sh
+```
+
+This entry runs formatting, Clippy, unit/integration tests, Rust line coverage (minimum 80%), dependency audit, license policy, secret scan, release size, and repository contract checks. The formal 1.0 baseline is **69 Python tests passing, Rust line coverage ≥ 80%, and a release verification binary of about 0.97 MB**.
+
+### AX6S / AArch64 cross build
+
+```sh
+OPENWRT_BIN_NAME=wloc-service \
+OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
+./scripts/ci/verify-rust-openwrt.sh
+```
+
+This pins the OpenWrt 24.10.8 `mediatek/mt7622` toolchain, Rust version, and SHA-256, and verifies the AArch64 ELF, static linking, and size. See [Rust OpenWrt cross-build notes](docs/testing/RUST_OPENWRT_CROSS_BUILD.md).
+
+### x86_64 dual-format packaging
+
+```sh
+./scripts/openwrt/build-x86_64-runtime.sh \
+  --out-dir "$PWD/dist/runtime/x86_64"
+
+./scripts/openwrt/build-release-packages.sh \
+  --version 1.0.2 \
+  --release 1 \
+  --arch x86_64 \
+  --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
+  --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \
+  --gateway-ipk /absolute/path/luci-app-wificalling-gateway_1.7.3-1_all.ipk \
+  --gateway-sha256 <verified-sha256> \
+  --out-dir "$PWD/dist/openwrt-release"
+```
+
+### Four-environment Docker install & start matrix for all release packages
+
+```sh
+./scripts/openwrt/verify-docker-matrix.sh \
+  --dist-dir "$PWD/dist/v1.0.2"
+```
+
+Builds use the official OpenWrt SDK pinned by digest; after dependency preparation, product compilation runs locked/offline with read-only sources in a network-disabled container. Full boundaries and results: [OpenWrt packaging and Docker matrix](docs/testing/OPENWRT_PACKAGE_DOCKER_MATRIX.md).
+
+## Language composition
+
+A GitHub Linguist byte snapshot of the current main branch (2026-08-13). Python mostly drives reproducible builds, fixture governance, and CI; the router product runtime is mainly Rust, with Shell handling OpenWrt lifecycle and network integration.
+
+```mermaid
+pie showData
+    title GitHub Linguist language snapshot
+    "Python · 59.03%" : 63959
+    "Rust · 22.40%" : 24273
+    "Shell · 18.56%" : 20112
+```
+
+> The numbers drift as main updates; whether LuCI JavaScript, docs, and generated/excluded files count depends on GitHub Linguist rules. Do not judge the project's primary language by helper-tool bytes alone.
+
+## Project structure
+
+```text
+src/                         Rust service, protocol, TLS/H2, exit & Geo modules
+openwrt/                     procd/UCI, LuCI/rpcd, and OpenWrt package definitions
+scripts/openwrt/             cross builds, dual-format packaging, Docker matrix
+scripts/ci/                  coverage, security, dependency, and repository gates
+tests/                       Rust, Python, JavaScript, and network-model tests
+fixtures/                    synthetic/sanitized fixture contracts and validators
+docs/                        API, security, deployment, testing, bilingual guides
+.handoffs/                   reproducible multi-agent handoff records
+```
+
+## Security, privacy, and rollback
+
+- The CA private key lives only on the router (mode 0600); it must never be committed to Git, support packages, or logs.
+- No node secrets, tokens, raw captures, device identifiers, precise user locations, or raw WLOC responses are committed.
+- Only the designated test device and an explicit host scope are allowed; normal HTTPS, other LAN devices, and UDP 500/4500 are not part of the WLOC data plane.
+- When upstream validation, ALPN, resource limits, or Geo checks fail, the service must not keep running with a "looks successful" default location.
+- On disable, the WLOC redirect is withdrawn first, then the engine is drained and stopped; before recovery, confirm the standalone nftables rules are gone.
+- Deleting the `wloc-service root CA` profile on the iPhone revokes device trust; after regenerating the CA, reinstall and verify the new fingerprint on every test device.
+
+Report vulnerabilities privately via [SECURITY.md](SECURITY.md); never paste certificates, IPs, node configs, or device information into public issues.
+
+## Contributing
+
+This repository uses GitHub Issues as the only assignable work units, integrated through dedicated branches, path leases, reproducible handoffs, and cross-role reviews. Before committing:
+
+1. Read [AGENTS.md](AGENTS.md) and the owned paths of the corresponding issue;
+2. Write a failing test first, then the minimal implementation;
+3. Run `./scripts/ci/verify.sh`;
+4. Review the diff for secrets, keys, device data, and unrelated changes;
+5. Merge through a Pull Request; security-sensitive changes must not be self-reviewed.
+
+Detailed collaboration: [Multi-agent workflow](docs/MULTI_AGENT_WORKFLOW.md).
+
+## Star growth
+
+[![Star History](https://cdn.jsdelivr.net/gh/smthdagg/wificalling-location-gateway@star-chart/docs/images/star-history.svg)](https://github.com/smthdagg/wificalling-location-gateway/stargazers)
+
+> The chart is regenerated daily by the `star-history-chart` workflow (or manually from the Actions tab): it reads the official star timeline with GitHub's auto-injected token and renders the SVG locally — the token is never written to any repository file and no third-party service is involved. `main` is branch-protected and the chart lives on the `star-chart` branch, embedded via the jsDelivr CDN; stars earned before GitHub exposed the timeline (the initial period) do not appear.
+
+If this project helps your OpenWrt / Wi‑Fi Calling experiments, a Star, a reproducible bug report, or a note in the [LINUX.DO](https://linux.do/) community is welcome. Please never publish personal locations, certificates, or proxy credentials in public content.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE). Third-party dependencies and external projects remain under their own licenses; the MIT grant does not change the isolation requirements for external AGPL implementation material defined in the [clean-room boundary ADR](docs/adr/0001-license-boundary.md).
+
+Wi‑Fi Calling Gateway 1.7 continues to be maintained by its own repository. This repository does not vendor its source; formal builds accept only published IPKs validated by identity, version, and SHA-256, and combine them into a single installable package at build time.
+
+---
+
+## 中文
 
 ## 项目简介
 
@@ -204,7 +494,7 @@ logread -e wloc-service
 ./scripts/ci/verify.sh
 ```
 
-该入口执行格式、Clippy、单元/集成测试、Rust 行覆盖率（最低 80%）、依赖审计、许可证策略、秘密扫描、发布体积和仓库契约检查。正式版 1.0 验证基线为 **67 个 Python 测试通过、Rust 行覆盖率 80.32%、release 验证二进制约 0.97 MB**。
+该入口执行格式、Clippy、单元/集成测试、Rust 行覆盖率（最低 80%）、依赖审计、许可证策略、秘密扫描、发布体积和仓库契约检查。正式版 1.0 验证基线为 **69 个 Python 测试通过、Rust 行覆盖率 ≥80%、release 验证二进制约 0.97 MB**。
 
 ### AX6S / AArch64 交叉构建
 
@@ -223,7 +513,7 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
   --out-dir "$PWD/dist/runtime/x86_64"
 
 ./scripts/openwrt/build-release-packages.sh \
-  --version 1.0.0 \
+  --version 1.0.2 \
   --release 1 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
@@ -237,7 +527,7 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir "$PWD/dist/v1.0.0"
+  --dist-dir "$PWD/dist/v1.0.2"
 ```
 
 构建使用固定摘要的官方 OpenWrt SDK；依赖准备之后，产品编译采用 locked/offline、只读源码和禁网容器。完整边界和结果见 [OpenWrt 发布打包与 Docker 矩阵](docs/testing/OPENWRT_PACKAGE_DOCKER_MATRIX.md)。

@@ -94,6 +94,10 @@ case "$dependency_mode" in
 				exit 2
 			}
 			tar -xzf "$gateway_stage/package/data.tar.gz" -C "$gateway_stage/data"
+			# The Gateway 1.7.x compiler has no WireGuard pre-shared key
+			# support; the patch adds it (fail-closed against future
+			# Gateway versions).
+			"$root/scripts/openwrt/patch-wireguard-psk.sh" "$gateway_stage/data"
 			cp -R "$gateway_stage/data/." "$stage/data/"
 			# The integrated LuCI views intentionally replace the standalone
 			# Gateway views after the verified Gateway payload is merged.
