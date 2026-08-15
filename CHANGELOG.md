@@ -41,6 +41,13 @@ manual refresh for the WLOC monitor.
     source of truth) instead of trusting possibly stale sing-box route rules.
   - Housekeeping runs every 10 seconds; the probe itself still only runs when
     the fingerprint changed or cached evidence is stale.
+- **The router LAN address is no longer hardcoded to 192.168.31.1.** The CA
+  profile URL, the DNS hijack, and the matching TPROXY rule now derive the
+  router IP from `uci network.lan.ipaddr` (falling back to the `br-lan`
+  address), and the LuCI pages build the profile link from the address the
+  admin is actually using - so certificate installation and WLOC interception
+  work on any LAN subnet, not only 192.168.31.x. The FAQ profile link is now
+  a tappable link instead of static text.
 - The packaged UI no longer lags the repository copy: probe failure reasons
   and the newer translation table were missing from earlier release packages.
 

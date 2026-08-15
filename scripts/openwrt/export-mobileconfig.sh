@@ -11,7 +11,26 @@ set -eu
 
 CA_PEM=/etc/wloc-service/ca.pem
 OUT=/www/wloc-ca.mobileconfig
-CERT_URL="http://192.168.31.1/wloc-ca.mobileconfig"
+
+# The router's own LAN IPv4, used for the profile download URL. UCI is
+# authoritative; fall back to the LAN bridge address for non-standard
+# layouts.
+lan_ip() {
+    ip=$(uci -q get network.lan.ipaddr) || ip=
+    case "$ip" in
+        ''|*[!0-9.]*)
+            ip=$(ip -4 addr show br-lan 2>/dev/null | sed -n 's/^[[:space:]]*inet \([0-9.]*\)\/.*/\1/p' | head -1)
+            ;;
+    esac
+    printf '%s' "$ip"
+}
+
+ROUTER_IP=$(lan_ip)
+[ -n "$ROUTER_IP" ] || {
+    echo "export-mobileconfig: cannot determine the router LAN IP" >&2
+    exit 1
+}
+CERT_URL="http://$ROUTER_IP/wloc-ca.mobileconfig"
 
 [ -f "$CA_PEM" ] || {
     echo "export-mobileconfig: no CA at $CA_PEM (start wloc-service first)" >&2

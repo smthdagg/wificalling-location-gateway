@@ -82,8 +82,11 @@ async function loadModeHandler(sourcePath, manualLat, manualLon, ctlResults) {
 		};
 	};
 	const view = { extend: function(value) { return value; } };
+	// The page derives the CA profile URL from location.hostname; simulate
+	// the browser environment (a typical LAN address) for the loader.
+	const location = { hostname: '192.168.31.1' };
 	const moduleFactory = new Function(
-		'view', 'wlocI18n', 'form', 'fs', 'poll', 'uci', 'ui', 'rpc', 'L', 'E',
+		'view', 'wlocI18n', 'form', 'fs', 'poll', 'uci', 'ui', 'rpc', 'L', 'E', 'location',
 		source
 	);
 	const page = moduleFactory(
@@ -96,7 +99,8 @@ async function loadModeHandler(sourcePath, manualLat, manualLon, ctlResults) {
 		ui,
 		rpc,
 		{ resolveDefault: function(value) { return value; } },
-		E
+		E,
+		location
 	);
 	await page.render(['{}', '', null, null, {}, '{}']);
 	assert(modeOption && typeof modeOption.onchange === 'function', 'location mode handler not found');

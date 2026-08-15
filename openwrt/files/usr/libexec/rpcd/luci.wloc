@@ -28,6 +28,18 @@ ctl_live() {
 	return 1
 }
 
+# The router's own LAN IPv4 for the CA profile URL: UCI is authoritative,
+# the LAN bridge address is the fallback. Empty when not configured.
+lan_ip() {
+	ip=$(uci -q get network.lan.ipaddr) || ip=
+	case "$ip" in
+		''|*[!0-9.]*)
+			ip=$(ip -4 addr show br-lan 2>/dev/null | sed -n 's/^[[:space:]]*inet \([0-9.]*\)\/.*/\1/p' | head -1)
+			;;
+	esac
+	printf '%s' "$ip"
+}
+
 case "$1" in
 list)
 	json_init
@@ -151,7 +163,12 @@ call)
 		fi
 		json_init
 		json_add_boolean ok 1
-		json_add_string url "http://192.168.31.1/wloc-ca.mobileconfig"
+		ip=$(lan_ip)
+		if [ -n "$ip" ]; then
+			json_add_string url "http://$ip/wloc-ca.mobileconfig"
+		else
+			json_add_string url ""
+		fi
 		json_dump
 		exit 0
 		;;

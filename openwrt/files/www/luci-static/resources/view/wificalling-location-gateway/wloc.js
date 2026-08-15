@@ -54,7 +54,12 @@ var verifyFingerprint = rpc.declare({
 
 var STATUS_FILE = '/var/run/wloc-service/status.json';
 var EVENTS_FILE = '/var/run/wloc-service/events.jsonl';
-var PROFILE_URL = 'http://192.168.31.1/wloc-ca.mobileconfig';
+// The CA profile is served by this router's uhttpd; derive the address
+// from the page the admin is using instead of a hardcoded subnet, so the
+// link works on any LAN (e.g. 192.168.50.1).
+var profileHost = (location.hostname.indexOf(':') >= 0)
+	? '[' + location.hostname + ']' : location.hostname;
+var PROFILE_URL = 'http://' + profileHost + '/wloc-ca.mobileconfig';
 function fmtTime(unix) {
 	if (!unix) return '-';
 	return new Date(unix * 1000).toLocaleString();

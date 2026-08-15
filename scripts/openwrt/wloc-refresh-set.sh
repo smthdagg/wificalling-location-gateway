@@ -15,9 +15,27 @@ SET=apple_hosts
 
 HOSTS="gs-loc.apple.com gs-loc-cn.apple.com gs-loc-corpa.apple.com gs-loc.apple.com.cn bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com"
 
+# The router's own LAN IPv4 (the DNS hijack maps the WLOC names to it);
+# answers equal to it must not pollute the set.
+lan_ip() {
+    ip=$(uci -q get network.lan.ipaddr) || ip=
+    case "$ip" in
+        ''|*[!0-9.]*)
+            ip=$(ip -4 addr show br-lan 2>/dev/null | sed -n 's/^[[:space:]]*inet \([0-9.]*\)\/.*/\1/p' | head -1)
+            ;;
+    esac
+    printf '%s' "$ip"
+}
+
+ROUTER_IP=$(lan_ip)
+[ -n "$ROUTER_IP" ] || {
+    echo "wloc-refresh-set: cannot determine the router LAN IP" >&2
+    exit 1
+}
+
 collect() {
     # Query an explicit public resolver so the DNS hijack (which maps the
-    # WLOC names to 192.168.31.1) does not pollute the set.
+    # WLOC names to the router's LAN IP) does not pollute the set.
     for host in $HOSTS; do
         nslookup "$host" 223.5.5.5 2>/dev/null \
             | sed -n 's/^Address: *\([0-9][0-9.]*\)$/\1/p'
@@ -26,7 +44,7 @@ collect() {
     done
 }
 
-ips=$(collect | grep -v '^192.168.31.1$' | sort -u | tr '
+ips=$(collect | grep -v "^$ROUTER_IP$" | sort -u | tr '
 ' ',' | sed 's/,\$$//')
 [ -n "$ips" ] || {
     echo "wloc-refresh-set: no A records resolved (DNS unavailable?)" >&2

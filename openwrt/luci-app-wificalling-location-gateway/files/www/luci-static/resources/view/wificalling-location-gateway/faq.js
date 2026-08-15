@@ -4,6 +4,12 @@
 
 // FAQ：Wi-Fi Calling 与 WLOC 定位的使用步骤和注意事项（中英双语）。
 
+// The CA profile is served by this router's uhttpd; derive the address
+// from the page the admin is using instead of a hardcoded subnet.
+var profileHost = (location.hostname.indexOf(':') >= 0)
+	? '[' + location.hostname + ']' : location.hostname;
+var PROFILE_URL = 'http://' + profileHost + '/wloc-ca.mobileconfig';
+
 var CONTENT = {
 	zh: {
 		title: '使用帮助（FAQ）',
@@ -27,7 +33,7 @@ var CONTENT = {
 		],
 		wlocStepsTitle: 'WLOC 定位 · 使用步骤',
 		wlocSteps: [
-			'1. 安装根证书：在 iPhone 的 Safari 中打开 http://192.168.31.1/wloc-ca.mobileconfig，安装配置描述文件。',
+			'1. 安装根证书：在 iPhone 的 Safari 中打开 {profile-url}，安装配置描述文件。',
 			'2. 开启完全信任：iPhone「设置 → 通用 → 关于本机 → 证书信任设置」，将 wloc-service 根证书开启完全信任。',
 			'3. 在「WLOC 设置」页面打开「启用 WLOC 拦截」。',
 			'4. 选择定位模式：自动（跟随节点）——跟随测试设备绑定的节点出口定位；手动位置——用「手动搜索」搜索地名（如 Tokyo）或直接输入坐标，也可从「已保存的位置」一键应用。',
@@ -66,7 +72,7 @@ var CONTENT = {
 		],
 		wlocStepsTitle: 'WLOC Location · Usage steps',
 		wlocSteps: [
-			'1. Install the root CA: open http://192.168.31.1/wloc-ca.mobileconfig in Safari on the iPhone and install the configuration profile.',
+			'1. Install the root CA: open {profile-url} in Safari on the iPhone and install the configuration profile.',
 			'2. Enable full trust: on the iPhone go to Settings > General > About > Certificate Trust Settings and enable full trust for the wloc-service root CA.',
 			'3. Turn on "Enable WLOC interception" on the WLOC Settings page.',
 			'4. Choose a location mode: Auto (follow node) follows the bound node\'s exit; Manual lets you search a place name (e.g. Tokyo) or enter coordinates, or apply a saved preset in one click.',
@@ -92,6 +98,15 @@ function stepsCard(title, steps) {
 	]);
 }
 
+// Replace the {profile-url} placeholder with a tappable link to the CA
+// profile (the plain text is used when the URL cannot be derived).
+function withProfileUrl(item) {
+	var parts = String(item).split('{profile-url}');
+	if (parts.length === 1)
+		return item;
+	return [parts[0], E('a', { href: PROFILE_URL, target: '_blank' }, PROFILE_URL), parts[1]];
+}
+
 function notesCard(title, notes) {
 	return E('div', { 'class': 'cbi-section' }, [
 		E('h3', {}, title),
@@ -101,6 +116,8 @@ function notesCard(title, notes) {
 
 return view.extend({
 	render: function() {
+		// The tab menu is re-rendered in English on every page switch; like
+		// the other views, localize it here so it stays in the UI language.
 		wlocI18n.localizeTabs();
 		// Follow the LuCI interface language automatically (the body class
 		// is `lang_en` on this firmware, `lang-en` on others).
@@ -112,7 +129,7 @@ return view.extend({
 			E('p', {}, c.intro),
 			stepsCard(c.wfcStepsTitle, c.wfcSteps),
 			notesCard(c.wfcNotesTitle, c.wfcNotes),
-			stepsCard(c.wlocStepsTitle, c.wlocSteps),
+			stepsCard(c.wlocStepsTitle, c.wlocSteps.map(withProfileUrl)),
 			notesCard(c.wlocNotesTitle, c.wlocNotes)
 		]);
 	}

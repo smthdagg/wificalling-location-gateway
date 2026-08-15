@@ -27,6 +27,24 @@ ips=$(uci -q show wificalling-gateway \
     exit 1
 }
 
+# The router's own LAN IPv4, used for the DNS hijack and the matching
+# TPROXY rule. UCI is authoritative; fall back to the LAN bridge address.
+lan_ip() {
+    ip=$(uci -q get network.lan.ipaddr) || ip=
+    case "$ip" in
+        ''|*[!0-9.]*)
+            ip=$(ip -4 addr show br-lan 2>/dev/null | sed -n 's/^[[:space:]]*inet \([0-9.]*\)\/.*/\1/p' | head -1)
+            ;;
+    esac
+    printf '%s' "$ip"
+}
+
+ROUTER_IP=$(lan_ip)
+[ -n "$ROUTER_IP" ] || {
+    echo "wloc-redirect-sync: cannot determine the router LAN IP" >&2
+    exit 1
+}
+
 # DNS hijack: force the Apple WLOC hostnames to this router so the
 # devices always connect to an address our rules match, regardless of
 # CDN IP rotation (the Apple names resolve to different aliyun/akamai
@@ -39,7 +57,7 @@ for hosts_file in /etc/hosts /tmp/hosts/wloc-hosts; do
     sed -i "/$HOSTS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
     cat >> "$hosts_file" <<EOF
 $HOSTS_MARKER
-192.168.31.1 gs-loc.apple.com gs-loc-cn.apple.com gs-loc-corpa.apple.com gs-loc.apple.com.cn bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com
+$ROUTER_IP gs-loc.apple.com gs-loc-cn.apple.com gs-loc-corpa.apple.com gs-loc.apple.com.cn bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com
 # wloc-service end
 EOF
 done
@@ -64,7 +82,7 @@ nft "add chain inet $TABLE $CHAIN { type filter hook prerouting priority mangle;
 nft flush chain inet "$TABLE" "$CHAIN"
 for ip in $ips; do
     nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr @apple_hosts meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
-    nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr 192.168.31.1 meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
+    nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr $ROUTER_IP meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
 done
 
 echo "wloc-redirect-sync: tproxy $ips -> :$PROXY_PORT (mark $FWMARK, table $ROUTE_TABLE)"
