@@ -2,6 +2,26 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.0.7] - 2026-08-15
+
+### Fixed
+
+- **WLOC follow-device exit probe now works for WireGuard nodes**: the
+  probe only looked for the bound node among the Gateway sing-box
+  outbounds, but sing-box 1.13 keeps wireguard peers in `endpoints` (named
+  `wg-<section>`), so a device bound to a WireGuard node silently fell
+  back to the first regular outbound (or direct) and the monitor showed
+  the router WAN IP instead of the node exit - the follow-device location
+  never updated to the node's real country/city. The probe now parses and
+  re-emits wireguard endpoints (`route.final` naming, same shape as the
+  node-health handshake probe) and resolves the UCI binding to the
+  `wg-<section>` tag. Verified live: a WireGuard node exit now reports
+  GB / Maidenhead / Europe/London with the exit IP in the monitor.
+
+### 中文说明
+
+- **修复**：WLOC「跟随设备」出口探测现在支持 WireGuard 节点——之前探测只在 sing-box 的 outbounds 里找设备绑定节点，而 sing-box 1.13 把 wireguard 对端放在 `endpoints`（命名为 `wg-<section>`），导致绑定 WireGuard 节点的设备静默回退到其他节点或直连，监控页显示的出口 IP 是路由器 WAN IP 而不是节点出口，跟随定位永远更新不到节点的真实国家/城市。现在探测会解析并复用 wireguard endpoints（`route.final` 指向 endpoint，与节点握手探测同款配置），并把 UCI 绑定正确解析为 `wg-<section>` tag。已真机验证：WireGuard 节点出口现在在监控页显示 GB / Maidenhead / Europe/London 及出口 IP。
+
 ## [1.0.6] - 2026-08-15
 
 ### Audit
