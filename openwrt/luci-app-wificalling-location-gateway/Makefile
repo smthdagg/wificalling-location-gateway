@@ -4,7 +4,7 @@ LUCI_TITLE:=Wi-Fi Calling & WLOC Location Gateway
 LUCI_DESCRIPTION:=Unified admin UI for the Wi-Fi Calling gateway and the WLOC location spoofing module (two side-by-side modules sharing the sing-box node pool and routing).
 LUCI_DEPENDS:=+wloc-service +luci-app-wificalling-gateway +luci-base +rpcd-mod-rpcsys
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.0.7
+PKG_VERSION:=1.0.8
 PKG_RELEASE:=1
 
 PKG_MAINTAINER:=wificalling-location-gateway maintainers

@@ -2,6 +2,23 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.0.8] - 2026-08-15
+
+### Fixed
+
+- **A stale device-policy node reference no longer stops the whole
+  gateway**: re-importing nodes in LuCI changes their UCI section names;
+  a device policy that still referenced an old name made the config
+  compiler fail outright, so sing-box.json was never generated and the
+  proxy stopped for every device (all traffic fell back to direct - a
+  test site showed the router gateway IP instead of the node exit). The
+  compiler now skips such devices with a warning: the stale device routes
+  directly while every other device keeps proxying.
+
+### 中文说明
+
+- **修复**：设备策略引用已不存在的节点不再导致整个网关失效——在 LuCI 里重新导入节点会改变节点的 UCI section 名称，若某条设备策略仍引用旧名称，配置编译器会直接失败，sing-box.json 无法生成，所有设备的代理全部停止（流量全部直连——测试站点显示路由器网关 IP 而不是节点出口）。现在编译器会跳过这类设备并输出警告：过期引用的设备走直连，其余设备继续正常代理。
+
 ## [1.0.7] - 2026-08-15
 
 ### Fixed
