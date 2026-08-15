@@ -1,6 +1,6 @@
 [package]
 name = "wificalling-location-gateway"
-version = "1.0.3"
+version = "1.0.4"
 edition = "2021"
 rust-version = "1.90"
 license = "MIT"
