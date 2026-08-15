@@ -53,7 +53,7 @@
   },
   "admin/services/wificalling-location-gateway/health": {
     "title": "Service Status",
-    "order": 30,
+    "order": 45,
     "action": {
       "type": "view",
       "path": "wificalling-location-gateway/wloc-health"
