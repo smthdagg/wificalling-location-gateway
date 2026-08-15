@@ -11,15 +11,15 @@ fail() {
 }
 
 [ -f "$repo_root/VERSION" ] || fail 'missing canonical VERSION file'
-[ "$(cat "$repo_root/VERSION")" = 1.0.4 ] || fail 'canonical version must be 1.0.4'
-grep -Eq '^version = "1\.0\.4"$' "$repo_root/Cargo.toml" ||
-	fail 'Cargo package version must be 1.0.4'
-grep -Fx 'PKG_VERSION:=1.0.4' "$repo_root/openwrt/Makefile" >/dev/null ||
-	fail 'OpenWrt runtime version must be 1.0.4'
+[ "$(cat "$repo_root/VERSION")" = 1.0.5 ] || fail 'canonical version must be 1.0.5'
+grep -Eq '^version = "1\.0\.5"$' "$repo_root/Cargo.toml" ||
+	fail 'Cargo package version must be 1.0.5'
+grep -Fx 'PKG_VERSION:=1.0.5' "$repo_root/openwrt/Makefile" >/dev/null ||
+	fail 'OpenWrt runtime version must be 1.0.5'
 grep -Fx 'PKG_RELEASE:=1' "$repo_root/openwrt/Makefile" >/dev/null ||
 	fail 'OpenWrt runtime release must reset to 1'
-grep -Fx 'PKG_VERSION:=1.0.4' "$repo_root/openwrt/luci-app-wificalling-location-gateway/Makefile" >/dev/null ||
-	fail 'LuCI package version must be 1.0.4'
+grep -Fx 'PKG_VERSION:=1.0.5' "$repo_root/openwrt/luci-app-wificalling-location-gateway/Makefile" >/dev/null ||
+	fail 'LuCI package version must be 1.0.5'
 grep -Fx 'PKG_RELEASE:=1' "$repo_root/openwrt/luci-app-wificalling-location-gateway/Makefile" >/dev/null ||
 	fail 'LuCI package release must reset to 1'
 
@@ -31,13 +31,13 @@ plan=$(
 		--arch x86_64 --service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl"
 )
 for expected in \
-	'wificalling-location-gateway_1.0.4-r1_x86_64.ipk' \
-	'wificalling-location-gateway-1.0.4-r1.apk'; do
+	'wificalling-location-gateway_1.0.5-r1_x86_64.ipk' \
+	'wificalling-location-gateway-1.0.5-r1.apk'; do
 	printf '%s\n' "$plan" | grep -F "$expected" >/dev/null ||
 		fail "release plan is missing $expected"
 done
 
-grep -F 'version=${1:-1.0.4-1}' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null ||
-	fail 'AX6S standalone builder default must be 1.0.4 release 1'
+grep -F 'version=${1:-1.0.5-1}' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null ||
+	fail 'AX6S standalone builder default must be 1.0.5 release 1'
 
 printf '%s\n' 'release version tests passed'

@@ -2,6 +2,28 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.0.5] - 2026-08-15
+
+### Fixed
+
+- **Node status column blank after a WireGuard handshake**: the node health
+  document embedded the WireGuard exit IP unquoted (`"ping_ms":1.2.3.4`),
+  which made the whole `node-status.json` invalid JSON - LuCI's parse failed
+  and every Node status / Ping / Quality column rendered as "-" once any
+  WireGuard node completed a handshake. The exit IP is now quoted.
+- **Compact status document + static export**: the status document only
+  carries the fields the LuCI view reads (id/state/measurement/ping_ms) and
+  is exported under the uhttpd docroot (`/www/wloc-node-status.json`), so
+  the view reads it with a plain GET - immune to the `/ubus` JSON-RPC reply
+  truncation seen on some firmwares (ImmortalWrt 24.10) with larger
+  replies. The quality threshold comparison now uses `parseFloat` to accept
+  both numeric and quoted ping values.
+
+### 中文说明
+
+- **修复**：WireGuard 握手成功后节点状态列空白——节点健康检查把握手出口 IP 以无引号形式写进 `node-status.json`（`"ping_ms":1.2.3.4`），导致整个文件不是合法 JSON，LuCI 解析失败后所有节点的「节点状态 / Ping / 质量」列都显示 "-"。现在出口 IP 会正确加引号。
+- **新增**：状态文档精简并静态导出——`node-status.json` 只保留 LuCI 界面需要的字段（id/state/measurement/ping_ms），并导出到 uhttpd 文档根目录（`/www/wloc-node-status.json`），页面用普通 GET 读取，不受部分固件（如 ImmortalWrt 24.10）上 `/ubus` JSON-RPC 大响应截断的影响。质量阈值比较改用 `parseFloat`，同时兼容数字和带引号的 ping 值。
+
 ## [1.0.4] - 2026-08-15
 
 ### Fixed
