@@ -24,6 +24,12 @@ manual refresh for the WLOC monitor.
   (new `control.refresh` control command wired through `wloc-ctl` and the
   `luci.wloc` rpcd bridge; a failed probe shows the reason without restarting
   the daemon).
+- **Connected-device picker in the "Add LAN device" form**: the edit modal
+  lists the LAN devices detected from the DHCP leases and the ARP cache
+  (hostname + real IP, router and already-bound IPs excluded); picking one
+  fills in the device name and the LAN IP field with the device's actual
+  address. The IP placeholder now shows the router's real subnet pattern
+  instead of a hardcoded 192.168.31.x.
 - The monitor page ships under a versioned LuCI view name like the settings
   page, so an updated page is never served from the browser cache.
 

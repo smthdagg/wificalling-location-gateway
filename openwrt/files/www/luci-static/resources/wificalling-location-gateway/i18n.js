@@ -117,6 +117,8 @@ var ZH = {
 	'Configure proxy nodes and assign fixed LAN devices. Monitoring and logs are available from the submenu.': '配置代理节点并为局域网设备分配策略。监控与日志见子菜单。',
 	'Continuous traffic is aggregated and written at most once per interval.': '持续流量按间隔聚合写入，每个间隔最多写一次。',
 	'DHCP binding': 'DHCP 绑定',
+	'From connected devices': '从已连接设备选择',
+	'No connected devices detected.': '未检测到已连接设备。',
 	'Debug': '调试',
 	'Device display name': '设备显示名称',
 	'Device offline': '设备离线',

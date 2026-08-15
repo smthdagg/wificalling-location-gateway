@@ -15,7 +15,8 @@ return view.extend({
 			L.resolveDefault(fs.read('/var/run/wificalling-gateway/node-status.json'), '{}'),
 			uci.load('wificalling-gateway'),
 			L.resolveDefault(fs.read('/tmp/dhcp.leases'), ''),
-			uci.load('dhcp')
+			uci.load('dhcp'),
+			L.resolveDefault(fs.read('/proc/net/arp'), '')
 		]);
 	},
 	render: function(data) {
@@ -47,10 +48,23 @@ return view.extend({
 		// (wfc_ host sections) for the device policy status column.  dnsmasq
 		// lease lines are: expiry MAC IP hostname clientid.
 		var leaseMac = {};
+		var leaseHost = {};
 		(data[2] || '').split('\n').forEach(function(line) {
 			var p = line.split(/\s+/);
-			if (p.length >= 3 && /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(p[2]))
+			if (p.length >= 4 && /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(p[2])) {
 				leaseMac[p[2]] = p[1];
+				if (p[3] && p[3] !== '*')
+					leaseHost[p[2]] = p[3];
+			}
+		});
+		// Devices seen in the ARP cache but not in the DHCP leases (static
+		// IPs) still show up in the connected-devices picker.
+		var arpDevices = {};
+		(data[4] || '').split('\n').slice(1).forEach(function(line) {
+			var p = line.trim().split(/\s+/);
+			if (p.length >= 4 && /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(p[0])
+				&& /^[0-9a-fA-F:]+$/.test(p[2]))
+				arpDevices[p[0]] = p[2];
 		});
 		var wfcHost = {};
 		uci.sections('dhcp', 'host').forEach(function(h) {
@@ -64,6 +78,43 @@ return view.extend({
 			if (mac) return wlocI18n.t('Not bound yet');
 			return wlocI18n.t('Device offline');
 		}
+
+		// The router's LAN subnet hint for the IP placeholder, derived from
+		// the address the admin uses to reach LuCI (e.g. 192.168.31.x).
+		function lanSubnetHint() {
+			var host = location.hostname || '';
+			if (/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(host)) {
+				var parts = host.split('.');
+				return parts.slice(0, 3).join('.') + '.x';
+			}
+			return '192.168.x.x';
+		}
+
+		// Connected LAN devices (DHCP hostname when known, ARP-only entries
+		// otherwise) for the add-device picker; the router itself and IPs
+		// already bound to a device policy are excluded.
+		var detected = {};
+		Object.keys(leaseHost).forEach(function(ip) {
+			detected[ip] = { name: leaseHost[ip], mac: leaseMac[ip] };
+		});
+		Object.keys(arpDevices).forEach(function(ip) {
+			if (!detected[ip])
+				detected[ip] = { name: '', mac: arpDevices[ip] };
+		});
+		var routerHost = (location.hostname || '').toLowerCase();
+		var boundIps = {};
+		uci.sections('wificalling-gateway', 'device').forEach(function(d) {
+			(d.source_ip || []).forEach(function(ip) { boundIps[ip] = true; });
+		});
+		var detectedDevices = Object.keys(detected)
+			.filter(function(ip) {
+				return ip !== routerHost && !boundIps[ip];
+			})
+			.map(function(ip) { return { ip: ip, name: detected[ip].name }; })
+			.sort(function(a, b) {
+				var na = (a.name || a.ip).toLowerCase(), nb = (b.name || b.ip).toLowerCase();
+				return na < nb ? -1 : (na > nb ? 1 : 0);
+			});
 
 		var m = new form.Map('wificalling-gateway', wlocI18n.t('Wi-Fi Calling Gateway settings'),
 			wlocI18n.t('Configure proxy nodes and assign fixed LAN devices. Monitoring and logs are available from the submenu.'));
@@ -175,7 +226,45 @@ return view.extend({
 		selectedNode.description = wlocI18n.t('Save the node first, then reload this page to select it for a device.');
 		uci.sections('wificalling-gateway', 'node').forEach(function(node) { selectedNode.value(node['.name'], node.label || node['.name']); });
 		var ips = s.option(form.DynamicList, 'source_ip', wlocI18n.t('LAN IPv4 addresses'));
-		ips.datatype = 'ip4addr'; ips.rmempty = false; ips.placeholder = '192.168.31.x';
+		ips.datatype = 'ip4addr'; ips.rmempty = false; ips.placeholder = lanSubnetHint();
+		// Pick a connected LAN device to fill in its real name and IP in
+		// the add/edit modal (the modal inputs use the cbid DOM ids).
+		var devicePicker = s.option(form.DummyValue, '_device_picker', wlocI18n.t('From connected devices'));
+		devicePicker.rmempty = true;
+		devicePicker.textvalue = function() { return ''; };
+		devicePicker.renderWidget = function(section_id, option_index, cfgvalue) {
+			if (!detectedDevices.length)
+				return E('em', {}, wlocI18n.t('No connected devices detected.'));
+			var select = E('select', { class: 'cbi-input-select' }, detectedDevices.map(function(d) {
+				return E('option', { value: d.ip }, (d.name ? d.name + ' (' + d.ip + ')' : d.ip));
+			}));
+			select.addEventListener('change', function() {
+				var ip = select.value;
+				if (!ip) return;
+				var labelInput = document.getElementById('widget.cbid.wificalling-gateway.' + section_id + '.label');
+				if (labelInput) {
+					var dev = detectedDevices.find(function(d) { return d.ip === ip; });
+					labelInput.value = (dev && dev.name) ? dev.name : '';
+					labelInput.dispatchEvent(new Event('input', { bubbles: true }));
+				}
+				var dynlist = document.getElementById('cbid.wificalling-gateway.' + section_id + '.source_ip');
+				if (dynlist) {
+					var existing = Array.prototype.map.call(
+						dynlist.querySelectorAll('.item input[type=hidden]'),
+						function(input) { return input.value; });
+					if (existing.indexOf(ip) < 0) {
+						var ipInput = document.getElementById('widget.cbid.wificalling-gateway.' + section_id + '.source_ip');
+						if (ipInput) {
+							ipInput.value = ip;
+							ipInput.dispatchEvent(new Event('input', { bubbles: true }));
+							var addBtn = dynlist.querySelector('.add-item .cbi-button-add');
+							if (addBtn) addBtn.click();
+						}
+					}
+				}
+			});
+			return select;
+		};
 				var dhcpBinding = s.option(form.DummyValue, '_dhcp_binding', wlocI18n.t('DHCP binding'));
 				// A DummyValue has no editable value: without rmempty the save
 				// parse rejects it as "must not be empty", silently breaking the

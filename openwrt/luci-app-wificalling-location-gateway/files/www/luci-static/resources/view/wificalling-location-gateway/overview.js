@@ -15,7 +15,8 @@ return view.extend({
 			L.resolveDefault(fs.read('/var/run/wificalling-gateway/node-status.json'), '{}'),
 			uci.load('wificalling-gateway'),
 			L.resolveDefault(fs.read('/tmp/dhcp.leases'), ''),
-			uci.load('dhcp')
+			uci.load('dhcp'),
+			L.resolveDefault(fs.read('/proc/net/arp'), '')
 		]);
 	},
 	render: function(data) {
@@ -29,28 +30,41 @@ return view.extend({
 		}
 		function quality(n) {
 			if (!n) return '-';
-			if (n.state === 'unreachable') return _('Offline');
-			if (n.ping_ms == null) return _('Unknown');
-			if (n.ping_ms <= 100) return _('Excellent');
-			if (n.ping_ms <= 200) return _('Good');
-			if (n.ping_ms <= 300) return _('Fair');
-			return _('Poor');
+			if (n.state === 'unreachable') return wlocI18n.t('Offline');
+			if (n.ping_ms == null) return wlocI18n.t('Unknown');
+			if (n.ping_ms <= 100) return wlocI18n.t('Excellent');
+			if (n.ping_ms <= 200) return wlocI18n.t('Good');
+			if (n.ping_ms <= 300) return wlocI18n.t('Fair');
+			return wlocI18n.t('Poor');
 		}
 		function nodeState(n) {
 			if (!n) return '-';
-			if (n.state === 'reachable' || n.state === 'tcp_reachable') return _('Alive');
-			if (n.state === 'unreachable') return _('Offline');
-			return _('Unknown');
+			if (n.state === 'reachable' || n.state === 'tcp_reachable') return wlocI18n.t('Alive');
+			if (n.state === 'unreachable') return wlocI18n.t('Offline');
+			return wlocI18n.t('Unknown');
 		}
 		function latency(n) { return n && n.ping_ms != null ? n.ping_ms + ' ms (' + n.measurement + ')' : '-'; }
 		// Live DHCP lease map (IP -> MAC) and plugin-managed static bindings
 		// (wfc_ host sections) for the device policy status column.  dnsmasq
 		// lease lines are: expiry MAC IP hostname clientid.
 		var leaseMac = {};
+		var leaseHost = {};
 		(data[2] || '').split('\n').forEach(function(line) {
 			var p = line.split(/\s+/);
-			if (p.length >= 3 && /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(p[2]))
+			if (p.length >= 4 && /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(p[2])) {
 				leaseMac[p[2]] = p[1];
+				if (p[3] && p[3] !== '*')
+					leaseHost[p[2]] = p[3];
+			}
+		});
+		// Devices seen in the ARP cache but not in the DHCP leases (static
+		// IPs) still show up in the connected-devices picker.
+		var arpDevices = {};
+		(data[4] || '').split('\n').slice(1).forEach(function(line) {
+			var p = line.trim().split(/\s+/);
+			if (p.length >= 4 && /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(p[0])
+				&& /^[0-9a-fA-F:]+$/.test(p[2]))
+				arpDevices[p[0]] = p[2];
 		});
 		var wfcHost = {};
 		uci.sections('dhcp', 'host').forEach(function(h) {
@@ -59,122 +73,199 @@ return view.extend({
 		});
 		function dhcpState(ip) {
 			var mac = leaseMac[ip], host = wfcHost[ip];
-			if (host && host.mac && mac && host.mac.toLowerCase() === mac.toLowerCase()) return _('Bound');
-			if (host && host.mac && mac) return _('MAC changed, rebind on reconnect');
-			if (mac) return _('Not bound yet');
-			return _('Device offline');
+			if (host && host.mac && mac && host.mac.toLowerCase() === mac.toLowerCase()) return wlocI18n.t('Bound');
+			if (host && host.mac && mac) return wlocI18n.t('MAC changed, rebind on reconnect');
+			if (mac) return wlocI18n.t('Not bound yet');
+			return wlocI18n.t('Device offline');
 		}
 
-		var m = new form.Map('wificalling-gateway', _('Wi-Fi Calling Gateway settings'),
-			_('Configure proxy nodes and assign fixed LAN devices. Monitoring and logs are available from the submenu.'));
+		// The router's LAN subnet hint for the IP placeholder, derived from
+		// the address the admin uses to reach LuCI (e.g. 192.168.31.x).
+		function lanSubnetHint() {
+			var host = location.hostname || '';
+			if (/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(host)) {
+				var parts = host.split('.');
+				return parts.slice(0, 3).join('.') + '.x';
+			}
+			return '192.168.x.x';
+		}
+
+		// Connected LAN devices (DHCP hostname when known, ARP-only entries
+		// otherwise) for the add-device picker; the router itself and IPs
+		// already bound to a device policy are excluded.
+		var detected = {};
+		Object.keys(leaseHost).forEach(function(ip) {
+			detected[ip] = { name: leaseHost[ip], mac: leaseMac[ip] };
+		});
+		Object.keys(arpDevices).forEach(function(ip) {
+			if (!detected[ip])
+				detected[ip] = { name: '', mac: arpDevices[ip] };
+		});
+		var routerHost = (location.hostname || '').toLowerCase();
+		var boundIps = {};
+		uci.sections('wificalling-gateway', 'device').forEach(function(d) {
+			(d.source_ip || []).forEach(function(ip) { boundIps[ip] = true; });
+		});
+		var detectedDevices = Object.keys(detected)
+			.filter(function(ip) {
+				return ip !== routerHost && !boundIps[ip];
+			})
+			.map(function(ip) { return { ip: ip, name: detected[ip].name }; })
+			.sort(function(a, b) {
+				var na = (a.name || a.ip).toLowerCase(), nb = (b.name || b.ip).toLowerCase();
+				return na < nb ? -1 : (na > nb ? 1 : 0);
+			});
+
+		var m = new form.Map('wificalling-gateway', wlocI18n.t('Wi-Fi Calling Gateway settings'),
+			wlocI18n.t('Configure proxy nodes and assign fixed LAN devices. Monitoring and logs are available from the submenu.'));
 		var importPanel = E('div', { class: 'cbi-section' }, [
-			E('h3', {}, _('Import proxy node')),
-			E('p', {}, _('Paste one AnyTLS, Hysteria2/Hy2, TUIC, VLESS, VMess, Trojan, or WireGuard (wg://) link. It is parsed locally in this browser and is not sent to an external service.')),
+			E('h3', {}, wlocI18n.t('Import proxy node')),
+			E('p', {}, wlocI18n.t('Paste one AnyTLS, Hysteria2/Hy2, TUIC, VLESS, VMess, Trojan, or WireGuard (wg://) link. It is parsed locally in this browser and is not sent to an external service.')),
 			E('div', { class: 'cbi-section-create' }, [
 				E('button', { class: 'cbi-button cbi-button-add', click: function() {
 				var input = E('textarea', { class: 'cbi-input-textarea', rows: 6, style: 'width:100%', placeholder: 'anytls://…' });
-				ui.showModal(_('Import node link'), [input, E('div', { class: 'right' }, [
-					E('button', { class: 'btn', click: ui.hideModal }, _('Cancel')),
+				ui.showModal(wlocI18n.t('Import node link'), [input, E('div', { class: 'right' }, [
+					E('button', { class: 'btn', click: ui.hideModal }, wlocI18n.t('Cancel')),
 					E('button', { class: 'btn cbi-button-positive', click: function() {
 						var parsed;
 						try { parsed = nodeImport.parse(input.value); }
-						catch (err) { ui.addNotification(null, E('p', {}, _('Unable to parse node link:') + ' ' + err.message), 'error'); return; }
+						catch (err) { ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to parse node link:') + ' ' + err.message), 'error'); return; }
 						var sid = uci.add('wificalling-gateway', 'node');
 						Object.keys(parsed).forEach(function(key) { if (parsed[key] !== '') uci.set('wificalling-gateway', sid, key, parsed[key]); });
 						uci.save().then(function() {
 							ui.hideModal();
-							ui.addNotification(null, E('p', {}, _('Node imported successfully. Reloading settings…')), 'info');
+							ui.addNotification(null, E('p', {}, wlocI18n.t('Node imported successfully. Reloading settings…')), 'info');
 							window.setTimeout(function() { window.location.reload(); }, 500);
-						}).catch(function(err) { ui.addNotification(null, E('p', {}, _('Unable to save imported node:') + ' ' + err.message), 'error'); });
-					} }, _('Import'))
+						}).catch(function(err) { ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to save imported node:') + ' ' + err.message), 'error'); });
+					} }, wlocI18n.t('Import'))
 				])]);
-				} }, _('Import node link'))
+				} }, wlocI18n.t('Import node link'))
 			])
 		]);
-		var s = m.section(form.NamedSection, 'main', 'global', _('General'));
-		s.option(form.Flag, 'enabled', _('Enable'));
-		var logLevel = s.option(form.ListValue, 'log_level', _('Log level'));
-		logLevel.value('warn', _('Warning')); logLevel.value('info', _('Information')); logLevel.value('debug', _('Debug'));
-		var logEnabled = s.option(form.Flag, 'log_enabled', _('Activity log'));
+		var s = m.section(form.NamedSection, 'main', 'global', wlocI18n.t('General'));
+		s.option(form.Flag, 'enabled', wlocI18n.t('Enable'));
+		var logLevel = s.option(form.ListValue, 'log_level', wlocI18n.t('Log level'));
+		logLevel.value('warn', wlocI18n.t('Warning')); logLevel.value('info', wlocI18n.t('Information')); logLevel.value('debug', wlocI18n.t('Debug'));
+		var logEnabled = s.option(form.Flag, 'log_enabled', wlocI18n.t('Activity log'));
 		logEnabled.default = '1';
-		logEnabled.description = _('Record handshake outcomes and sustained encrypted communication. Turn off to stop writing the activity log.');
-		var eventInterval = s.option(form.Value, 'event_interval', _('Sustained activity log interval (seconds)'));
+		logEnabled.description = wlocI18n.t('Record handshake outcomes and sustained encrypted communication. Turn off to stop writing the activity log.');
+		var eventInterval = s.option(form.Value, 'event_interval', wlocI18n.t('Sustained activity log interval (seconds)'));
 		eventInterval.datatype = 'range(30,3600)'; eventInterval.default = '60';
 		eventInterval.depends('log_enabled', '1');
-		eventInterval.description = _('Continuous traffic is aggregated and written at most once per interval.');
-		var maxEvents = s.option(form.Value, 'max_events_per_device', _('Maximum records per device'));
+		eventInterval.description = wlocI18n.t('Continuous traffic is aggregated and written at most once per interval.');
+		var maxEvents = s.option(form.Value, 'max_events_per_device', wlocI18n.t('Maximum records per device'));
 		maxEvents.datatype = 'range(1,500)'; maxEvents.default = '20';
 		maxEvents.depends('log_enabled', '1');
-		maxEvents.description = _('Each device keeps its own newest records, so one device cannot fill the entire log.');
+		maxEvents.description = wlocI18n.t('Each device keeps its own newest records, so one device cannot fill the entire log.');
 
-		s = m.section(form.GridSection, 'node', _('Proxy nodes'));
-		s.addremove = true; s.nodescriptions = true; s.anonymous = true; s.addbtntitle = _('Add proxy node');
+		s = m.section(form.GridSection, 'node', wlocI18n.t('Proxy nodes'));
+		s.addremove = true; s.nodescriptions = true; s.anonymous = true; s.addbtntitle = wlocI18n.t('Add proxy node');
 		s.sectiontitle = function(id) { return uci.get('wificalling-gateway', id, 'label') || id; };
-		s.option(form.Flag, 'enabled', _('Enable')).default = '1';
-		var nodeLabel = s.option(form.Value, 'label', _('Node display name'));
-		nodeLabel.rmempty = false; nodeLabel.placeholder = _('Example: UK AnyTLS');
-		nodeLabel.description = _('This name is shown in the device node selector.');
-		var p = s.option(form.ListValue, 'protocol', _('Protocol'));
+		s.option(form.Flag, 'enabled', wlocI18n.t('Enable')).default = '1';
+		var nodeLabel = s.option(form.Value, 'label', wlocI18n.t('Node display name'));
+		nodeLabel.rmempty = false; nodeLabel.placeholder = wlocI18n.t('Example: UK AnyTLS');
+		nodeLabel.description = wlocI18n.t('This name is shown in the device node selector.');
+		var p = s.option(form.ListValue, 'protocol', wlocI18n.t('Protocol'));
 		['anytls','hysteria2','tuic','vless','vmess','trojan','wireguard'].forEach(function(x) { p.value(x); });
-		s.option(form.Value, 'server', _('Server')).datatype = 'host';
-		s.option(form.Value, 'port', _('Port')).datatype = 'port';
-		var nodeStatus = s.option(form.DummyValue, '_node_status', _('Node status'));
+		s.option(form.Value, 'server', wlocI18n.t('Server')).datatype = 'host';
+		s.option(form.Value, 'port', wlocI18n.t('Port')).datatype = 'port';
+		var nodeStatus = s.option(form.DummyValue, '_node_status', wlocI18n.t('Node status'));
 		nodeStatus.textvalue = function(id) { return E('span', { id: 'wfc-node-state-' + id }, nodeState(nodeById(id))); };
-		var nodePing = s.option(form.DummyValue, '_node_ping', _('Ping / latency'));
+		var nodePing = s.option(form.DummyValue, '_node_ping', wlocI18n.t('Ping / latency'));
 		nodePing.textvalue = function(id) { return E('span', { id: 'wfc-node-ping-' + id }, latency(nodeById(id))); };
-		var nodeQuality = s.option(form.DummyValue, '_node_quality', _('Quality'));
+		var nodeQuality = s.option(form.DummyValue, '_node_quality', wlocI18n.t('Quality'));
 		nodeQuality.textvalue = function(id) { return E('span', { id: 'wfc-node-quality-' + id }, quality(nodeById(id))); };
-		var secret = s.option(form.Value, 'password', _('Password'));
-		secret.password = true; secret.textvalue = function(id) { return this.cfgvalue(id) ? _('Set') : _('Not set'); };
-		var uuidField = s.option(form.Value, 'uuid', _('UUID'));
-		uuidField.password = true; uuidField.textvalue = function(id) { return this.cfgvalue(id) ? _('Set') : _('Not set'); };
-		s.option(form.Value, 'sni', _('TLS server name'));
-		var securityOpt = s.option(form.ListValue, 'security', _('Security'));
-		securityOpt.value('', _('None')); securityOpt.value('tls'); securityOpt.value('reality');
+		var secret = s.option(form.Value, 'password', wlocI18n.t('Password'));
+		secret.password = true; secret.textvalue = function(id) { return this.cfgvalue(id) ? wlocI18n.t('Set') : wlocI18n.t('Not set'); };
+		var uuidField = s.option(form.Value, 'uuid', wlocI18n.t('UUID'));
+		uuidField.password = true; uuidField.textvalue = function(id) { return this.cfgvalue(id) ? wlocI18n.t('Set') : wlocI18n.t('Not set'); };
+		s.option(form.Value, 'sni', wlocI18n.t('TLS server name'));
+		var securityOpt = s.option(form.ListValue, 'security', wlocI18n.t('Security'));
+		securityOpt.value('', wlocI18n.t('None')); securityOpt.value('tls'); securityOpt.value('reality');
 		securityOpt.depends('protocol', 'vless');
 		securityOpt.depends('protocol', 'vmess');
 		// The compiler has no reality arm for VMess; selecting it would emit a
 		// cleartext outbound that sing-box check accepts. Reject it up front.
 		securityOpt.validate = function(section_id, value) {
-			if (value == 'reality' && this.map.getSectionValue(section_id, 'protocol') == 'vmess')
+			// LuCI 26 removed form.Map#getSectionValue; read the committed
+			// protocol via the global uci API instead.
+			if (value == 'reality' && uci.get('wificalling-gateway', section_id, 'protocol') == 'vmess')
 				return false;
 			return true;
 		};
-		s.option(form.Flag, 'insecure', _('Allow insecure certificate'));
-		s.option(form.Value, 'alpn', _('ALPN'));
-		s.option(form.Value, 'pin_sha256', _('TLS public-key SHA-256 (base64)'));
-		s.option(form.Value, 'flow', _('VLESS flow'));
-		s.option(form.Value, 'public_key', _('Reality public key'));
-		s.option(form.Value, 'short_id', _('Reality short ID'));
-		s.option(form.Value, 'fingerprint', _('Reality fingerprint'));
-		var udpMode = s.option(form.ListValue, 'udp_mode', _('TUIC UDP mode'));
-		udpMode.value('native', _('Native')); udpMode.value('quic', _('QUIC'));
-		var transport = s.option(form.ListValue, 'transport', _('Transport'));
-		transport.value('', _('None')); transport.value('ws', _('WebSocket'));
-		s.option(form.Value, 'path', _('WebSocket path'));
-		s.option(form.Value, 'host', _('WebSocket Host'));
-		var wgKey = s.option(form.Value, 'private_key', _('WireGuard private key'));
-		wgKey.password = true; wgKey.textvalue = function(id) { return this.cfgvalue(id) ? _('Set') : _('Not set'); };
-		s.option(form.Value, 'local_address', _('WireGuard local address'));
-		s.option(form.Value, 'reserved', _('WireGuard reserved (comma-separated)'));
-		s.option(form.Value, 'mtu', _('WireGuard MTU'));
+		s.option(form.Flag, 'insecure', wlocI18n.t('Allow insecure certificate'));
+		s.option(form.Value, 'alpn', wlocI18n.t('ALPN'));
+		s.option(form.Value, 'pin_sha256', wlocI18n.t('TLS public-key SHA-256 (base64)'));
+		s.option(form.Value, 'flow', wlocI18n.t('VLESS flow'));
+		s.option(form.Value, 'public_key', wlocI18n.t('Reality public key'));
+		s.option(form.Value, 'short_id', wlocI18n.t('Reality short ID'));
+		s.option(form.Value, 'fingerprint', wlocI18n.t('Reality fingerprint'));
+		var udpMode = s.option(form.ListValue, 'udp_mode', wlocI18n.t('TUIC UDP mode'));
+		udpMode.value('native', wlocI18n.t('Native')); udpMode.value('quic', wlocI18n.t('QUIC'));
+		var transport = s.option(form.ListValue, 'transport', wlocI18n.t('Transport'));
+		transport.value('', wlocI18n.t('None')); transport.value('ws', wlocI18n.t('WebSocket'));
+		s.option(form.Value, 'path', wlocI18n.t('WebSocket path'));
+		s.option(form.Value, 'host', wlocI18n.t('WebSocket Host'));
+		var wgKey = s.option(form.Value, 'private_key', wlocI18n.t('WireGuard private key'));
+		wgKey.password = true; wgKey.textvalue = function(id) { return this.cfgvalue(id) ? wlocI18n.t('Set') : wlocI18n.t('Not set'); };
+		s.option(form.Value, 'local_address', wlocI18n.t('WireGuard local address'));
+		s.option(form.Value, 'reserved', wlocI18n.t('WireGuard reserved (comma-separated)'));
+		s.option(form.Value, 'mtu', wlocI18n.t('WireGuard MTU'));
 
-		s = m.section(form.GridSection, 'device', _('Device policies'));
-		s.addremove = true; s.nodescriptions = true; s.anonymous = true; s.addbtntitle = _('Add LAN device');
+		s = m.section(form.GridSection, 'device', wlocI18n.t('Device policies'));
+		s.addremove = true; s.nodescriptions = true; s.anonymous = true; s.addbtntitle = wlocI18n.t('Add LAN device');
 		s.sectiontitle = function(id) { return uci.get('wificalling-gateway', id, 'label') || id; };
-		s.option(form.Flag, 'enabled', _('Enable')).default = '1';
-		var deviceLabel = s.option(form.Value, 'label', _('Device display name'));
-		deviceLabel.rmempty = false; deviceLabel.placeholder = _('Example: iPhone 12');
-		var routeMode = s.option(form.ListValue, 'route_mode', _('Routing mode'));
-		routeMode.value('independent', _('Independent tunnel')); routeMode.value('follow_gateway', _('Follow gateway'));
+		s.option(form.Flag, 'enabled', wlocI18n.t('Enable')).default = '1';
+		var deviceLabel = s.option(form.Value, 'label', wlocI18n.t('Device display name'));
+		deviceLabel.rmempty = false; deviceLabel.placeholder = wlocI18n.t('Example: iPhone 12');
+		var routeMode = s.option(form.ListValue, 'route_mode', wlocI18n.t('Routing mode'));
+		routeMode.value('independent', wlocI18n.t('Independent tunnel')); routeMode.value('follow_gateway', wlocI18n.t('Follow gateway'));
 		routeMode.default = 'independent';
-		var selectedNode = s.option(form.ListValue, 'node', _('Node'));
+		var selectedNode = s.option(form.ListValue, 'node', wlocI18n.t('Node'));
 		selectedNode.rmempty = false; selectedNode.depends('route_mode', 'independent');
-		selectedNode.description = _('Save the node first, then reload this page to select it for a device.');
+		selectedNode.description = wlocI18n.t('Save the node first, then reload this page to select it for a device.');
 		uci.sections('wificalling-gateway', 'node').forEach(function(node) { selectedNode.value(node['.name'], node.label || node['.name']); });
-		var ips = s.option(form.DynamicList, 'source_ip', _('LAN IPv4 addresses'));
-		ips.datatype = 'ip4addr'; ips.rmempty = false; ips.placeholder = '192.168.31.x';
-				var dhcpBinding = s.option(form.DummyValue, '_dhcp_binding', _('DHCP binding'));
+		var ips = s.option(form.DynamicList, 'source_ip', wlocI18n.t('LAN IPv4 addresses'));
+		ips.datatype = 'ip4addr'; ips.rmempty = false; ips.placeholder = lanSubnetHint();
+		// Pick a connected LAN device to fill in its real name and IP in
+		// the add/edit modal (the modal inputs use the cbid DOM ids).
+		var devicePicker = s.option(form.DummyValue, '_device_picker', wlocI18n.t('From connected devices'));
+		devicePicker.rmempty = true;
+		devicePicker.textvalue = function() { return ''; };
+		devicePicker.renderWidget = function(section_id, option_index, cfgvalue) {
+			if (!detectedDevices.length)
+				return E('em', {}, wlocI18n.t('No connected devices detected.'));
+			var select = E('select', { class: 'cbi-input-select' }, detectedDevices.map(function(d) {
+				return E('option', { value: d.ip }, (d.name ? d.name + ' (' + d.ip + ')' : d.ip));
+			}));
+			select.addEventListener('change', function() {
+				var ip = select.value;
+				if (!ip) return;
+				var labelInput = document.getElementById('widget.cbid.wificalling-gateway.' + section_id + '.label');
+				if (labelInput) {
+					var dev = detectedDevices.find(function(d) { return d.ip === ip; });
+					labelInput.value = (dev && dev.name) ? dev.name : '';
+					labelInput.dispatchEvent(new Event('input', { bubbles: true }));
+				}
+				var dynlist = document.getElementById('cbid.wificalling-gateway.' + section_id + '.source_ip');
+				if (dynlist) {
+					var existing = Array.prototype.map.call(
+						dynlist.querySelectorAll('.item input[type=hidden]'),
+						function(input) { return input.value; });
+					if (existing.indexOf(ip) < 0) {
+						var ipInput = document.getElementById('widget.cbid.wificalling-gateway.' + section_id + '.source_ip');
+						if (ipInput) {
+							ipInput.value = ip;
+							ipInput.dispatchEvent(new Event('input', { bubbles: true }));
+							var addBtn = dynlist.querySelector('.add-item .cbi-button-add');
+							if (addBtn) addBtn.click();
+						}
+					}
+				}
+			});
+			return select;
+		};
+				var dhcpBinding = s.option(form.DummyValue, '_dhcp_binding', wlocI18n.t('DHCP binding'));
 				// A DummyValue has no editable value: without rmempty the save
 				// parse rejects it as "must not be empty", silently breaking the
 				// "Save" button (Save & Apply still worked via the staged-changes
@@ -184,7 +275,7 @@ return view.extend({
 				dhcpBinding.rmempty = true;
 				function bindingState(id) {
 					if ((uci.get('wificalling-gateway', id, 'route_mode') || 'independent') !== 'independent')
-						return _('Following gateway');
+						return wlocI18n.t('Following gateway');
 					var ipList = uci.get('wificalling-gateway', id, 'source_ip') || [];
 					if (!Array.isArray(ipList)) ipList = [ipList];
 					return ipList.map(function(ip) { return ip + ': ' + dhcpState(ip); }).join('<br>');

@@ -110,16 +110,20 @@ case "$dependency_mode" in
 		view_name="wloc_mode_fix_$view_suffix"
 		monitor_name="wloc_monitor_fix_$view_suffix"
 		faq_name="wloc_faq_fix_$view_suffix"
+		wfc_name="wfc_overview_fix_$view_suffix"
 		# Versioned view names bust the browser's resource cache: the LuCI
 		# menu loads a fresh URL per package version, so an updated settings,
-		# monitor, or FAQ page is picked up without a manual cache clear.
+		# monitor, FAQ, or overview page is picked up without a manual cache
+		# clear.
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/wloc.js" \
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$view_name.js"
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/wloc-monitor.js" \
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$monitor_name.js"
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/faq.js" \
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$faq_name.js"
-		python3 - "$stage/data/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json" "$view_name" "$monitor_name" "$faq_name" <<'PY'
+		cp "$stage/data/www/luci-static/resources/view/wificalling-gateway/overview.js" \
+			"$stage/data/www/luci-static/resources/view/wificalling-gateway/$wfc_name.js"
+		python3 - "$stage/data/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json" "$view_name" "$monitor_name" "$faq_name" "$wfc_name" <<'PY'
 import json
 import sys
 
@@ -127,6 +131,7 @@ path = sys.argv[1]
 view_name = sys.argv[2]
 monitor_name = sys.argv[3]
 faq_name = sys.argv[4]
+wfc_name = sys.argv[5]
 with open(path, encoding="utf-8") as handle:
     menu = json.load(handle)
 menu["admin/services/wificalling-location-gateway/wloc"]["action"]["path"] = (
@@ -137,6 +142,9 @@ menu["admin/services/wificalling-location-gateway/wloc-monitor"]["action"]["path
 )
 menu["admin/services/wificalling-location-gateway/faq"]["action"]["path"] = (
     f"wificalling-location-gateway/{faq_name}"
+)
+menu["admin/services/wificalling-location-gateway/wfc"]["action"]["path"] = (
+    f"wificalling-gateway/{wfc_name}"
 )
 with open(path, "w", encoding="utf-8") as handle:
     json.dump(menu, handle, ensure_ascii=False, indent=2)
