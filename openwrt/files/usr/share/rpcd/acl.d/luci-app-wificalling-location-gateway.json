@@ -9,7 +9,8 @@
           "cert_info",
           "regen_ca",
           "restart_service",
-          "verify_fingerprint"
+          "verify_fingerprint",
+          "health"
         ],
         "file": [
           "read"

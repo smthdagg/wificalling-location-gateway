@@ -3,12 +3,13 @@
 'require wificalling-location-gateway.i18n as wlocI18n';
 'require poll';
 'require dom';
+'require rpc';
 
 // 服务状态与日志（合并页）：wloc-service 与 Wi-Fi Calling Gateway
 // （monitor-loop + sing-box）的进程、配置、规则、补丁、节点健康与最近日志。
 // 数据由 /usr/sbin/wloc-health.sh 通过 luci.wloc rpcd `health` 方法提供。
 
-var getHealth = L.rpc.declare({
+var getHealth = rpc.declare({
 	object: 'luci.wloc',
 	method: 'health'
 });

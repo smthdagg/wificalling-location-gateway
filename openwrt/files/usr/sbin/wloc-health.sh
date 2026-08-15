@@ -17,6 +17,16 @@ json_escape() {
 
 now=$(date +%s)
 
+# File age in seconds (busybox-safe; -1 when unknown).
+file_age() {
+	local f="$1"
+	if [ -f "$f" ] && date -r "$f" +%s >/dev/null 2>&1; then
+		echo $((now - $(date -r "$f" +%s)))
+	else
+		echo -1
+	fi
+}
+
 # --- wloc-service ---------------------------------------------------------
 wloc_pid=$(pgrep -f '/usr/sbin/wloc-service' 2>/dev/null | head -n 1 || true)
 wloc_running=0; [ -n "$wloc_pid" ] && wloc_running=1
@@ -25,13 +35,14 @@ wloc_socket=0; [ -S /var/run/wloc-service/control.sock ] && wloc_socket=1
 wloc_phase=unknown; wloc_exit=unknown; wloc_geo=unknown; wloc_error=null; wloc_status_fresh=0
 wloc_status=/var/run/wloc-service/status.json
 if [ -f "$wloc_status" ]; then
-	age=$((now - $(stat -c %Y "$wloc_status" 2>/dev/null || echo 0)))
-	[ "$age" -le 120 ] && wloc_status_fresh=1
+	wloc_age=$(file_age "$wloc_status")
+	[ "$wloc_age" -ge 0 ] && [ "$wloc_age" -le 120 ] && wloc_status_fresh=1
 	wloc_phase=$(sed -n 's/.*"service_phase"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$wloc_status" | head -n 1)
 	[ -n "$wloc_phase" ] || wloc_phase=unknown
-	wloc_exit=$(sed -n 's/.*"exit"[[:space:]]*:[[:space:]]*{[^}]*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$wloc_status" | head -n 1)
+	# exit/geo blocks span multiple lines; pull each block and read its state.
+	wloc_exit=$(grep -A5 '"exit"' "$wloc_status" | sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
 	[ -n "$wloc_exit" ] || wloc_exit=unknown
-	wloc_geo=$(sed -n 's/.*"geo"[[:space:]]*:[[:space:]]*{[^}]*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$wloc_status" | head -n 1)
+	wloc_geo=$(grep -A10 '"geo":' "$wloc_status" | sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
 	[ -n "$wloc_geo" ] || wloc_geo=unknown
 	wloc_err=$(sed -n 's/.*"last_error"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/p' "$wloc_status" | head -n 1)
 	[ -n "$wloc_err" ] && wloc_error=$(json_escape "$wloc_err")
@@ -47,7 +58,7 @@ rundir=/var/run/wificalling-gateway
 sb_config=0; sb_config_valid=0; sb_config_age=-1
 if [ -f "$rundir/sing-box.json" ]; then
 	sb_config=1
-	sb_config_age=$((now - $(stat -c %Y "$rundir/sing-box.json" 2>/dev/null || echo 0)))
+	sb_config_age=$(file_age "$rundir/sing-box.json")
 	if command -v sing-box >/dev/null 2>&1; then
 		if sing-box check -c "$rundir/sing-box.json" >/dev/null 2>&1; then
 			sb_config_valid=1
@@ -57,8 +68,8 @@ fi
 
 norm_fresh=0; norm_age=-1
 if [ -f "$rundir/normalized.conf" ]; then
-	norm_age=$((now - $(stat -c %Y "$rundir/normalized.conf" 2>/dev/null || echo 0)))
-	[ "$norm_age" -le 120 ] && norm_fresh=1
+	norm_age=$(file_age "$rundir/normalized.conf")
+	[ "$norm_age" -ge 0 ] && [ "$norm_age" -le 120 ] && norm_fresh=1
 fi
 
 nft_rules=0
