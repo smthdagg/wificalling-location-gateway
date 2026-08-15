@@ -2,6 +2,32 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.0.4] - 2026-08-15
+
+### Fixed
+
+- **Secondary router (no DHCP) support**: the device-policy status column no
+  longer reports every device as offline when `/tmp/dhcp.leases` is empty. A
+  device recently seen in the ARP cache is shown as "Online (static IP)", so
+  routers that do not run DHCP (secondary/AP routers) now work as expected;
+  the FAQ documents the setup (point the device gateway at the secondary
+  router).
+- **CA profile always available**: `wloc-service` exports the iOS CA profile
+  (`/www/wloc-ca.mobileconfig`) automatically right after the root CA is
+  ready, and the WLOC settings page auto-(re)generates it on every load. The
+  profile link now works without clicking "Regenerate profile", and when
+  generation fails the page shows the reason instead of a 403/404 dead link
+  (older uhttpd builds answer missing files with 403).
+- **WireGuard handshake validation**: node health checks validate WireGuard
+  nodes by a real handshake and report the verified exit IP, instead of
+  relying on ICMP alone.
+
+### 中文说明
+
+- **新增**：支持旁路由（不提供 DHCP）——设备策略状态列不再因 `/tmp/dhcp.leases` 为空而把所有设备误报为「设备离线」：设备只要近期出现在 ARP 邻居表就显示「在线（静态 IP）」，旁路由/AP 模式可正常使用；FAQ 已补充旁路由设置说明（把设备网关指向旁路由 IP）。
+- **新增**：证书描述文件自动生成——`wloc-service` 在根证书就绪后自动导出 `/www/wloc-ca.mobileconfig`，WLOC 设置页每次加载也会自动重新生成；证书链接无需手动点击「重新生成描述文件」即可使用，生成失败时页面会显示具体原因，而不是 403/404 死链接（旧版 uhttpd 对不存在的文件返回 403）。
+- **新增**：WireGuard 节点真实握手校验——节点健康检查通过真实握手验证 WireGuard 节点并上报出口 IP，不再只依赖 ICMP。
+
 ## [1.0.3] - 2026-08-15
 
 ### Added

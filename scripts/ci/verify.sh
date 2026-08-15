@@ -25,6 +25,11 @@ done
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 ./scripts/scan_secrets.py
 
+# LuCI view regression guards (device status, CA profile auto-regen, i18n).
+for js_test in tests/js/*.test.js; do
+    node "$js_test"
+done
+
 if command -v shellcheck >/dev/null 2>&1; then
     find scripts -type f -name '*.sh' -exec shellcheck {} +
 fi

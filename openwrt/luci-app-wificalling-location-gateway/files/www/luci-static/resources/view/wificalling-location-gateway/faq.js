@@ -29,7 +29,8 @@ var CONTENT = {
 			'节点导入链接仅在本浏览器中本地解析，不会发送到任何外部服务。',
 			'设备策略中的节点需先保存节点后，刷新页面才能选择。',
 			'活动日志只记录握手结果与持续加密流量等元数据；隧道内容全程加密，通话/短信无法区分，号码与消息内容不可见。',
-			'若手机显示「未检测到」，请检查节点连通性、设备策略绑定与 iPhone 的 Wi-Fi 通话开关。'
+			'若手机显示「未检测到」，请检查节点连通性、设备策略绑定与 iPhone 的 Wi-Fi 通话开关。',
+			'旁路由（自身不提供 DHCP）同样可用：设备是否在线通过 ARP 邻居表识别，无需 DHCP 租约；请把设备的网关指向旁路由 IP。'
 		],
 		wlocStepsTitle: 'WLOC 定位 · 使用步骤',
 		wlocSteps: [
@@ -68,7 +69,8 @@ var CONTENT = {
 			'Node import links are parsed locally in this browser and are never sent to any external service.',
 			'Save a node first, then reload the page, before you can select it for a device policy.',
 			'The activity log only records handshake results and sustained encrypted traffic. Tunnel content is fully encrypted: calls are inferred from sustained bidirectional traffic, SMS cannot be distinguished, and phone numbers or message content are never visible.',
-			'If the phone shows "Not detected", check node connectivity, the device policy binding and the iPhone Wi-Fi Calling switch.'
+			'If the phone shows "Not detected", check node connectivity, the device policy binding and the iPhone Wi-Fi Calling switch.',
+			'A secondary router without DHCP works too: device liveness is detected via the ARP cache, so no DHCP lease is required; just point the device gateway to the secondary router\'s IP.'
 		],
 		wlocStepsTitle: 'WLOC Location · Usage steps',
 		wlocSteps: [

@@ -76,13 +76,20 @@ function gpsOf(geo) {
 
 return view.extend({
 	load: function() {
+		// Auto-repack the iOS CA profile on every page load (idempotent,
+		// sub-100ms): the profile link must work even before anyone clicks
+		// "Regenerate profile", otherwise a fresh install - or a secondary
+		// router without DHCP - shows a dead /wloc-ca.mobileconfig link.
+		var autoRegen = regenProfile().then(function(r) { return r; },
+			function(e) { return { error: String(e) }; });
 		return Promise.all([
 			L.resolveDefault(fs.read(STATUS_FILE), '{}'),
 			L.resolveDefault(fs.read(EVENTS_FILE), ''),
 			uci.load('wloc-service'),
 			uci.load('wificalling-gateway'),
 			L.resolveDefault(certInfo(), {}),
-			L.resolveDefault(fs.read('/var/run/wloc-service/proxy-health.json'), '{}')
+			L.resolveDefault(fs.read('/var/run/wloc-service/proxy-health.json'), '{}'),
+			autoRegen
 		]);
 	},
 
@@ -94,6 +101,7 @@ return view.extend({
 		var ca = data[4] || {};
 		var proxyHealth;
 		try { proxyHealth = JSON.parse(data[5] || '{}'); } catch (e) { proxyHealth = {}; }
+		var regen = data[6] || {};
 		var deviceList = uci.sections('wificalling-gateway', 'device').map(function(d) {
 			return { ip: d.source_ip, label: d.label || d.source_ip };
 		}).filter(function(d) { return d.ip; });
@@ -374,7 +382,15 @@ return view.extend({
 		]);
 
 		/* ---------- 1. Safari certificate ---------- */
-		var certLink = E('a', { 'href': PROFILE_URL, 'target': '_blank', 'id': 'wloc-cert-link' }, PROFILE_URL);
+		var certLink;
+		if (regen && regen.error) {
+			// The profile could not be (re)generated on this router: show
+			// why instead of a link that would 403/404 in the browser.
+			certLink = E('span', { 'class': 'alert-message warning', 'id': 'wloc-cert-link' },
+				wlocI18n.t('Profile unavailable: ') + String(regen.error));
+		} else {
+			certLink = E('a', { 'href': PROFILE_URL, 'target': '_blank', 'id': 'wloc-cert-link' }, PROFILE_URL);
+		}
 		function fmtCertTime(unix) {
 			return unix ? new Date(unix * 1000).toLocaleString() : wlocI18n.t('Unknown');
 		}

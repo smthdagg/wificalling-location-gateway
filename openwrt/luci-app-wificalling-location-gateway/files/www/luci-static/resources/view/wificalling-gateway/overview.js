@@ -86,6 +86,11 @@ return view.extend({
 			if (host && host.mac && mac && host.mac.toLowerCase() === mac.toLowerCase()) return wlocI18n.t('Bound');
 			if (host && host.mac && mac) return wlocI18n.t('MAC changed, rebind on reconnect');
 			if (mac) return wlocI18n.t('Not bound yet');
+			// No DHCP lease (static IP, or a router that does not run DHCP
+			// at all, e.g. a secondary/AP router): the ARP cache is the only
+			// liveness source, so a recently-seen device is online, not
+			// offline. Only report offline when neither source knows it.
+			if (arpDevices[ip]) return wlocI18n.t('Online (static IP)');
 			return wlocI18n.t('Device offline');
 		}
 

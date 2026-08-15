@@ -332,6 +332,20 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
     std::fs::write(&ca_info_path, serde_json::to_string_pretty(&ca_info)?)?;
 
+    // Ship the iOS CA profile right after the root CA is ready, so the LuCI
+    // profile link works without an explicit "Regenerate profile" click
+    // (the export script writes /www/wloc-ca.mobileconfig for uhttpd). The
+    // script is part of the package and may be absent in dev builds - both
+    // failure modes are non-fatal.
+    if let Ok(output) = std::process::Command::new("/usr/sbin/export-mobileconfig.sh").output() {
+        if !output.status.success() {
+            eprintln!(
+                "warning: export-mobileconfig.sh failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+    }
+
     let mut upstream_roots = rustls::RootCertStore::empty();
     upstream_roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let proxy =
