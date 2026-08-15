@@ -36,10 +36,10 @@ return view.extend({
 		wlocI18n.localizeTabs();
 		var health = data || {};
 
-		var wlocBody = E('tbody', {}, []);
-		var gwBody = E('tbody', {}, []);
-		var extraBody = E('tbody', {}, []);
-		var logBody = E('tbody', {}, []);
+		var wlocBody = E('div', {}, []);
+		var gwBody = E('div', {}, []);
+		var extraBody = E('div', {}, []);
+		var logBody = E('div', {}, []);
 
 		function renderHealth(h) {
 			wlocBody.innerHTML = '';
@@ -54,9 +54,9 @@ return view.extend({
 			var patches = g.patches || {};
 
 			function row(tbody, label, value) {
-				tbody.appendChild(E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td', style: 'white-space:nowrap;padding:2px 10px 2px 0;color:#666' }, label),
-					E('td', { 'class': 'td', style: 'padding:2px 0' }, value)
+				tbody.appendChild(E('div', { style: 'padding:2px 0' }, [
+					E('span', { style: 'display:inline-block;width:96px;color:#666;vertical-align:middle' }, label),
+					E('span', { style: 'vertical-align:middle' }, value)
 				]));
 			}
 
@@ -102,9 +102,8 @@ return view.extend({
 
 			// log lines
 			(h.log || []).forEach(function(line) {
-				logBody.appendChild(E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td' }, E('code', { style: 'font-size:11px;color:#555;word-break:break-all' }, line))
-				]));
+				logBody.appendChild(E('div', { style: 'padding:1px 0' },
+					E('code', { style: 'font-size:11px;color:#555;word-break:break-all' }, line)));
 			});
 			if (!(h.log || []).length) {
 				row(logBody, wlocI18n.t('Recent logs'), wlocI18n.t('No log lines yet'));
@@ -125,19 +124,19 @@ return view.extend({
 		return E([], [
 			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('WLOC service')),
-				E('table', { 'class': 'cbi-section-table', style: 'width:100%' }, wlocBody)
+				wlocBody
 			]),
 			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Gateway')),
-				E('table', { 'class': 'cbi-section-table', style: 'width:100%' }, gwBody)
+				gwBody
 			]),
 			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Patches and nodes')),
-				E('table', { 'class': 'cbi-section-table', style: 'width:100%' }, extraBody)
+				extraBody
 			]),
 			E('div', { 'class': 'cbi-section' }, [
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Recent logs')),
-				E('table', { 'class': 'cbi-section-table', style: 'width:100%' }, logBody)
+				logBody
 			])
 		]);
 	}
