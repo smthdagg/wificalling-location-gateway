@@ -39,6 +39,7 @@ cat > "$tmp/gateway/data/usr/libexec/wificalling-gateway/compiler.sh" <<'COMPILE
 #!/bin/sh
       s=s ",\"peers\":[{\"address\":" q(f[4]) ",\"port\":" f[5] ",\"public_key\":" q(f[13]) ",\"allowed_ips\":[\"0.0.0.0/0\"]"
       s=s ",\"private_key\":" q(f[21]) ",\"peer_public_key\":" q(f[13]) ",\"local_address\":[" q(f[22]) "]"
+      if (!node_proto[$3]) fail("device references unknown node: " $3)
 COMPILER
 cat > "$tmp/gateway/data/usr/libexec/wificalling-gateway/node-health.sh" <<'HEALTH'
 #!/bin/sh
@@ -142,6 +143,12 @@ grep -F 'if (f[25]!="") s=s ",\"pre_shared_key\":" q(f[25])' \
 grep -F 'config_get pre_shared_key "$s" pre_shared_key' \
 	"$tmp/result/data/etc/init.d/wificalling-gateway" >/dev/null ||
 	fail 'standalone package must patch init.d with the pre_shared_key field'
+grep -F 'device_guard_marker' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/compiler.sh" >/dev/null ||
+	fail 'standalone package must skip devices with stale node references'
+grep -F 'fail("device references unknown node: " $3)' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/compiler.sh" >/dev/null &&
+	fail 'standalone package must not keep the fail-hard unknown-node device path'
 grep -F 'wg_handshake_test' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
 	fail 'standalone package must patch node-health.sh with the wireguard handshake test'

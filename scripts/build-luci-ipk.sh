@@ -100,6 +100,7 @@ case "$dependency_mode" in
 			"$root/scripts/openwrt/patch-wireguard-psk.sh" "$gateway_stage/data"
 			"$root/scripts/openwrt/patch-wireguard-health.sh" "$gateway_stage/data"
 			"$root/scripts/openwrt/patch-node-status-compact.sh" "$gateway_stage/data"
+			"$root/scripts/openwrt/patch-gateway-device-guard.sh" "$gateway_stage/data"
 			cp -R "$gateway_stage/data/." "$stage/data/"
 			# The integrated LuCI views intentionally replace the standalone
 			# Gateway views after the verified Gateway payload is merged.
