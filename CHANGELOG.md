@@ -2,6 +2,39 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.0.6] - 2026-08-15
+
+### Audit
+
+- Full audit and verification pass over all components. No functional
+  defects found in this cycle; the release repackages and re-signs the
+  verified tree:
+  - Rust: 99 unit tests, `clippy` clean, `rustfmt` clean, dependency
+    advisories/bans/licenses green.
+  - Python: 69 tests; LuCI JS regression tests (tab localization, mode
+    switch, secondary-router fallback) all pass; packaging scripts
+    ShellCheck-clean.
+  - Install artifacts: four-environment Docker matrix
+    (AX6S aarch64, OpenWrt 24.10/25.12 x86_64, iStoreOS) installs, starts,
+    and passes socket/status checks; SHA256SUMS verified against the
+    manifest.
+  - Live Redmi AX6S (ImmortalWrt 24.10.6): services up, CA profile
+    served, node status document valid with all nodes reporting
+    (reachable / handshake OK with exit IP / handshake failed), control
+    API (status/refresh/geo-set) responsive, all three build patches
+    present.
+- Privacy sweep: no real device IPs, credentials, or keys in the
+  repository (the only LAN IP is a unit-test fixture).
+
+### 中文说明
+
+- **审计**：本轮对所有组件做了全面审计与验证，未发现功能性缺陷；本版本对验证通过的全部代码重新打包并签名发布：
+  - Rust：99 个单元测试、`clippy` 零警告、`rustfmt` 通过、依赖安全（advisories/bans/licenses）全绿。
+  - Python：69 个测试；LuCI JS 回归测试（标签本地化、模式切换、旁路由兜底）全部通过；打包脚本 ShellCheck 干净。
+  - 安装产物：四环境 Docker 矩阵（AX6S aarch64、OpenWrt 24.10/25.12 x86_64、iStoreOS）安装、启动、socket/status 检查全部通过；SHA256SUMS 与清单一致。
+  - Redmi AX6S 真机（ImmortalWrt 24.10.6）：服务运行正常、证书描述文件可下载、节点状态文档有效且所有节点状态正确（在线 / 握手成功带出口 IP / 握手失败）、控制接口（status/refresh/geo-set）正常、三个构建补丁全部落地。
+- **隐私**：仓库内无真实设备 IP、凭据或密钥（唯一的局域网 IP 是单元测试 fixture）。
+
 ## [1.0.5] - 2026-08-15
 
 ### Fixed

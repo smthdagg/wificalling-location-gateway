@@ -2,7 +2,7 @@
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
-version=${1:-1.0.5-1}
+version=${1:-1.0.6-1}
 dependency_mode=${2:-production}
 package=luci-app-wificalling-location-gateway
 source_dir="$root/openwrt/$package/files"

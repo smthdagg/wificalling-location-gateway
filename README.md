@@ -158,13 +158,13 @@ Do not run `opkg remove` first; installing directly restores missing components 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.0.5-r1_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.0.6-r1_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12 (native APK v3)
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.5-r1.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.6-r1.apk
 ```
 
 `--allow-untrusted` applies only to locally built packages that are not yet signed in a repository. Formal releases use repository signing; never rename an IPK into an APK.
@@ -445,13 +445,13 @@ opkg install /tmp/wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.0.5-r1_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.0.6-r1_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.5-r1.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.6-r1.apk
 ```
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。
