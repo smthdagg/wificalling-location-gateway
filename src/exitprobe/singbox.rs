@@ -27,10 +27,19 @@ pub struct SingBoxOutbound {
     raw: Value,
 }
 
+/// A parsed sing-box wireguard endpoint (sing-box 1.13+ keeps wireguard
+/// peers in `endpoints`, not `outbounds`).
+#[derive(Clone, Debug)]
+pub struct SingBoxEndpoint {
+    pub tag: String,
+    raw: Value,
+}
+
 /// The parsed configuration pieces the probe needs.
 #[derive(Clone, Debug)]
 pub struct SingBoxConfig {
     pub outbounds: Vec<SingBoxOutbound>,
+    pub endpoints: Vec<SingBoxEndpoint>,
 }
 
 /// Select the outbound the route rules bind to `device_ip`.
@@ -127,7 +136,8 @@ fn option_value(line: &str, keyword: &str) -> Option<String> {
     Some(value[..end].to_owned())
 }
 
-/// Parse a sing-box.json document, retaining outbounds for reuse.
+/// Parse a sing-box.json document, retaining outbounds and wireguard
+/// endpoints for reuse.
 pub fn parse_singbox_config(document: &Value) -> SingBoxConfig {
     let outbounds = document
         .get("outbounds")
@@ -145,39 +155,73 @@ pub fn parse_singbox_config(document: &Value) -> SingBoxConfig {
                 .collect()
         })
         .unwrap_or_default();
-    SingBoxConfig { outbounds }
+    let endpoints = document
+        .get("endpoints")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let tag = item.get("tag")?.as_str()?.to_owned();
+                    Some(SingBoxEndpoint {
+                        tag,
+                        raw: item.clone(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    SingBoxConfig {
+        outbounds,
+        endpoints,
+    }
 }
 
 /// Build a minimal probe configuration: a local HTTP inbound plus the target
-/// outbound (reused verbatim from the Gateway config) and a direct fallback.
+/// node (a regular outbound, or a wireguard endpoint re-emitted from the
+/// Gateway config) and a direct fallback. For endpoints the sing-box 1.13
+/// model routes through the endpoint by naming it as `route.final` (the same
+/// shape the node-health handshake probe uses).
 pub fn build_probe_config(
     config: &SingBoxConfig,
-    outbound_tag: &str,
+    node_tag: &str,
     listen_port: u16,
 ) -> Result<String, ProbeFailure> {
-    let outbound = config
-        .outbounds
-        .iter()
-        .find(|outbound| outbound.tag == outbound_tag)
-        .ok_or(ProbeFailure::Unreachable)?;
-
-    let mut outbounds = vec![outbound.raw.clone()];
-    outbounds.push(json!({"type": "direct", "tag": "direct"}));
-
-    let probe = json!({
-        "log": {"level": "warn"},
-        "inbounds": [{
-            "type": "http",
-            "tag": "probe",
-            "listen": "127.0.0.1",
-            "listen_port": listen_port
-        }],
-        "outbounds": outbounds,
-        "route": {
-            "final": outbound_tag
-        }
+    let inbound = json!({
+        "type": "http",
+        "tag": "probe",
+        "listen": "127.0.0.1",
+        "listen_port": listen_port
     });
-    serde_json::to_string(&probe).map_err(|_| ProbeFailure::InvalidData)
+
+    if let Some(outbound) = config.outbounds.iter().find(|o| o.tag == node_tag) {
+        let mut outbounds = vec![outbound.raw.clone()];
+        outbounds.push(json!({"type": "direct", "tag": "direct"}));
+        let probe = json!({
+            "log": {"level": "warn"},
+            "inbounds": [inbound],
+            "outbounds": outbounds,
+            "route": {
+                "final": node_tag
+            }
+        });
+        return serde_json::to_string(&probe).map_err(|_| ProbeFailure::InvalidData);
+    }
+
+    if let Some(endpoint) = config.endpoints.iter().find(|e| e.tag == node_tag) {
+        let probe = json!({
+            "log": {"level": "warn"},
+            "inbounds": [inbound],
+            "endpoints": [endpoint.raw.clone()],
+            "outbounds": [{"type": "direct", "tag": "direct"}],
+            "route": {
+                "final": node_tag
+            }
+        });
+        return serde_json::to_string(&probe).map_err(|_| ProbeFailure::InvalidData);
+    }
+
+    Err(ProbeFailure::Unreachable)
 }
 
 /// Ask an IP echo service through the local HTTP proxy and return the exit IP.
@@ -275,18 +319,29 @@ impl SingBoxProbe {
         // 1. The node bound to the device policy in UCI - the source of
         //    truth. The Gateway regenerates its sing-box route rules at its
         //    own pace, so a fresh UCI binding must win over a stale rule.
+        //    The node may be a regular outbound or a wireguard endpoint.
         let uci_text = std::fs::read_to_string(&self.uci_config_path).ok();
         if let Some(tag) = select_node_tag(&document, uci_text.as_deref(), self.device_ip) {
-            if config.outbounds.iter().any(|o| o.tag == tag) {
+            if config.outbounds.iter().any(|o| o.tag == tag)
+                || config.endpoints.iter().any(|e| e.tag == tag)
+            {
                 return Ok(tag);
             }
         }
-        // 2. Fall back to the first non-direct outbound.
+        // 2. Fall back to the first non-direct outbound, then the first
+        //    wireguard endpoint (a gateway with only wg nodes has no usable
+        //    outbound for the follow-device probe).
         config
             .outbounds
             .iter()
             .find(|outbound| outbound.tag != "direct")
             .map(|outbound| outbound.tag.clone())
+            .or_else(|| {
+                config
+                    .endpoints
+                    .first()
+                    .map(|endpoint| endpoint.tag.clone())
+            })
             .ok_or(ProbeFailure::Unreachable)
     }
 
@@ -478,6 +533,74 @@ mod tests {
             build_probe_config(&config, "missing", 18080),
             Err(ProbeFailure::Unreachable)
         );
+    }
+
+    #[test]
+    fn wireguard_endpoint_probe_config_is_built() {
+        // sing-box 1.13 keeps wireguard peers in `endpoints`: the probe
+        // config must re-emit the endpoint and route through it, exactly
+        // like the node-health handshake probe.
+        let doc = json!({
+            "outbounds": [{"type": "direct", "tag": "direct"}],
+            "endpoints": [{
+                "type": "wireguard",
+                "tag": "node-wgtest",
+                "address": ["10.48.48.64/21"],
+                "private_key": "abc",
+                "peers": [{"address": "1.2.3.4", "port": 51820, "public_key": "def"}]
+            }]
+        });
+        let config = parse_singbox_config(&doc);
+        assert_eq!(config.endpoints.len(), 1);
+        assert_eq!(config.endpoints[0].tag, "node-wgtest");
+
+        let probe = build_probe_config(&config, "node-wgtest", 18080).unwrap();
+        let probe: Value = serde_json::from_str(&probe).unwrap();
+        assert_eq!(probe["endpoints"][0]["tag"], "node-wgtest");
+        assert_eq!(probe["endpoints"][0]["type"], "wireguard");
+        assert_eq!(probe["route"]["final"], "node-wgtest");
+        assert_eq!(probe["outbounds"].as_array().unwrap().len(), 1);
+        assert_eq!(probe["outbounds"][0]["type"], "direct");
+        assert!(probe
+            .get("outbounds")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|o| { o.get("type").and_then(Value::as_str) != Some("wireguard") }));
+    }
+
+    #[test]
+    fn uci_wireguard_binding_resolves_to_an_endpoint_tag() {
+        // A device bound to a wireguard node has no matching outbound, but
+        // the endpoint must be selected for the follow-device probe.
+        let doc = json!({
+            "outbounds": [{"type": "direct", "tag": "direct"}],
+            "endpoints": [{"type": "wireguard", "tag": "node-wgtest", "address": ["10.0.0.1/24"]}]
+        });
+        let dir = std::env::temp_dir();
+        let config_path = dir.join("wloc-singbox-wg-endpoint.json");
+        let uci_path = dir.join("wloc-singbox-wg-uci");
+        std::fs::write(&config_path, doc.to_string()).unwrap();
+        std::fs::write(
+            &uci_path,
+            "config device\n\toption label 'iPhone17'\n\toption node 'wgtest'\n\tlist source_ip '192.168.31.176'\n",
+        )
+        .unwrap();
+        let mut probe = SingBoxProbe::new(
+            config_path.clone(),
+            IpAddr::V4(Ipv4Addr::new(192, 168, 31, 176)),
+            18080,
+            dir.join("wloc-singbox-wg-endpoint-work"),
+        );
+        probe.uci_config_path = uci_path.clone();
+        // Selection resolves to the wireguard endpoint tag; the sing-box
+        // spawn then fails on this host, which maps to Unreachable - the
+        // important assertion is that load_outbound_tag() does not give up.
+        assert_eq!(probe.load_outbound_tag(), Ok("node-wgtest".to_owned()));
+        std::fs::remove_file(&config_path).unwrap();
+        std::fs::remove_file(&uci_path).unwrap();
+        let _ = std::fs::remove_dir_all(dir.join("wloc-singbox-wg-endpoint-work"));
     }
 
     #[test]
