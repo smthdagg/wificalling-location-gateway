@@ -98,20 +98,22 @@ impl ExitProbeRuntime for StubProbe {
 /// device's bound node), or the deterministic stub when `WLOC_PROBE=stub`.
 /// The probe wiring (assigned device, probe port, node) comes from the UCI
 /// configuration; `WLOC_*` environment variables override it for staging.
-fn build_probe(uci: &WlocUciConfig) -> Box<dyn ExitProbeRuntime> {
+fn build_probe(assigned_device: &str, probe_port: u16) -> Box<dyn ExitProbeRuntime> {
     if std::env::var("WLOC_PROBE").as_deref() == Ok("stub") {
         return Box::new(StubProbe {
             exit_ip: env_or("WLOC_STUB_EXIT_IP", IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))),
             wan_ip: env_or("WLOC_STUB_WAN_IP", IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))),
         });
     }
+    // 0.0.0.0 matches no device policy, so the probe falls back to the
+    // first non-direct outbound when nothing is configured.
     let device_ip: IpAddr = env_or(
         "WLOC_DEVICE_IP",
-        uci.assigned_device
+        assigned_device
             .parse()
-            .unwrap_or(IpAddr::V4(Ipv4Addr::new(192, 168, 31, 176))),
+            .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
     );
-    let probe_port: u16 = env_or("WLOC_PROBE_PORT", uci.probe_port);
+    let probe_port: u16 = env_or("WLOC_PROBE_PORT", probe_port);
     Box::new(
         wificalling_location_gateway::exitprobe::singbox::SingBoxProbe::new(
             std::path::PathBuf::from(
@@ -215,15 +217,24 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             WlocUciConfig::default()
         }
     };
+    // The device whose node binding the location follows. It is normally
+    // chosen from LuCI; when unset, fall back to the first device policy of
+    // the Gateway config so a fresh install follows something on any subnet
+    // instead of a fixed example address.
+    let assigned_device = if uci.assigned_device.trim().is_empty() {
+        gateway_first_device_ip().unwrap_or_default()
+    } else {
+        uci.assigned_device.clone()
+    };
     eprintln!(
         "wloc-service: uci enabled={} geo_source={:?} node={} device={}",
         uci.enabled,
         uci.location_mode,
         uci.node_ref,
-        if uci.assigned_device.is_empty() {
+        if assigned_device.is_empty() {
             "(none)".to_owned()
         } else {
-            uci.assigned_device.clone()
+            assigned_device.clone()
         }
     );
 
@@ -243,7 +254,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let service = WlocService::new(
         StubRuntime,
-        build_probe(&uci),
+        build_probe(&assigned_device, uci.probe_port),
         geo,
         WlocServiceConfig {
             node_ref: NodeRef::new(&uci.node_ref)
@@ -254,11 +265,11 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             },
             scope_valid: true,
             ipv6_ready: true,
-            assigned_device_configured: !uci.assigned_device.is_empty(),
-            assigned_device: if uci.assigned_device.is_empty() {
+            assigned_device_configured: !assigned_device.is_empty(),
+            assigned_device: if assigned_device.is_empty() {
                 None
             } else {
-                Some(uci.assigned_device.clone())
+                Some(assigned_device)
             },
             // Background manual place-info lookups use the public Nominatim
             // TLS endpoint; a strict connect/read timeout keeps them off the
@@ -464,7 +475,41 @@ fn upstream_apple_ips() -> Vec<String> {
         .ok()
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default();
+    let router_ip = lan_router_ip();
     parse_apple_ips(&output)
+        .into_iter()
+        .filter(|ip| Some(ip.as_str()) != router_ip.as_deref())
+        .collect()
+}
+
+/// The router's own LAN IPv4 (`uci network.lan.ipaddr`), used to filter the
+/// hijacked address out of the upstream Apple IP set on any subnet.
+fn lan_router_ip() -> Option<String> {
+    let output = std::process::Command::new("uci")
+        .args(["-q", "get", "network.lan.ipaddr"])
+        .output()
+        .ok()?;
+    let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if ip.is_empty() {
+        None
+    } else {
+        Some(ip)
+    }
+}
+
+/// The first source IP of the Gateway device policy - the natural follow
+/// target when wloc-service has no assigned device configured.
+fn gateway_first_device_ip() -> Option<String> {
+    let output = std::process::Command::new("uci")
+        .args(["-q", "get", "wificalling-gateway.@device[0].source_ip"])
+        .output()
+        .ok()?;
+    let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if ip.is_empty() {
+        None
+    } else {
+        Some(ip)
+    }
 }
 
 /// Extract IPv4 addresses from the `nft list set` output (elements line).
@@ -486,7 +531,6 @@ fn parse_apple_ips(output: &str) -> Vec<String> {
                     !token.is_empty()
                         && token.chars().all(|c| c.is_ascii_digit() || c == '.')
                         && token.matches('.').count() == 3
-                        && *token != "192.168.31.1"
                         && *token != "127.0.0.1"
                 })
                 .map(str::to_owned)

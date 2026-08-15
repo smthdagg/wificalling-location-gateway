@@ -20,7 +20,9 @@ config wloc-service 'main'
 	option manual_lat '51.5074'
 	option manual_lon '-0.1278'
 	option node_ref 'default'
-	option assigned_device '192.168.31.176'
+	# assigned_device is chosen from LuCI (WLOC Settings > Follow device);
+	# when unset the daemon follows the first device policy of the
+	# wificalling-gateway config instead of any fixed example address.
 	option probe_interval '300'
 	option geo_provider 'http'
 	option probe_port '18080'

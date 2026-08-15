@@ -11,7 +11,26 @@ set -eu
 
 CA_PEM=/etc/wloc-service/ca.pem
 OUT=/www/wloc-ca.mobileconfig
-CERT_URL="http://192.168.31.1/wloc-ca.mobileconfig"
+
+# The router's own LAN IPv4, used for the profile download URL. UCI is
+# authoritative; fall back to the LAN bridge address for non-standard
+# layouts.
+lan_ip() {
+    ip=$(uci -q get network.lan.ipaddr) || ip=
+    case "$ip" in
+        ''|*[!0-9.]*)
+            ip=$(ip -4 addr show br-lan 2>/dev/null | sed -n 's/^[[:space:]]*inet \([0-9.]*\)\/.*/\1/p' | head -1)
+            ;;
+    esac
+    printf '%s' "$ip"
+}
+
+ROUTER_IP=$(lan_ip)
+[ -n "$ROUTER_IP" ] || {
+    echo "export-mobileconfig: cannot determine the router LAN IP" >&2
+    exit 1
+}
+CERT_URL="http://$ROUTER_IP/wloc-ca.mobileconfig"
 
 [ -f "$CA_PEM" ] || {
     echo "export-mobileconfig: no CA at $CA_PEM (start wloc-service first)" >&2
@@ -71,8 +90,21 @@ uuid2=$(cat /proc/sys/kernel/random/uuid)
     printf '%s\n' '  <integer>1</integer>'
     printf '%s\n' '</dict>'
     printf '%s\n' '</plist>'
-} >"$OUT"
+} >"$OUT.unsigned"
 
-rm -f /tmp/wloc-ca.b64
-echo "export-mobileconfig: profile written to $OUT"
+# CMS-sign the profile with the wloc-service CA itself. iOS trusts the CA
+# from a signed profile in its system trust store, so background processes
+# like locationd accept the MITM leaf certificates too (an unsigned profile
+# works for Safari but locationd rejects the CA with CertificateUnknown).
+if command -v openssl >/dev/null 2>&1 && [ -s "$CA_PEM" ] && [ -s "${CA_PEM%.pem}.key" ]; then
+    openssl cms -sign -binary -nosmimecap -nodetach \
+        -signer "$CA_PEM" -inkey "${CA_PEM%.pem}.key" \
+        -in "$OUT.unsigned" -outform DER -out "$OUT" -md sha256 2>/dev/null \
+        && SIGNED=1
+fi
+if [ "${SIGNED:-0}" != "1" ]; then
+    mv "$OUT.unsigned" "$OUT"
+fi
+rm -f "$OUT.unsigned" /tmp/wloc-ca.b64
+echo "export-mobileconfig: profile written to $OUT (signed=${SIGNED:-0})"
 echo "export-mobileconfig: open on the test iPhone: $CERT_URL"

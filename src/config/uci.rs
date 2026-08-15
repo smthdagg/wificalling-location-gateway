@@ -289,7 +289,7 @@ config wloc-service 'main'
 	option manual_lat '51.5074'
 	option manual_lon '-0.1278'
 	option node_ref 'uk_anytls_test'
-	option assigned_device '192.168.31.176'
+	option assigned_device '192.168.1.100'
 	option probe_interval '600'
 	option geo_provider 'http'
 	option probe_port '18080'
@@ -300,7 +300,7 @@ config wloc-service 'main'
         assert_eq!(config.manual_latitude, Some(51.5074));
         assert_eq!(config.manual_longitude, Some(-0.1278));
         assert_eq!(config.node_ref, "uk_anytls_test");
-        assert_eq!(config.assigned_device, "192.168.31.176");
+        assert_eq!(config.assigned_device, "192.168.1.100");
         assert_eq!(config.probe_interval_secs, 600);
         assert_eq!(config.geo_provider, "http");
         assert_eq!(config.probe_port, 18080);

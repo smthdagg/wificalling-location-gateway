@@ -53,7 +53,12 @@ manual refresh for the WLOC monitor.
   address), and the LuCI pages build the profile link from the address the
   admin is actually using - so certificate installation and WLOC interception
   work on any LAN subnet, not only 192.168.31.x. The FAQ profile link is now
-  a tappable link instead of static text.
+  a tappable link instead of static text. The packaged export script and the
+  daemon's upstream-IP filter use the runtime LAN address as well.
+- **The shipped default config no longer pins an example device IP.** A fresh
+  install no longer ships `assigned_device 192.168.31.176`; when no follow
+  device is chosen in LuCI, the daemon follows the first device policy of the
+  Gateway config, so WLOC works out of the box on any subnet.
 - The packaged UI no longer lags the repository copy: probe failure reasons
   and the newer translation table were missing from earlier release packages.
 
