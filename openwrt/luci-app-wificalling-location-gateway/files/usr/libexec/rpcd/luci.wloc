@@ -55,6 +55,8 @@ list)
 	json_close_object
 	json_add_object verify_fingerprint
 	json_close_object
+	json_add_object health
+	json_close_object
 	json_dump
 	json_cleanup
 	;;
@@ -208,6 +210,16 @@ call)
 		/etc/init.d/wloc-service restart >/dev/null 2>&1
 		sleep 2
 		echo '{"ok":true}'
+		exit 0
+		;;
+	health)
+		if [ ! -x /usr/sbin/wloc-health.sh ]; then
+			json_init
+			json_add_string error "wloc-health.sh 未安装"
+			json_dump
+			exit 1
+		fi
+		/usr/sbin/wloc-health.sh
 		exit 0
 		;;
 	regen_ca)

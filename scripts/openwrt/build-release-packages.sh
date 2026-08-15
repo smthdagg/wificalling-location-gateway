@@ -120,7 +120,7 @@ cp "$service_bin" "$package_dir/files/usr/sbin/wloc-service"
 cp "$ctl_bin" "$package_dir/files/usr/sbin/wloc-ctl"
 cp "$repo_root/openwrt/files/etc/init.d/wloc-service" "$package_dir/files/etc/init.d/wloc-service"
 cp "$repo_root/openwrt/files/etc/config/wloc-service" "$package_dir/files/etc/config/wloc-service"
-for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh; do
+for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh wloc-health.sh; do
 	cp "$repo_root/openwrt/files/usr/sbin/$helper" "$package_dir/files/usr/sbin/$helper"
 done
 chmod 0755 "$package_dir/files/usr/sbin/"* "$package_dir/files/etc/init.d/"*

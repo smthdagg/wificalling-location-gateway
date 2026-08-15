@@ -167,6 +167,7 @@ PY
 			cp "$root/openwrt/files/etc/init.d/wloc-service" "$stage/data/etc/init.d/wloc-service"
 			cp "$root/openwrt/files/usr/sbin/wloc-redirect-sync.sh" "$stage/data/usr/sbin/wloc-redirect-sync.sh"
 			cp "$root/openwrt/files/usr/sbin/wloc-refresh-set.sh" "$stage/data/usr/sbin/wloc-refresh-set.sh"
+			cp "$root/openwrt/files/usr/sbin/wloc-health.sh" "$stage/data/usr/sbin/wloc-health.sh"
 			cp "$service_bin" "$stage/data/usr/sbin/wloc-service"
 			cp "$ctl_bin" "$stage/data/usr/sbin/wloc-ctl"
 			chmod 0755 "$stage/data/etc/init.d/wloc-service" "$stage/data/usr/sbin/"*

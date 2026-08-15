@@ -50,5 +50,13 @@
       "type": "view",
       "path": "wificalling-location-gateway/faq"
     }
+  },
+  "admin/services/wificalling-location-gateway/health": {
+    "title": "Service Status",
+    "order": 30,
+    "action": {
+      "type": "view",
+      "path": "wificalling-location-gateway/wloc-health"
+    }
   }
 }
