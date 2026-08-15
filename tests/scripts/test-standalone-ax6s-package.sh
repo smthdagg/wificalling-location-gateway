@@ -42,10 +42,15 @@ cat > "$tmp/gateway/data/usr/libexec/wificalling-gateway/compiler.sh" <<'COMPILE
 COMPILER
 cat > "$tmp/gateway/data/usr/libexec/wificalling-gateway/node-health.sh" <<'HEALTH'
 #!/bin/sh
+output=${2:-/var/run/wificalling-gateway/node-status.json}
 json_escape() {
 	printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
+	printf '{"generated_at":%s,"note":"ICMP ping only; this is not a proxy protocol handshake.","nodes":[' "$(date +%s)"
 		[ "$first" -eq 1 ] || printf ','
+		printf '{"id":"%s","label":"%s","protocol":"%s","server":"%s","port":%s,"state":"%s","measurement":"%s","ping_ms":%s}' \
+			"$(json_escape "$id")" "$(json_escape "$label")" "$(json_escape "$protocol")" \
+			"$(json_escape "$server")" "$port" "$state" "$measurement" "$ping_json"
 HEALTH
 chmod 0755 "$tmp/gateway/data/usr/libexec/wificalling-gateway/node-health.sh"
 cat >> "$tmp/gateway/data/etc/init.d/wificalling-gateway" <<'INITD'
@@ -142,6 +147,14 @@ grep -F 'wg_handshake_test' \
 	fail 'standalone package must patch node-health.sh with the wireguard handshake test'
 [ "$(grep -c 'wg_handshake_test' "$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh")" -ge 2 ] ||
 	fail 'standalone package handshake patch must define and call wg_handshake_test'
+grep -F 'compact_status_marker' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
+	fail 'standalone package must compact the node-status.json output'
+[ "$(grep -c '"id":"%s","state":"%s","measurement":"%s","ping_ms":%s' "$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh")" -eq 1 ] ||
+	fail 'standalone package compact output must drop the unused fields'
+grep -F '"note":"ICMP ping only' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null &&
+	fail 'standalone package compact output must drop the note field'
 
 if GATEWAY_IPK="$tmp/gateway.ipk" GATEWAY_IPK_SHA256=deadbeef \
 	WLOC_SERVICE_BIN="$tmp/wloc-service" WLOC_CTL_BIN="$tmp/wloc-ctl" \
