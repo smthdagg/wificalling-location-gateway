@@ -297,7 +297,7 @@ Detailed collaboration: [Multi-agent workflow](docs/MULTI_AGENT_WORKFLOW.md).
 
 ## Star growth
 
-[![Star History](https://cdn.jsdelivr.net/gh/smthdagg/wificalling-location-gateway@star-chart/docs/images/star-history.svg)](https://github.com/smthdagg/wificalling-location-gateway/stargazers)
+[![Star History](https://cdn.jsdelivr.net/gh/smthdagg/wificalling-location-gateway@star-chart/docs/images/star-history.svg?v=2)](https://github.com/smthdagg/wificalling-location-gateway/stargazers)
 
 > The chart is regenerated daily by the `star-history-chart` workflow (or manually from the Actions tab): it reads the official star timeline with GitHub's auto-injected token and renders the SVG locally — the token is never written to any repository file and no third-party service is involved. `main` is branch-protected and the chart lives on the `star-chart` branch, embedded via the jsDelivr CDN; stars earned before GitHub exposed the timeline (the initial period) do not appear.
 
@@ -584,7 +584,7 @@ docs/                        API、安全、部署、测试和双语用户教程
 
 ## Star 增长
 
-[![Star History](https://cdn.jsdelivr.net/gh/smthdagg/wificalling-location-gateway@star-chart/docs/images/star-history.svg)](https://github.com/smthdagg/wificalling-location-gateway/stargazers)
+[![Star History](https://cdn.jsdelivr.net/gh/smthdagg/wificalling-location-gateway@star-chart/docs/images/star-history.svg?v=2)](https://github.com/smthdagg/wificalling-location-gateway/stargazers)
 
 > 图表由 `star-history-chart` 工作流每日自动更新（也可在 Actions 页面手动运行）：用 GitHub 自动注入的 token 读取官方 star 时间线并本地生成 SVG，token 不写入仓库任何文件，也不经过第三方服务。main 受分支保护，图表发布在 `star-chart` 分支并经 jsDelivr CDN 嵌入；首次生成前的 star 历史（GitHub 未开放时间线访问的时期）不会出现在图中。
 
