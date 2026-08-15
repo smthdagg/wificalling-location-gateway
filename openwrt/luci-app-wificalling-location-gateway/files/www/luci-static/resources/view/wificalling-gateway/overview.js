@@ -118,9 +118,43 @@ return view.extend({
 
 		var m = new form.Map('wificalling-gateway', wlocI18n.t('Wi-Fi Calling Gateway settings'),
 			wlocI18n.t('Configure proxy nodes and assign fixed LAN devices. Monitoring and logs are available from the submenu.'));
+
+		// Parse a standard WireGuard config block ([Interface]/[Peer]) into
+		// the same node object the link importer produces, so a conf file
+		// can be pasted directly instead of being converted to wg:// first.
+		function parseWireguardConf(text) {
+			var section = null, iface = {}, peer = {};
+			text.split('\n').forEach(function(line) {
+				var t = line.trim();
+				if (t === '[Interface]') { section = 'iface'; return; }
+				if (t === '[Peer]') { section = 'peer'; return; }
+				if (!section || !t || t.indexOf('#') === 0) return;
+				var eq = t.indexOf('=');
+				if (eq < 0) return;
+				var key = t.slice(0, eq).trim(), val = t.slice(eq + 1).trim();
+				if (section === 'iface') iface[key] = val; else peer[key] = val;
+			});
+			if (!iface.PrivateKey || !iface.Address || !peer.PublicKey || !peer.Endpoint)
+				throw new Error(wlocI18n.t('WireGuard conf needs PrivateKey, Address, Peer PublicKey and Endpoint'));
+			var endpoint = peer.Endpoint.trim().split(':');
+			if (endpoint.length !== 2 || !/^[0-9]+$/.test(endpoint[1]))
+				throw new Error(wlocI18n.t('Invalid WireGuard endpoint: ') + peer.Endpoint);
+			return {
+				enabled: '1', protocol: 'wireguard',
+				label: 'WireGuard ' + endpoint[0],
+				server: endpoint[0], port: endpoint[1],
+				public_key: peer.PublicKey,
+				private_key: iface.PrivateKey,
+				local_address: iface.Address.split(',')[0].trim(),
+				reserved: iface.Reserved || '',
+				mtu: iface.MTU || '',
+				pre_shared_key: peer.PresharedKey || ''
+			};
+		}
+
 		var importPanel = E('div', { class: 'cbi-section' }, [
 			E('h3', {}, wlocI18n.t('Import proxy node')),
-			E('p', {}, wlocI18n.t('Paste one AnyTLS, Hysteria2/Hy2, TUIC, VLESS, VMess, Trojan, or WireGuard (wg://) link. It is parsed locally in this browser and is not sent to an external service.')),
+			E('p', {}, wlocI18n.t('Paste one AnyTLS, Hysteria2/Hy2, TUIC, VLESS, VMess, Trojan, or WireGuard link (wg:// or an [Interface]/[Peer] config block). It is parsed locally in this browser and is not sent to an external service.')),
 			E('div', { class: 'cbi-section-create' }, [
 				E('button', { class: 'cbi-button cbi-button-add', click: function() {
 				var input = E('textarea', { class: 'cbi-input-textarea', rows: 6, style: 'width:100%', placeholder: 'anytls://…' });
@@ -128,7 +162,11 @@ return view.extend({
 					E('button', { class: 'btn', click: ui.hideModal }, wlocI18n.t('Cancel')),
 					E('button', { class: 'btn cbi-button-positive', click: function() {
 						var parsed;
-						try { parsed = nodeImport.parse(input.value); }
+						try {
+							parsed = /^\s*\[Interface\]/m.test(input.value)
+								? parseWireguardConf(input.value)
+								: nodeImport.parse(input.value);
+						}
 						catch (err) { ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to parse node link:') + ' ' + err.message), 'error'); return; }
 						var sid = uci.add('wificalling-gateway', 'node');
 						Object.keys(parsed).forEach(function(key) { if (parsed[key] !== '') uci.set('wificalling-gateway', sid, key, parsed[key]); });
