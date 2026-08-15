@@ -102,16 +102,6 @@ if [ -f "$node_status" ]; then
 	[ "$nodes_unknown" -lt 0 ] && nodes_unknown=0
 fi
 
-# --- log tail -------------------------------------------------------------
-log_tail=$(logread 2>/dev/null | grep -E 'wloc-service|wificalling-gateway|sing-box' | tail -n 12 || true)
-log_json='[]'
-if [ -n "$log_tail" ]; then
-	log_json=$(printf '%s\n' "$log_tail" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '
-		BEGIN { printf "[" }
-		{ if (NR > 1) printf ","; printf "\"%s\"", $0 }
-		END { printf "]" }')
-fi
-
 printf '{"generated_at":%s,' "$now"
 printf '"services":{"wloc":{"running":%s,"socket":%s,"status_fresh":%s,"phase":"%s","exit":"%s","geo":"%s","last_error":%s},' \
 	"$wloc_running" "$wloc_socket" "$wloc_status_fresh" "$wloc_phase" "$wloc_exit" "$wloc_geo" "$wloc_error"
@@ -119,6 +109,5 @@ printf '"gateway":{"running":%s,"monitor":%s,"singbox":%s,"config_present":%s,"c
 	"$monitor_running" "$monitor_running" "$sb_running" "$sb_config" "$sb_config_valid" "$sb_config_age" "$norm_fresh" "$nft_rules" "$devices"
 printf '"patches":{"psk":%s,"handshake":%s,"compact":%s,"device_guard":%s}}},' \
 	"$patch_psk" "$patch_health" "$patch_compact" "$patch_device_guard"
-printf '"nodes":{"total":%s,"ok":%s,"down":%s,"unknown":%s},' \
+printf '"nodes":{"total":%s,"ok":%s,"down":%s,"unknown":%s}}\n' \
 	"$nodes_total" "$nodes_ok" "$nodes_down" "$nodes_unknown"
-printf '"log":%s}\n' "$log_json"

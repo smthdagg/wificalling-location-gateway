@@ -39,13 +39,11 @@ return view.extend({
 		var wlocBody = E('div', {}, []);
 		var gwBody = E('div', {}, []);
 		var extraBody = E('div', {}, []);
-		var logBody = E('div', {}, []);
 
 		function renderHealth(h) {
 			wlocBody.innerHTML = '';
 			gwBody.innerHTML = '';
 			extraBody.innerHTML = '';
-			logBody.innerHTML = '';
 
 			var s = h.services || {};
 			var w = s.wloc || {};
@@ -99,15 +97,6 @@ return view.extend({
 				' ',
 				nodes.down ? E('span', { style: 'color:#dc2626;margin-left:10px' }, nodes.down + ' ' + wlocI18n.t('offline')) : E([])
 			]));
-
-			// log lines
-			(h.log || []).forEach(function(line) {
-				logBody.appendChild(E('div', { style: 'padding:1px 0' },
-					E('code', { style: 'font-size:11px;color:#555;word-break:break-all' }, line)));
-			});
-			if (!(h.log || []).length) {
-				row(logBody, wlocI18n.t('Recent logs'), wlocI18n.t('No log lines yet'));
-			}
 			if (h.error) {
 				row(wlocBody, wlocI18n.t('Health check'), E('span', { style: 'color:#dc2626' }, h.error));
 			}
@@ -130,13 +119,9 @@ return view.extend({
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Gateway')),
 				gwBody
 			]),
-			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
+			E('div', { 'class': 'cbi-section' }, [
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Patches and nodes')),
 				extraBody
-			]),
-			E('div', { 'class': 'cbi-section' }, [
-				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Recent logs')),
-				logBody
 			])
 		]);
 	}
