@@ -2,6 +2,26 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.0.11] - 2026-08-16
+
+### Changed
+
+- **Service Status page**: the Wi-Fi Calling Gateway block and its restart
+  button now come first (matching the submenu order), followed by WLOC.
+- **One-click service restarts** on the Service Status page: "Restart
+  Wi-Fi Calling gateway" regenerates the proxy config and restarts
+  sing-box; "Restart WLOC service" restarts the daemon. The health report
+  refreshes immediately after each restart.
+- **Proxy config age clarified**: a large age is normal (the config is
+  only regenerated on gateway restart), so the page shows "generated N s
+  ago" and only warns when nodes/devices were changed without a restart.
+
+### 中文说明
+
+- **改进**：服务状态页顺序调整为 Wi-Fi 通话网关在前、WLOC 在后（与子菜单一致），重启按钮同步。
+- **新增**：服务状态页一键重启按钮——「重启 Wi-Fi 通话网关」会重新生成代理配置并重启 sing-box；「重启 WLOC 服务」重启守护进程；重启后健康报告立即刷新。
+- **改进**：代理配置年龄语义澄清——配置只在网关重启时重新生成，数值大属正常，页面改为显示「N 秒前生成」，仅当节点/设备变更而未重启时给出提示。
+
 ## [1.0.10] - 2026-08-16
 
 ### Changed
