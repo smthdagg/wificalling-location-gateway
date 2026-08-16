@@ -70,7 +70,11 @@ return view.extend({
 			row(gwBody, wlocI18n.t('Monitor'), statusDot(!!g.running, g.running ? wlocI18n.t('Running') : wlocI18n.t('Stopped')));
 			row(gwBody, wlocI18n.t('sing-box'), statusDot(!!g.singbox, g.singbox ? wlocI18n.t('Running') : wlocI18n.t('Stopped')));
 			row(gwBody, wlocI18n.t('Proxy config'), statusDot(!!g.config_valid, g.config_valid ? wlocI18n.t('Valid') : wlocI18n.t('Invalid')));
-			row(gwBody, wlocI18n.t('Config age'), ageText(g.config_age));
+			row(gwBody, wlocI18n.t('Proxy config age'), ageText(g.config_age));
+			if (g.config_stale) {
+				row(gwBody, wlocI18n.t('Config changed'), E('span', { style: 'color:#d97706' },
+					wlocI18n.t('Nodes/devices changed - restart the gateway to apply')));
+			}
 			row(gwBody, wlocI18n.t('nftables'), g.nft_rules + ' ' + wlocI18n.t('rules'));
 			row(gwBody, wlocI18n.t('Devices'), g.devices + ' ' + wlocI18n.t('policies'));
 
@@ -133,6 +137,5 @@ function yesNo(v) {
 
 function ageText(seconds) {
 	if (seconds == null || seconds < 0) return '-';
-	if (seconds <= 120) return wlocI18n.t('Fresh');
-	return wlocI18n.t('Stale (%d s)').format(seconds);
+	return wlocI18n.t('generated %d s ago').format(seconds);
 }

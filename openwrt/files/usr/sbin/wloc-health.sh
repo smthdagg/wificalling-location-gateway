@@ -56,9 +56,18 @@ sb_running=0; [ -n "$sb_pid" ] && sb_running=1
 
 rundir=/var/run/wificalling-gateway
 sb_config=0; sb_config_valid=0; sb_config_age=-1
+# True only when the UCI config changed AFTER the running proxy config was
+# generated - i.e. the admin edited nodes/devices but the gateway was not
+# restarted, so sing-box still runs the old config. A large config age by
+# itself is normal: the config is only regenerated on restart.
+sb_config_stale=0
 if [ -f "$rundir/sing-box.json" ]; then
 	sb_config=1
 	sb_config_age=$(file_age "$rundir/sing-box.json")
+	if [ -f /etc/config/wificalling-gateway ] \
+		&& [ /etc/config/wificalling-gateway -nt "$rundir/sing-box.json" ]; then
+		sb_config_stale=1
+	fi
 	if command -v sing-box >/dev/null 2>&1; then
 		if sing-box check -c "$rundir/sing-box.json" >/dev/null 2>&1; then
 			sb_config_valid=1
@@ -105,8 +114,8 @@ fi
 printf '{"generated_at":%s,' "$now"
 printf '"services":{"wloc":{"running":%s,"socket":%s,"status_fresh":%s,"phase":"%s","exit":"%s","geo":"%s","last_error":%s},' \
 	"$wloc_running" "$wloc_socket" "$wloc_status_fresh" "$wloc_phase" "$wloc_exit" "$wloc_geo" "$wloc_error"
-printf '"gateway":{"running":%s,"monitor":%s,"singbox":%s,"config_present":%s,"config_valid":%s,"config_age":%s,"normalized_fresh":%s,"nft_rules":%s,"devices":%s,' \
-	"$monitor_running" "$monitor_running" "$sb_running" "$sb_config" "$sb_config_valid" "$sb_config_age" "$norm_fresh" "$nft_rules" "$devices"
+printf '"gateway":{"running":%s,"monitor":%s,"singbox":%s,"config_present":%s,"config_valid":%s,"config_age":%s,"config_stale":%s,"nft_rules":%s,"devices":%s,' \
+	"$monitor_running" "$monitor_running" "$sb_running" "$sb_config" "$sb_config_valid" "$sb_config_age" "$sb_config_stale" "$nft_rules" "$devices"
 printf '"patches":{"psk":%s,"handshake":%s,"compact":%s,"device_guard":%s}}},' \
 	"$patch_psk" "$patch_health" "$patch_compact" "$patch_device_guard"
 printf '"nodes":{"total":%s,"ok":%s,"down":%s,"unknown":%s}}\n' \
