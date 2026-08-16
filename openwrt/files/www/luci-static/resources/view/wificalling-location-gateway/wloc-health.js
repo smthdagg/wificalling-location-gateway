@@ -160,19 +160,19 @@ return view.extend({
 			E('div', {}, [
 				E('button', {
 					'class': 'cbi-button cbi-button-apply',
-					'id': 'wloc-restart-wloc',
-					style: 'margin-right:8px',
-					click: restartAction(restartWloc,
-						wlocI18n.t('WLOC service restarted'),
-						wlocI18n.t('Restarting…'))
-				}, wlocI18n.t('Restart WLOC service')),
-				E('button', {
-					'class': 'cbi-button cbi-button-apply',
 					'id': 'wloc-restart-gateway',
+					style: 'margin-right:8px',
 					click: restartAction(restartGateway,
 						wlocI18n.t('Gateway restarted - proxy was briefly interrupted'),
 						wlocI18n.t('Restarting…'))
-				}, wlocI18n.t('Restart Wi-Fi Calling gateway'))
+				}, wlocI18n.t('Restart Wi-Fi Calling gateway')),
+				E('button', {
+					'class': 'cbi-button cbi-button-apply',
+					'id': 'wloc-restart-wloc',
+					click: restartAction(restartWloc,
+						wlocI18n.t('WLOC service restarted'),
+						wlocI18n.t('Restarting…'))
+				}, wlocI18n.t('Restart WLOC service'))
 			]),
 			E('p', { style: 'color:#666;font-size:12px;margin-bottom:0' },
 				wlocI18n.t('Restarting the gateway regenerates the proxy config and briefly interrupts device proxying.'))
@@ -180,12 +180,12 @@ return view.extend({
 
 		return E([], [
 			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
-				E('h3', { style: 'margin-top:0' }, wlocI18n.t('WLOC service')),
-				wlocBody
-			]),
-			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Gateway')),
 				gwBody
+			]),
+			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
+				E('h3', { style: 'margin-top:0' }, wlocI18n.t('WLOC service')),
+				wlocBody
 			]),
 			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Patches and nodes')),
