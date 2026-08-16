@@ -76,6 +76,30 @@ return view.extend({
 		// right now - a WireGuard handshake (bypassing the monitor's
 		// result cache) or a TCP reachability probe for other protocols -
 		// and reports the exit IP or the failure reason.
+		// The result banner carries an explicit close button (the stock
+		// LuCI notification's dismiss control is easy to miss under some
+		// themes) and never auto-dismisses.
+		function testNotify(message, kind) {
+			var mc = document.querySelector('#maincontent') || document.body;
+			var msg = E('div', {
+				'class': 'alert-message fade-in ' + (kind || 'info'),
+				style: 'display:flex;align-items:center;padding:8px 12px'
+			}, [
+				E('div', { style: 'flex:1' }, E('p', { style: 'margin:0' }, message)),
+				E('button', {
+					'class': 'btn',
+					style: 'margin-left:12px;white-space:nowrap',
+					click: function() {
+						msg.classList.add('fade-out');
+						window.setTimeout(function() {
+							if (msg.parentNode) msg.parentNode.removeChild(msg);
+						}, 400);
+					}
+				}, wlocI18n.t('Close'))
+			]);
+			mc.insertBefore(msg, mc.firstElementChild);
+			return msg;
+		}
 		function runNodeTest(id, btn) {
 			if (btn.disabled) return;
 			btn.disabled = true;
@@ -85,24 +109,24 @@ return view.extend({
 				btn.disabled = false;
 				btn.textContent = original;
 				if (r && r.state === 'handshake_ok') {
-					ui.addNotification(null, E('p', {}, wlocI18n.t('Handshake OK') + ' — ' + r.exit_ip), 'info');
+					testNotify(wlocI18n.t('Handshake OK') + ' — ' + r.exit_ip, 'info');
 				}
 				else if (r && r.state === 'handshake_failed') {
-					ui.addNotification(null, E('p', {}, wlocI18n.t('Handshake failed') + ' (' + wgFailReason(r.reason) + ')'), 'error');
+					testNotify(wlocI18n.t('Handshake failed') + ' (' + wgFailReason(r.reason) + ')', 'error');
 				}
 				else if (r && r.state === 'tcp_reachable') {
-					ui.addNotification(null, E('p', {}, wlocI18n.t('Alive') + (r.ping_ms ? ' — ' + r.ping_ms + ' ms' : '')), 'info');
+					testNotify(wlocI18n.t('Alive') + (r.ping_ms ? ' — ' + r.ping_ms + ' ms' : ''), 'info');
 				}
 				else if (r && r.state === 'unreachable') {
-					ui.addNotification(null, E('p', {}, wlocI18n.t('Offline')), 'error');
+					testNotify(wlocI18n.t('Offline'), 'error');
 				}
 				else {
-					ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to test node: ') + wgFailReason(r && r.reason)), 'error');
+					testNotify(wlocI18n.t('Unable to test node: ') + wgFailReason(r && r.reason), 'error');
 				}
 			}).catch(function(e) {
 				btn.disabled = false;
 				btn.textContent = original;
-				ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to test node: ') + String(e)), 'error');
+				testNotify(wlocI18n.t('Unable to test node: ') + String(e), 'error');
 			});
 		}
 		function latency(n) {
@@ -354,8 +378,9 @@ return view.extend({
 			var testBtn = E('button', {
 				'class': 'btn cbi-button cbi-button-action',
 				id: 'wfc-node-test-' + section_id,
+				title: wlocI18n.t('Run a fresh connection test for this node'),
 				click: function() { runNodeTest(section_id, this); }
-			}, wlocI18n.t('Test connection'));
+			}, 'nodeTest');
 			tdEl.lastElementChild.insertBefore(testBtn, tdEl.lastElementChild.firstChild);
 			return tdEl;
 		};

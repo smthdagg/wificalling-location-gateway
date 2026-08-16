@@ -67,14 +67,21 @@ function main() {
 			`${relative}: the view must declare the node_test rpcd method`);
 		assert(source.includes("'wfc-node-test-'"),
 			`${relative}: every node row must carry a test button`);
-		assert(source.includes("wlocI18n.t('Test connection')"),
-			`${relative}: the test button label must be localizable`);
+		assert(source.includes("}, 'nodeTest')"),
+			`${relative}: the test button label must be nodeTest`);
 		assert(source.includes('renderRowActions'),
 			`${relative}: the test button must be injected into the row actions (before Edit/Delete)`);
 		assert(source.includes('modalonly = true'),
 			`${relative}: the detail fields must stay hidden from the table (visible in the edit modal)`);
 		assert(source.includes("'label', wlocI18n.t('Name')"),
 			`${relative}: the name column must be labelled Name`);
+		// The test result banner must carry an explicit close button and
+		// must not auto-dismiss (the stock notification's dismiss control
+		// is easy to miss under some themes).
+		assert(source.includes('function testNotify'),
+			`${relative}: the test result banner must be rendered by a helper with an explicit close button`);
+		assert(source.includes("wlocI18n.t('Close')"),
+			`${relative}: the test result banner must have a close button`);
 	});
 
 	i18nSources.forEach(function(relative) {
@@ -85,8 +92,10 @@ function main() {
 			`${relative}: missing timeout translation key`);
 		assert(source.includes("'Server unreachable': '服务器不可达'"),
 			`${relative}: missing unreachable translation`);
-		assert(source.includes("'Test connection': '测试连接'"),
-			`${relative}: missing test button translation`);
+		assert(source.includes("'Close': '关闭'"),
+			`${relative}: missing close button translation`);
+		assert(source.includes("'Run a fresh connection test for this node'"),
+			`${relative}: missing test button tooltip translation`);
 		assert(source.includes("'Testing…': '测试中…'"),
 			`${relative}: missing testing state translation`);
 		assert(source.includes("'Unable to test node: '"),
