@@ -47,7 +47,15 @@ return view.extend({
 		function nodeState(n) {
 			if (!n) return '-';
 			if (n.state === 'handshake_ok') return wlocI18n.t('Handshake OK');
-			if (n.state === 'handshake_failed') return wlocI18n.t('Handshake failed');
+			if (n.state === 'handshake_failed') {
+				// The status export classifies failed handshakes so a bad
+				// node (missing keys, psk mismatch) is visible as such
+				// instead of a bare "Offline".
+				var reason = n.reason === 'config_missing' ? wlocI18n.t('Missing key/address')
+					: n.reason === 'timeout' ? wlocI18n.t('Handshake timed out (key/psk mismatch?)')
+					: n.reason === 'unreachable' ? wlocI18n.t('Server unreachable') : '';
+				return wlocI18n.t('Handshake failed') + (reason ? ' (' + reason + ')' : '');
+			}
 			if (n.state === 'reachable' || n.state === 'tcp_reachable') return wlocI18n.t('Alive');
 			if (n.state === 'unreachable') return wlocI18n.t('Offline');
 			return wlocI18n.t('Unknown');

@@ -49,13 +49,15 @@ edits = [
         '\tprintf \'{"generated_at":%s,"note":"ICMP ping only; this is not a proxy protocol handshake.","nodes":[\' "$(date +%s)"',
         '\tprintf \'{"generated_at":%s,"nodes":[\' "$(date +%s)"',
     ),
-    # Emit only the fields the LuCI view actually reads.
+    # Emit only the fields the LuCI view actually reads. The wireguard
+    # handshake patch sets reason_json (config_missing/timeout/unreachable)
+    # on failed handshakes; every other node falls back to null.
     (
         "\t\tprintf '{\"id\":\"%s\",\"label\":\"%s\",\"protocol\":\"%s\",\"server\":\"%s\",\"port\":%s,\"state\":\"%s\",\"measurement\":\"%s\",\"ping_ms\":%s}' \\\n"
         "\t\t\t\"$(json_escape \"$id\")\" \"$(json_escape \"$label\")\" \"$(json_escape \"$protocol\")\" \\\n"
         "\t\t\t\"$(json_escape \"$server\")\" \"$port\" \"$state\" \"$measurement\" \"$ping_json\"",
-        "printf '{\"id\":\"%s\",\"state\":\"%s\",\"measurement\":\"%s\",\"ping_ms\":%s}' \\\n"
-        "\t\t\t\"$(json_escape \"$id\")\" \"$state\" \"$measurement\" \"$ping_json\"",
+        "printf '{\"id\":\"%s\",\"state\":\"%s\",\"measurement\":\"%s\",\"ping_ms\":%s,\"reason\":%s}' \\\n"
+        "\t\t\t\"$(json_escape \"$id\")\" \"$state\" \"$measurement\" \"$ping_json\" \"${reason_json:-null}\"",
     ),
     # The handshake exit IP is a string and must be quoted, otherwise the
     # whole status document is invalid JSON ("ping_ms":1.2.3.4) and the

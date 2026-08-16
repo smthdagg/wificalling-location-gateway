@@ -154,11 +154,32 @@ grep -F 'wg_handshake_test' \
 	fail 'standalone package must patch node-health.sh with the wireguard handshake test'
 [ "$(grep -c 'wg_handshake_test' "$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh")" -ge 2 ] ||
 	fail 'standalone package handshake patch must define and call wg_handshake_test'
+grep -F '[ -n "$reserved" ]' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
+	fail 'standalone package handshake patch must forward the reserved field'
+grep -F 'reason_json=' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
+	fail 'standalone package handshake patch must report a failure reason'
+grep -F 'config_missing' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
+	fail 'standalone package handshake patch must distinguish missing key material'
+grep -F 'md5sum | cut -c1-4' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
+	fail 'standalone package handshake patch must derive the probe port from a busybox-safe hash'
+grep -F 'wg-health.lock' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
+	fail 'standalone package handshake patch must serialize concurrent handshake tests'
+grep -F 'kill -0' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
+	fail 'standalone package handshake patch must reclaim stale test locks'
 grep -F 'compact_status_marker' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
 	fail 'standalone package must compact the node-status.json output'
 [ "$(grep -c '"id":"%s","state":"%s","measurement":"%s","ping_ms":%s' "$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh")" -eq 1 ] ||
 	fail 'standalone package compact output must drop the unused fields'
+grep -F '"reason":%s' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
+	fail 'standalone package compact output must include the handshake failure reason'
 grep -F '"note":"ICMP ping only' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null &&
 	fail 'standalone package compact output must drop the note field'
