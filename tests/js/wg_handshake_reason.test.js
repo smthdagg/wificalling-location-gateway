@@ -63,12 +63,18 @@ function main() {
 		assert(source.includes("wlocI18n.t('Handshake failed')"),
 			`${relative}: the failed-handshake label must stay localizable`);
 		// Manual per-node connection test button.
-		assert(source.includes("method: 'wg_test'"),
-			`${relative}: the view must declare the wg_test rpcd method`);
+		assert(source.includes("method: 'node_test'"),
+			`${relative}: the view must declare the node_test rpcd method`);
 		assert(source.includes("'wfc-node-test-'"),
-			`${relative}: every wireguard node row must carry a test button`);
+			`${relative}: every node row must carry a test button`);
 		assert(source.includes("wlocI18n.t('Test connection')"),
 			`${relative}: the test button label must be localizable`);
+		assert(source.includes('renderRowActions'),
+			`${relative}: the test button must be injected into the row actions (before Edit/Delete)`);
+		assert(source.includes('modalonly = true'),
+			`${relative}: the detail fields must stay hidden from the table (visible in the edit modal)`);
+		assert(source.includes("'label', wlocI18n.t('Name')"),
+			`${relative}: the name column must be labelled Name`);
 	});
 
 	i18nSources.forEach(function(relative) {

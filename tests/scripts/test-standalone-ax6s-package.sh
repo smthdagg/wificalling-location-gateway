@@ -181,18 +181,18 @@ grep -F '"reason":%s' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
 	fail 'standalone package compact output must include the handshake failure reason'
 # The manual per-node connection test helper must ship and be wired into
-# rpcd so the LuCI "Test connection" button can ask for a fresh handshake.
+# rpcd so the LuCI "Test connection" button can ask for a fresh check.
 grep -F 'wg_handshake_test' \
-	"$tmp/result/data/usr/libexec/wificalling-gateway/wg-test.sh" >/dev/null ||
-	fail 'standalone package must ship the manual wireguard test helper'
-grep -F 'wg_test' \
+	"$tmp/result/data/usr/libexec/wificalling-gateway/node-test.sh" >/dev/null ||
+	fail 'standalone package must ship the manual node test helper'
+grep -F 'node_test' \
 	"$tmp/result/data/usr/libexec/rpcd/luci.wloc" >/dev/null ||
-	fail 'standalone package rpcd plugin must expose the wg_test method'
-grep -F 'wg_test' \
+	fail 'standalone package rpcd plugin must expose the node_test method'
+grep -F 'node_test' \
 	"$tmp/result/data/usr/share/rpcd/acl.d/luci-app-wificalling-location-gateway.json" >/dev/null ||
-	fail 'standalone package ACL must whitelist the wg_test method'
-[ -x "$tmp/result/data/usr/libexec/wificalling-gateway/wg-test.sh" ] ||
-	fail 'standalone package wg-test.sh must be executable'
+	fail 'standalone package ACL must whitelist the node_test method'
+[ -x "$tmp/result/data/usr/libexec/wificalling-gateway/node-test.sh" ] ||
+	fail 'standalone package node-test.sh must be executable'
 grep -F '"note":"ICMP ping only' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null &&
 	fail 'standalone package compact output must drop the note field'

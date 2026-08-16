@@ -10,9 +10,9 @@
 'require ui';
 'require wificalling-gateway.node-import as nodeImport';
 
-var wgTest = rpc.declare({
+var nodeTestRpc = rpc.declare({
 	object: 'luci.wloc',
-	method: 'wg_test',
+	method: 'node_test',
 	params: ['id'],
 	expect: {}
 });
@@ -72,15 +72,16 @@ return view.extend({
 			if (reason === 'unreachable') return wlocI18n.t('Server unreachable');
 			return reason || '';
 		}
-		// Manual connection test: asks the router to run a fresh WireGuard
-		// handshake right now (bypassing the monitor's result cache) and
-		// reports the exit IP or the failure reason.
-		function runWgTest(id, btn) {
+		// Manual connection test: asks the router to run a fresh check
+		// right now - a WireGuard handshake (bypassing the monitor's
+		// result cache) or a TCP reachability probe for other protocols -
+		// and reports the exit IP or the failure reason.
+		function runNodeTest(id, btn) {
 			if (btn.disabled) return;
 			btn.disabled = true;
 			var original = btn.textContent;
 			btn.textContent = wlocI18n.t('Testing…');
-			wgTest(id).then(function(r) {
+			nodeTestRpc(id).then(function(r) {
 				btn.disabled = false;
 				btn.textContent = original;
 				if (r && r.state === 'handshake_ok') {
@@ -88,6 +89,12 @@ return view.extend({
 				}
 				else if (r && r.state === 'handshake_failed') {
 					ui.addNotification(null, E('p', {}, wlocI18n.t('Handshake failed') + ' (' + wgFailReason(r.reason) + ')'), 'error');
+				}
+				else if (r && r.state === 'tcp_reachable') {
+					ui.addNotification(null, E('p', {}, wlocI18n.t('Alive') + (r.ping_ms ? ' — ' + r.ping_ms + ' ms' : '')), 'info');
+				}
+				else if (r && r.state === 'unreachable') {
+					ui.addNotification(null, E('p', {}, wlocI18n.t('Offline')), 'error');
 				}
 				else {
 					ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to test node: ') + wgFailReason(r && r.reason)), 'error');
@@ -266,7 +273,7 @@ return view.extend({
 		s.addremove = true; s.nodescriptions = true; s.anonymous = true; s.addbtntitle = wlocI18n.t('Add proxy node');
 		s.sectiontitle = function(id) { return uci.get('wificalling-gateway', id, 'label') || id; };
 		s.option(form.Flag, 'enabled', wlocI18n.t('Enable')).default = '1';
-		var nodeLabel = s.option(form.Value, 'label', wlocI18n.t('Node display name'));
+		var nodeLabel = s.option(form.Value, 'label', wlocI18n.t('Name'));
 		nodeLabel.rmempty = false; nodeLabel.placeholder = wlocI18n.t('Example: UK AnyTLS');
 		nodeLabel.description = wlocI18n.t('This name is shown in the device node selector.');
 		var p = s.option(form.ListValue, 'protocol', wlocI18n.t('Protocol'));
@@ -279,26 +286,21 @@ return view.extend({
 		nodePing.textvalue = function(id) { return E('span', { id: 'wfc-node-ping-' + id }, latency(nodeById(id))); };
 		var nodeQuality = s.option(form.DummyValue, '_node_quality', wlocI18n.t('Quality'));
 		nodeQuality.textvalue = function(id) { return E('span', { id: 'wfc-node-quality-' + id }, quality(nodeById(id))); };
-		var nodeTest = s.option(form.DummyValue, '_node_test', wlocI18n.t('Test connection'));
-		nodeTest.textvalue = function(id) {
-			// Only WireGuard nodes have a handshake to test.
-			if (uci.get('wificalling-gateway', id, 'protocol') !== 'wireguard')
-				return '';
-			return E('button', {
-				'class': 'cbi-button cbi-button-action',
-				id: 'wfc-node-test-' + id,
-				click: function() { runWgTest(id, this); }
-			}, wlocI18n.t('Test connection'));
-		};
+		// Every remaining field stays editable in the per-node modal but
+		// is hidden from the table so rows stay compact (Edit shows them).
 		var secret = s.option(form.Value, 'password', wlocI18n.t('Password'));
 		secret.password = true; secret.textvalue = function(id) { return this.cfgvalue(id) ? wlocI18n.t('Set') : wlocI18n.t('Not set'); };
+		secret.modalonly = true;
 		var uuidField = s.option(form.Value, 'uuid', wlocI18n.t('UUID'));
 		uuidField.password = true; uuidField.textvalue = function(id) { return this.cfgvalue(id) ? wlocI18n.t('Set') : wlocI18n.t('Not set'); };
-		s.option(form.Value, 'sni', wlocI18n.t('TLS server name'));
+		uuidField.modalonly = true;
+		var sniOpt = s.option(form.Value, 'sni', wlocI18n.t('TLS server name'));
+		sniOpt.modalonly = true;
 		var securityOpt = s.option(form.ListValue, 'security', wlocI18n.t('Security'));
 		securityOpt.value('', wlocI18n.t('None')); securityOpt.value('tls'); securityOpt.value('reality');
 		securityOpt.depends('protocol', 'vless');
 		securityOpt.depends('protocol', 'vmess');
+		securityOpt.modalonly = true;
 		// The compiler has no reality arm for VMess; selecting it would emit a
 		// cleartext outbound that sing-box check accepts. Reject it up front.
 		securityOpt.validate = function(section_id, value) {
@@ -308,27 +310,55 @@ return view.extend({
 				return false;
 			return true;
 		};
-		s.option(form.Flag, 'insecure', wlocI18n.t('Allow insecure certificate'));
-		s.option(form.Value, 'alpn', wlocI18n.t('ALPN'));
-		s.option(form.Value, 'pin_sha256', wlocI18n.t('TLS public-key SHA-256 (base64)'));
-		s.option(form.Value, 'flow', wlocI18n.t('VLESS flow'));
-		s.option(form.Value, 'public_key', wlocI18n.t('Reality public key'));
-		s.option(form.Value, 'short_id', wlocI18n.t('Reality short ID'));
-		s.option(form.Value, 'fingerprint', wlocI18n.t('Reality fingerprint'));
+		var insecureOpt = s.option(form.Flag, 'insecure', wlocI18n.t('Allow insecure certificate'));
+		insecureOpt.modalonly = true;
+		var alpnOpt = s.option(form.Value, 'alpn', wlocI18n.t('ALPN'));
+		alpnOpt.modalonly = true;
+		var pinOpt = s.option(form.Value, 'pin_sha256', wlocI18n.t('TLS public-key SHA-256 (base64)'));
+		pinOpt.modalonly = true;
+		var flowOpt = s.option(form.Value, 'flow', wlocI18n.t('VLESS flow'));
+		flowOpt.modalonly = true;
+		var pubKeyOpt = s.option(form.Value, 'public_key', wlocI18n.t('Reality public key'));
+		pubKeyOpt.modalonly = true;
+		var shortIdOpt = s.option(form.Value, 'short_id', wlocI18n.t('Reality short ID'));
+		shortIdOpt.modalonly = true;
+		var fpOpt = s.option(form.Value, 'fingerprint', wlocI18n.t('Reality fingerprint'));
+		fpOpt.modalonly = true;
 		var udpMode = s.option(form.ListValue, 'udp_mode', wlocI18n.t('TUIC UDP mode'));
 		udpMode.value('native', wlocI18n.t('Native')); udpMode.value('quic', wlocI18n.t('QUIC'));
+		udpMode.modalonly = true;
 		var transport = s.option(form.ListValue, 'transport', wlocI18n.t('Transport'));
 		transport.value('', wlocI18n.t('None')); transport.value('ws', wlocI18n.t('WebSocket'));
-		s.option(form.Value, 'path', wlocI18n.t('WebSocket path'));
-		s.option(form.Value, 'host', wlocI18n.t('WebSocket Host'));
+		transport.modalonly = true;
+		var pathOpt = s.option(form.Value, 'path', wlocI18n.t('WebSocket path'));
+		pathOpt.modalonly = true;
+		var hostOpt = s.option(form.Value, 'host', wlocI18n.t('WebSocket Host'));
+		hostOpt.modalonly = true;
 		var wgKey = s.option(form.Value, 'private_key', wlocI18n.t('WireGuard private key'));
 		wgKey.password = true; wgKey.textvalue = function(id) { return this.cfgvalue(id) ? wlocI18n.t('Set') : wlocI18n.t('Not set'); };
-		s.option(form.Value, 'local_address', wlocI18n.t('WireGuard local address'));
-		s.option(form.Value, 'reserved', wlocI18n.t('WireGuard reserved (comma-separated)'));
-		s.option(form.Value, 'mtu', wlocI18n.t('WireGuard MTU'));
+		wgKey.modalonly = true;
+		var localAddrOpt = s.option(form.Value, 'local_address', wlocI18n.t('WireGuard local address'));
+		localAddrOpt.modalonly = true;
+		var reservedOpt = s.option(form.Value, 'reserved', wlocI18n.t('WireGuard reserved (comma-separated)'));
+		reservedOpt.modalonly = true;
+		var mtuOpt = s.option(form.Value, 'mtu', wlocI18n.t('WireGuard MTU'));
+		mtuOpt.modalonly = true;
 		var wgPsk = s.option(form.Value, 'pre_shared_key', wlocI18n.t('WireGuard preshared key'));
 		wgPsk.password = true; wgPsk.depends('protocol', 'wireguard');
 		wgPsk.textvalue = function(id) { return this.cfgvalue(id) ? wlocI18n.t('Set') : wlocI18n.t('Not set'); };
+		// The per-row connection test goes before the Edit/Delete buttons.
+		var nodeRowActions = s.renderRowActions;
+		s.renderRowActions = function(section_id, more_label, trEl) {
+			var tdEl = nodeRowActions.call(this, section_id, more_label, trEl);
+			if (!tdEl.lastElementChild) return tdEl;
+			var testBtn = E('button', {
+				'class': 'btn cbi-button cbi-button-action',
+				id: 'wfc-node-test-' + section_id,
+				click: function() { runNodeTest(section_id, this); }
+			}, wlocI18n.t('Test connection'));
+			tdEl.lastElementChild.insertBefore(testBtn, tdEl.lastElementChild.firstChild);
+			return tdEl;
+		};
 
 		s = m.section(form.GridSection, 'device', wlocI18n.t('Device policies'));
 		s.addremove = true; s.nodescriptions = true; s.anonymous = true; s.addbtntitle = wlocI18n.t('Add LAN device');

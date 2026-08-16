@@ -226,6 +226,7 @@ var ZH = {
 	'MAC changed, rebind on reconnect': 'MAC 已变化，重连后重新绑定',
 	'Maximum records per device': '每台设备最大记录数',
 	'Native': '原生',
+	'Name': '名称',
 	'Node display name': '节点显示名称',
 	'Node imported successfully. Reloading settings…': '节点导入成功。正在重新加载设置…',
 	'Node status': '节点状态',

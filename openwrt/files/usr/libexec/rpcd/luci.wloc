@@ -59,7 +59,7 @@ list)
 	json_close_object
 	json_add_object health
 	json_close_object
-	json_add_object wg_test
+	json_add_object node_test
 	json_close_object
 	json_dump
 	json_cleanup
@@ -234,10 +234,11 @@ call)
 		/usr/sbin/wloc-health.sh
 		exit 0
 		;;
-	wg_test)
-		# Manual WireGuard handshake test for a single node. The helper
-		# reuses the monitor's handshake function but bypasses the result
-		# cache, so the user gets a fresh answer on demand.
+	node_test)
+		# Manual connection test for a single node. WireGuard nodes get a
+		# fresh handshake (bypassing the monitor's result cache); other
+		# protocols get a TCP reachability probe. The helper reuses the
+		# monitor's handshake function where applicable.
 		read -r input
 		json_load "$input"
 		json_get_var id id
@@ -245,11 +246,11 @@ call)
 			echo '{"state":"failed","reason":"no_node_id"}'
 			exit 0
 		fi
-		if [ ! -x /usr/libexec/wificalling-gateway/wg-test.sh ]; then
+		if [ ! -x /usr/libexec/wificalling-gateway/node-test.sh ]; then
 			echo '{"state":"failed","reason":"no_test_helper"}'
 			exit 0
 		fi
-		/usr/libexec/wificalling-gateway/wg-test.sh "$id"
+		/usr/libexec/wificalling-gateway/node-test.sh "$id"
 		exit 0
 		;;
 	regen_ca)
