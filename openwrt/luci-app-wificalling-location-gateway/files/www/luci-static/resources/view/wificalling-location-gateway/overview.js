@@ -4,10 +4,18 @@
 'require form';
 'require fs';
 'require poll';
+'require rpc';
 'require uci';
 'require dom';
 'require ui';
 'require wificalling-gateway.node-import as nodeImport';
+
+var wgTest = rpc.declare({
+	object: 'luci.wloc',
+	method: 'wg_test',
+	params: ['id'],
+	expect: {}
+});
 
 return view.extend({
 	load: function() {
@@ -51,14 +59,44 @@ return view.extend({
 				// The status export classifies failed handshakes so a bad
 				// node (missing keys, psk mismatch) is visible as such
 				// instead of a bare "Offline".
-				var reason = n.reason === 'config_missing' ? wlocI18n.t('Missing key/address')
-					: n.reason === 'timeout' ? wlocI18n.t('Handshake timed out (key/psk mismatch?)')
-					: n.reason === 'unreachable' ? wlocI18n.t('Server unreachable') : '';
+				var reason = wgFailReason(n.reason);
 				return wlocI18n.t('Handshake failed') + (reason ? ' (' + reason + ')' : '');
 			}
 			if (n.state === 'reachable' || n.state === 'tcp_reachable') return wlocI18n.t('Alive');
 			if (n.state === 'unreachable') return wlocI18n.t('Offline');
 			return wlocI18n.t('Unknown');
+		}
+		function wgFailReason(reason) {
+			if (reason === 'config_missing') return wlocI18n.t('Missing key/address');
+			if (reason === 'timeout') return wlocI18n.t('Handshake timed out (key/psk mismatch?)');
+			if (reason === 'unreachable') return wlocI18n.t('Server unreachable');
+			return reason || '';
+		}
+		// Manual connection test: asks the router to run a fresh WireGuard
+		// handshake right now (bypassing the monitor's result cache) and
+		// reports the exit IP or the failure reason.
+		function runWgTest(id, btn) {
+			if (btn.disabled) return;
+			btn.disabled = true;
+			var original = btn.textContent;
+			btn.textContent = wlocI18n.t('Testing…');
+			wgTest(id).then(function(r) {
+				btn.disabled = false;
+				btn.textContent = original;
+				if (r && r.state === 'handshake_ok') {
+					ui.addNotification(null, E('p', {}, wlocI18n.t('Handshake OK') + ' — ' + r.exit_ip), 'info');
+				}
+				else if (r && r.state === 'handshake_failed') {
+					ui.addNotification(null, E('p', {}, wlocI18n.t('Handshake failed') + ' (' + wgFailReason(r.reason) + ')'), 'error');
+				}
+				else {
+					ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to test node: ') + wgFailReason(r && r.reason)), 'error');
+				}
+			}).catch(function(e) {
+				btn.disabled = false;
+				btn.textContent = original;
+				ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to test node: ') + String(e)), 'error');
+			});
 		}
 		function latency(n) {
 			if (!n) return '-';
@@ -241,6 +279,17 @@ return view.extend({
 		nodePing.textvalue = function(id) { return E('span', { id: 'wfc-node-ping-' + id }, latency(nodeById(id))); };
 		var nodeQuality = s.option(form.DummyValue, '_node_quality', wlocI18n.t('Quality'));
 		nodeQuality.textvalue = function(id) { return E('span', { id: 'wfc-node-quality-' + id }, quality(nodeById(id))); };
+		var nodeTest = s.option(form.DummyValue, '_node_test', wlocI18n.t('Test connection'));
+		nodeTest.textvalue = function(id) {
+			// Only WireGuard nodes have a handshake to test.
+			if (uci.get('wificalling-gateway', id, 'protocol') !== 'wireguard')
+				return '';
+			return E('button', {
+				'class': 'cbi-button cbi-button-action',
+				id: 'wfc-node-test-' + id,
+				click: function() { runWgTest(id, this); }
+			}, wlocI18n.t('Test connection'));
+		};
 		var secret = s.option(form.Value, 'password', wlocI18n.t('Password'));
 		secret.password = true; secret.textvalue = function(id) { return this.cfgvalue(id) ? wlocI18n.t('Set') : wlocI18n.t('Not set'); };
 		var uuidField = s.option(form.Value, 'uuid', wlocI18n.t('UUID'));

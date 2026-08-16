@@ -54,14 +54,21 @@ function main() {
 
 	overviewSources.forEach(function(relative) {
 		const source = fs.readFileSync(path.join(root, relative), 'utf8');
-		assert(source.includes("n.reason === 'config_missing'"),
+		assert(source.includes("n.reason === 'config_missing'") || source.includes("wgFailReason(n.reason)"),
 			`${relative}: the view must render the config_missing handshake reason`);
-		assert(source.includes("n.reason === 'timeout'"),
+		assert(source.includes("n.reason === 'timeout'") || source.includes("reason === 'timeout'"),
 			`${relative}: the view must render the timeout handshake reason`);
-		assert(source.includes("n.reason === 'unreachable'"),
+		assert(source.includes("n.reason === 'unreachable'") || source.includes("reason === 'unreachable'"),
 			`${relative}: the view must render the unreachable handshake reason`);
 		assert(source.includes("wlocI18n.t('Handshake failed')"),
 			`${relative}: the failed-handshake label must stay localizable`);
+		// Manual per-node connection test button.
+		assert(source.includes("method: 'wg_test'"),
+			`${relative}: the view must declare the wg_test rpcd method`);
+		assert(source.includes("'wfc-node-test-'"),
+			`${relative}: every wireguard node row must carry a test button`);
+		assert(source.includes("wlocI18n.t('Test connection')"),
+			`${relative}: the test button label must be localizable`);
 	});
 
 	i18nSources.forEach(function(relative) {
@@ -72,6 +79,12 @@ function main() {
 			`${relative}: missing timeout translation key`);
 		assert(source.includes("'Server unreachable': '服务器不可达'"),
 			`${relative}: missing unreachable translation`);
+		assert(source.includes("'Test connection': '测试连接'"),
+			`${relative}: missing test button translation`);
+		assert(source.includes("'Testing…': '测试中…'"),
+			`${relative}: missing testing state translation`);
+		assert(source.includes("'Unable to test node: '"),
+			`${relative}: missing test failure translation`);
 	});
 
 	console.log('wireguard handshake reason guards passed');

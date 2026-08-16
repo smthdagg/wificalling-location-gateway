@@ -11,7 +11,8 @@
           "restart_service",
           "verify_fingerprint",
           "health",
-          "restart_gateway"
+          "restart_gateway",
+          "wg_test"
         ],
         "file": [
           "read"
@@ -43,7 +44,8 @@
           "cert_info",
           "regen_ca",
           "restart_service",
-          "verify_fingerprint"
+          "verify_fingerprint",
+          "wg_test"
         ],
         "file": [
           "write"
