@@ -10,7 +10,8 @@
           "regen_ca",
           "restart_service",
           "verify_fingerprint",
-          "health"
+          "health",
+          "restart_gateway"
         ],
         "file": [
           "read"

@@ -4,15 +4,30 @@
 'require poll';
 'require dom';
 'require rpc';
+'require ui';
 
-// 服务状态与日志（合并页）：wloc-service 与 Wi-Fi Calling Gateway
-// （monitor-loop + sing-box）的进程、配置、规则、补丁、节点健康与最近日志。
+// 服务状态页：wloc-service 与 Wi-Fi Calling Gateway（monitor-loop +
+// sing-box）的进程、配置、规则、补丁、节点健康，以及两个服务的重启按钮。
 // 数据由 /usr/sbin/wloc-health.sh 通过 luci.wloc rpcd `health` 方法提供。
 
 var getHealth = rpc.declare({
 	object: 'luci.wloc',
 	method: 'health'
 });
+
+var restartWloc = rpc.declare({
+	object: 'luci.wloc',
+	method: 'restart_service'
+});
+
+var restartGateway = rpc.declare({
+	object: 'luci.wloc',
+	method: 'restart_gateway'
+});
+
+function notify(title, message, kind) {
+	ui.addNotification(null, E('p', [ E('strong', title + ': '), message ]), kind);
+}
 
 // Compact status: a small colored dot plus short text.
 function statusDot(ok, text) {
@@ -114,6 +129,55 @@ return view.extend({
 			});
 		}, 10);
 
+		// One-click service restarts, then refresh the report immediately.
+		function restartAction(call, okText, busyLabel) {
+			return function() {
+				if (this.disabled) return;
+				this.disabled = true;
+				var original = this.textContent;
+				this.textContent = busyLabel;
+				call().then(function(r) {
+					this.disabled = false;
+					this.textContent = original;
+					if (r && r.error) {
+						notify(wlocI18n.t('Restart failed'), r.error, 'error');
+						return;
+					}
+					notify(wlocI18n.t('Restarted'), okText, 'info');
+					return L.resolveDefault(getHealth(), { error: wlocI18n.t('Health check unavailable') }).then(function(h) {
+						renderHealth(h);
+					});
+				}.bind(this)).catch(function(e) {
+					this.disabled = false;
+					this.textContent = original;
+					notify(wlocI18n.t('Restart failed'), String(e), 'error');
+				}.bind(this));
+			};
+		}
+
+		var restartButtons = E('div', { 'class': 'cbi-section', style: 'margin-top:16px' }, [
+			E('h3', { style: 'margin-top:0' }, wlocI18n.t('Restart services')),
+			E('div', {}, [
+				E('button', {
+					'class': 'cbi-button cbi-button-apply',
+					'id': 'wloc-restart-wloc',
+					style: 'margin-right:8px',
+					click: restartAction(restartWloc,
+						wlocI18n.t('WLOC service restarted'),
+						wlocI18n.t('Restarting…'))
+				}, wlocI18n.t('Restart WLOC service')),
+				E('button', {
+					'class': 'cbi-button cbi-button-apply',
+					'id': 'wloc-restart-gateway',
+					click: restartAction(restartGateway,
+						wlocI18n.t('Gateway restarted - proxy was briefly interrupted'),
+						wlocI18n.t('Restarting…'))
+				}, wlocI18n.t('Restart Wi-Fi Calling gateway'))
+			]),
+			E('p', { style: 'color:#666;font-size:12px;margin-bottom:0' },
+				wlocI18n.t('Restarting the gateway regenerates the proxy config and briefly interrupts device proxying.'))
+		]);
+
 		return E([], [
 			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('WLOC service')),
@@ -123,10 +187,11 @@ return view.extend({
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Gateway')),
 				gwBody
 			]),
-			E('div', { 'class': 'cbi-section' }, [
+			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Patches and nodes')),
 				extraBody
-			])
+			]),
+			restartButtons
 		]);
 	}
 });

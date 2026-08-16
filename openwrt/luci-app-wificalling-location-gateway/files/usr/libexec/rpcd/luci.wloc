@@ -53,6 +53,8 @@ list)
 	json_close_object
 	json_add_object restart_service
 	json_close_object
+	json_add_object restart_gateway
+	json_close_object
 	json_add_object verify_fingerprint
 	json_close_object
 	json_add_object health
@@ -208,6 +210,14 @@ call)
 		# changed), then restart the daemon so it reads the new config.
 		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
 		/etc/init.d/wloc-service restart >/dev/null 2>&1
+		sleep 2
+		echo '{"ok":true}'
+		exit 0
+		;;
+	restart_gateway)
+		# Regenerate the sing-box config and restart the proxy for the
+		# Wi-Fi Calling Gateway (brief interruption of device proxy).
+		/etc/init.d/wificalling-gateway restart >/dev/null 2>&1
 		sleep 2
 		echo '{"ok":true}'
 		exit 0
