@@ -52,6 +52,11 @@ The core boundary of the project is "**independent, precise, and revertible**": 
 - WireGuard nodes are fully supported: pre-shared keys, standard
   `[Interface]`/`[Peer]` config import, real-handshake health checks, and
   WLOC follow-device exit probing through sing-box endpoints.
+- Per-node **nodeTest** button: run a fresh connection test on demand -
+  a real WireGuard handshake (bypassing the monitor's result cache) or a
+  TCP reachability probe for other protocols - with the verified exit IP
+  or a classified failure reason (missing config / timeout / unreachable)
+  in a banner that stays until closed.
 - A dedicated **Service Status** page (Services > Service Status) reports
   both services at a glance - daemon processes, config validity, nftables
   rules, build patches, and node health - refreshed every 10 seconds.
@@ -164,13 +169,13 @@ Do not run `opkg remove` first; installing directly restores missing components 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.0.11-r1_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.2.0-r1_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12 (native APK v3)
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.11-r1.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.0-r1.apk
 ```
 
 `--allow-untrusted` applies only to locally built packages that are not yet signed in a repository. Formal releases use repository signing; never rename an IPK into an APK.
@@ -341,6 +346,7 @@ Wi‑Fi Calling Location Gateway 将两个原本分离的流程组织在同一�
 - 精确到“指定设备 + 授权主机 + TCP 443”的 DNS/nftables 隔离。
 - root-only Unix Socket 控制 API，以及经 rpcd 授权的 LuCI 管理桥接。
 - Wi‑Fi Calling 隧道状态、WLOC 当前目标与脱敏事件日志。
+- 每个节点提供 **nodeTest** 测试按钮：随时执行一次新的连接测试——WireGuard 节点进行真实握手（绕过监控循环的结果缓存），其他协议执行 TCP 连通性探测；结果显示出口 IP 或分类失败原因（配置缺失 / 超时 / 不可达），横幅带关闭按钮且不会自动消失。
 - IPK（OpenWrt 24.10 / iStoreOS 24.10）与原生 APK v3（OpenWrt 25.12）打包。
 - 固定 SDK/工具链、离线锁定编译、依赖审计、覆盖率门禁和 Docker 启动验证。
 
@@ -451,13 +457,13 @@ opkg install /tmp/wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.0.11-r1_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.2.0-r1_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.0.11-r1.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.0-r1.apk
 ```
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。

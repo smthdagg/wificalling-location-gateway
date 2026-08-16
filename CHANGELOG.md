@@ -2,6 +2,46 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.2.0] - 2026-08-17
+
+WireGuard node reliability and connection testing overhaul.
+
+### Added
+
+- **Per-node "nodeTest" connection test button** on the settings page: every
+  proxy node row now has a test button in front of Edit/Delete. WireGuard
+  nodes run a fresh handshake on demand (bypassing the monitor loop's 60s
+  result cache) and report the verified exit IP; all other protocols get a
+  TCP reachability probe of server:port. Results appear in a banner with an
+  explicit close button that never auto-dismisses.
+- **Handshake failure reasons**: the node status export and the LuCI view
+  now classify failed WireGuard handshakes (`config_missing` / `timeout` /
+  `unreachable`) instead of a bare "Offline". The status cell shows a short
+  label (e.g. "Handshake failed (Timeout)") and the full explanation is
+  available as a tooltip.
+
+### Changed
+
+- **WireGuard handshake probe hardened**: the probe now forwards the node's
+  `reserved` field (WARP-style endpoints), derives its probe port from an
+  md5sum hash instead of id arithmetic (cksum is absent on ImmortalWrt
+  busybox and crashed the whole monitor script), and serializes concurrent
+  monitor ticks with a mkdir lock that reclaims locks left by killed
+  processes - two racing ticks previously handed each other the wrong exit
+  IP.
+- **Compact node table**: only the essentials are shown as columns - Name,
+  Enable, Protocol, Server, Port, Node status, Ping/latency, Quality and
+  the WireGuard preshared key. Every other field (password, uuid, TLS,
+  Reality, transport, key material, ...) is hidden from the table and stays
+  editable in the per-node modal.
+
+### 中文说明
+
+- **新增**：设置页每个节点新增「nodeTest」连接测试按钮（位于 Edit/Delete 之前）。WireGuard 节点点击后立即执行一次真实握手（绕过监控循环 60 秒结果缓存）并显示出口 IP；其他协议节点执行 TCP 连通性探测。测试结果以带显式关闭按钮的横幅展示，不会自动消失。
+- **新增**：握手失败原因分类（配置缺失 / 超时 / 不可达）——节点状态不再只是笼统的「离线」，状态列显示简短标签（如「握手失败 (超时)」），完整原因可通过悬停查看。
+- **改进**：WireGuard 握手探测加固——转发 reserved 字段（WARP 类节点必需）；探测端口改用 md5sum 哈希派生（ImmortalWrt busybox 没有 cksum，旧实现会导致整个监控脚本崩溃）；用 mkdir 锁串行化并发监控轮询并回收被中断进程遗留的锁（此前两个并发轮询会互相写错出口 IP）。
+- **改进**：节点表格精简——仅保留 Name、启用、协议、服务器、端口、节点状态、Ping/延迟、质量、WireGuard 预共享密钥列；其余字段（密码、UUID、TLS、Reality、传输方式、密钥材料等）从表格隐藏，仍在编辑弹窗中可改。
+
 ## [1.0.11] - 2026-08-16
 
 ### Changed

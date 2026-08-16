@@ -49,7 +49,8 @@ var CONTENT = {
 			'定位请求由 iPhone 的应用（地图、天气等）触发；若地图未刷新，请重新触发定位或稍等片刻。',
 			'WLOC 使用日志最多显示最近 20 条，可一键清空；日志仅记录替换元数据，不记录原始 WLOC 响应内容。',
 			'配置（开关、模式、手动坐标、预设）保存在 /etc/config/wloc-service，重启后仍然生效。',
-			'「服务状态」页（服务 → 服务状态）集中显示 wloc-service 与 Wi-Fi 通话网关的进程、配置、规则、补丁与节点健康，每 10 秒自动刷新；异常项以红点标出。'
+			'「服务状态」页（服务 → 服务状态）集中显示 wloc-service 与 Wi-Fi 通话网关的进程、配置、规则、补丁与节点健康，每 10 秒自动刷新；异常项以红点标出。',
+			'每个代理节点行的「nodeTest」按钮可随时执行一次新的连接测试：WireGuard 节点进行真实握手并显示出口 IP，其他协议执行 TCP 连通性探测；若握手失败，状态列会显示简短原因（超时 / 不可达 / 配置缺失），鼠标悬停可查看完整解释。'
 		]
 	},
 	en: {
@@ -90,7 +91,8 @@ var CONTENT = {
 			'Location requests are triggered by iPhone apps (Maps, Weather, etc.). If maps do not refresh, re-trigger location and wait a moment.',
 			'The WLOC usage log keeps the newest 20 entries and can be cleared with one click; it only records replacement metadata, never raw WLOC responses.',
 			'Settings (switch, mode, manual coordinates, presets) are stored in /etc/config/wloc-service and survive reboots.',
-			'"Service Status" (Services > Service Status) shows both services in one place: daemon processes, config validity, nftables rules, build patches and node health, refreshed every 10 seconds; anything unhealthy is marked with a red dot.'
+			'"Service Status" (Services > Service Status) shows both services in one place: daemon processes, config validity, nftables rules, build patches and node health, refreshed every 10 seconds; anything unhealthy is marked with a red dot.',
+			'The "nodeTest" button on every proxy node row runs a fresh connection test on demand: WireGuard nodes perform a real handshake and show the verified exit IP, other protocols get a TCP reachability probe; when a handshake fails, the status cell shows a short reason (Timeout / Unreachable / Missing config) and hovering reveals the full explanation.'
 		]
 	}
 };
