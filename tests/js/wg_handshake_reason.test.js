@@ -75,6 +75,8 @@ function main() {
 			`${relative}: the detail fields must stay hidden from the table (visible in the edit modal)`);
 		assert(source.includes("'label', wlocI18n.t('Name')"),
 			`${relative}: the name column must be labelled Name`);
+		assert(source.includes("nodeLabel.modalonly = true"),
+			`${relative}: the label field must not duplicate the GridSection name column in the table`);
 		// The test result banner must carry an explicit close button and
 		// must not auto-dismiss (the stock notification's dismiss control
 		// is easy to miss under some themes).

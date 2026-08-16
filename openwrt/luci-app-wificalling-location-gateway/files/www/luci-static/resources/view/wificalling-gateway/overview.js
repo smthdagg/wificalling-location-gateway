@@ -300,6 +300,9 @@ return view.extend({
 		var nodeLabel = s.option(form.Value, 'label', wlocI18n.t('Name'));
 		nodeLabel.rmempty = false; nodeLabel.placeholder = wlocI18n.t('Example: UK AnyTLS');
 		nodeLabel.description = wlocI18n.t('This name is shown in the device node selector.');
+		// The GridSection already renders a Name column from the section
+		// title; showing the label field again would duplicate it.
+		nodeLabel.modalonly = true;
 		var p = s.option(form.ListValue, 'protocol', wlocI18n.t('Protocol'));
 		['anytls','hysteria2','tuic','vless','vmess','trojan','wireguard'].forEach(function(x) { p.value(x); });
 		s.option(form.Value, 'server', wlocI18n.t('Server')).datatype = 'host';
