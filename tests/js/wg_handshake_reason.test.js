@@ -62,6 +62,18 @@ function main() {
 			`${relative}: the view must render the unreachable handshake reason`);
 		assert(source.includes("wlocI18n.t('Handshake failed')"),
 			`${relative}: the failed-handshake label must stay localizable`);
+		// Short status-cell labels keep the node table compact; the full
+		// explanation lives in the tooltip and result banner.
+		assert(source.includes("wlocI18n.t('Missing config')"),
+			`${relative}: the config_missing status cell must use the short label`);
+		assert(source.includes("wlocI18n.t('Timeout')"),
+			`${relative}: the timeout status cell must use the short label`);
+		assert(source.includes("wlocI18n.t('Unreachable')"),
+			`${relative}: the unreachable status cell must use the short label`);
+		assert(source.includes('function wgFailDetail'),
+			`${relative}: the full failure explanation must be available for tooltip/banner`);
+		assert(source.includes('title: detail'),
+			`${relative}: the status cell must carry the full explanation as a tooltip`);
 		// Manual per-node connection test button.
 		assert(source.includes("method: 'node_test'"),
 			`${relative}: the view must declare the node_test rpcd method`);
@@ -90,8 +102,12 @@ function main() {
 		const source = fs.readFileSync(path.join(root, relative), 'utf8');
 		assert(source.includes("'Missing key/address': '缺少私钥/公钥或本地地址'"),
 			`${relative}: missing config_missing translation`);
-		assert(source.includes("'Handshake timed out (key/psk mismatch?)'"),
-			`${relative}: missing timeout translation key`);
+		assert(source.includes("'Handshake timed out (key/psk mismatch?)': '服务器无响应，密钥或预共享密钥可能不匹配'"),
+			`${relative}: missing timeout detail translation`);
+		assert(source.includes("'Timeout': '超时'"),
+			`${relative}: missing short timeout label`);
+		assert(source.includes("'Unreachable': '不可达'"),
+			`${relative}: missing short unreachable label`);
 		assert(source.includes("'Server unreachable': '服务器不可达'"),
 			`${relative}: missing unreachable translation`);
 		assert(source.includes("'Close': '关闭'"),

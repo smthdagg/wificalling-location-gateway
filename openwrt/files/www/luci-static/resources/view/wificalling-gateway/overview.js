@@ -57,8 +57,8 @@ return view.extend({
 			if (n.state === 'handshake_ok') return wlocI18n.t('Handshake OK');
 			if (n.state === 'handshake_failed') {
 				// The status export classifies failed handshakes so a bad
-				// node (missing keys, psk mismatch) is visible as such
-				// instead of a bare "Offline".
+				// node is visible as such instead of a bare "Offline".
+				// Keep the cell short; the full explanation is a tooltip.
 				var reason = wgFailReason(n.reason);
 				return wlocI18n.t('Handshake failed') + (reason ? ' (' + reason + ')' : '');
 			}
@@ -66,11 +66,19 @@ return view.extend({
 			if (n.state === 'unreachable') return wlocI18n.t('Offline');
 			return wlocI18n.t('Unknown');
 		}
+		// Short status-cell label for a failed handshake.
 		function wgFailReason(reason) {
+			if (reason === 'config_missing') return wlocI18n.t('Missing config');
+			if (reason === 'timeout') return wlocI18n.t('Timeout');
+			if (reason === 'unreachable') return wlocI18n.t('Unreachable');
+			return reason || '';
+		}
+		// Full explanation for the tooltip / result banner.
+		function wgFailDetail(reason) {
 			if (reason === 'config_missing') return wlocI18n.t('Missing key/address');
 			if (reason === 'timeout') return wlocI18n.t('Handshake timed out (key/psk mismatch?)');
 			if (reason === 'unreachable') return wlocI18n.t('Server unreachable');
-			return reason || '';
+			return '';
 		}
 		// Manual connection test: asks the router to run a fresh check
 		// right now - a WireGuard handshake (bypassing the monitor's
@@ -79,11 +87,12 @@ return view.extend({
 		// The result banner carries an explicit close button (the stock
 		// LuCI notification's dismiss control is easy to miss under some
 		// themes) and never auto-dismisses.
-		function testNotify(message, kind) {
+		function testNotify(message, kind, detail) {
 			var mc = document.querySelector('#maincontent') || document.body;
 			var msg = E('div', {
 				'class': 'alert-message fade-in ' + (kind || 'info'),
-				style: 'display:flex;align-items:center;padding:8px 12px'
+				style: 'display:flex;align-items:center;padding:8px 12px',
+				title: detail || null
 			}, [
 				E('div', { style: 'flex:1' }, E('p', { style: 'margin:0' }, message)),
 				E('button', {
@@ -112,7 +121,7 @@ return view.extend({
 					testNotify(wlocI18n.t('Handshake OK') + ' — ' + r.exit_ip, 'info');
 				}
 				else if (r && r.state === 'handshake_failed') {
-					testNotify(wlocI18n.t('Handshake failed') + ' (' + wgFailReason(r.reason) + ')', 'error');
+					testNotify(wlocI18n.t('Handshake failed') + ' (' + wgFailReason(r.reason) + ')', 'error', wgFailDetail(r.reason));
 				}
 				else if (r && r.state === 'tcp_reachable') {
 					testNotify(wlocI18n.t('Alive') + (r.ping_ms ? ' — ' + r.ping_ms + ' ms' : ''), 'info');
@@ -308,7 +317,14 @@ return view.extend({
 		s.option(form.Value, 'server', wlocI18n.t('Server')).datatype = 'host';
 		s.option(form.Value, 'port', wlocI18n.t('Port')).datatype = 'port';
 		var nodeStatus = s.option(form.DummyValue, '_node_status', wlocI18n.t('Node status'));
-		nodeStatus.textvalue = function(id) { return E('span', { id: 'wfc-node-state-' + id }, nodeState(nodeById(id))); };
+		nodeStatus.textvalue = function(id) {
+			var n = nodeById(id);
+			var detail = (n && n.state === 'handshake_failed') ? wgFailDetail(n.reason) : '';
+			return E('span', {
+				id: 'wfc-node-state-' + id,
+				title: detail || null
+			}, nodeState(n));
+		};
 		var nodePing = s.option(form.DummyValue, '_node_ping', wlocI18n.t('Ping / latency'));
 		nodePing.textvalue = function(id) { return E('span', { id: 'wfc-node-ping-' + id }, latency(nodeById(id))); };
 		var nodeQuality = s.option(form.DummyValue, '_node_quality', wlocI18n.t('Quality'));
