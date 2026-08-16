@@ -12,7 +12,7 @@ fail() {
 
 [ -f "$repo_root/VERSION" ] || fail 'missing canonical VERSION file'
 [ "$(cat "$repo_root/VERSION")" = 1.2.0 ] || fail 'canonical version must be 1.2.0'
-grep -Eq '^version = "1\.0\.11"$' "$repo_root/Cargo.toml" ||
+grep -Eq '^version = "1\.2\.0"$' "$repo_root/Cargo.toml" ||
 	fail 'Cargo package version must be 1.2.0'
 grep -F 'webpki-roots = "=1.0.9"' "$repo_root/Cargo.toml" >/dev/null ||
 	fail 'version bumps must not rewrite pinned dependency versions'
