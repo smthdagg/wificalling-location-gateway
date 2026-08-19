@@ -117,12 +117,12 @@ case "$gw_version" in
     ;;
   1.2.*)
     echo "build-release-packages: gateway $gw_version — skipping 1.7.x patches"
-    # The 1.2.x gateway IPK ships an older compiler/init.d without the
-    # project's WireGuard field pipeline; overlay the maintained versions.
-    cp "$repo_root/openwrt/files/usr/libexec/wificalling-gateway/compiler.sh" \
-      "$package_dir/files/usr/libexec/wificalling-gateway/compiler.sh"
-    cp "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" \
-      "$package_dir/files/etc/init.d/wificalling-gateway"
+    # The 1.2.x gateway IPK ships an OLDER gateway baseline (older
+    # compiler/init.d/monitor/node-health/config/LuCI). The project's
+    # openwrt/files/ carries the maintained 1.2.0 baseline (plus the
+    # memory-optimization compiler patch); overlay it wholesale so the
+    # integrated package never regresses to the older gateway files.
+    cp -R "$repo_root/openwrt/files/." "$package_dir/files/"
     ;;
   *)
     fail "unexpected gateway version: $gw_version"
