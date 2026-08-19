@@ -104,10 +104,17 @@ END {
       # back to the WS Host (f[19]) when sni (f[7]) is empty, so a plain
       # ws node with a Host header but no TLS never gains a tls block.
       else if (f[16]=="tls"||f[7]!="") s=s ",\"tls\":" tls((f[7]!=""?f[7]:f[19]),f[8],f[9],f[20])
+      if (f[17]=="ws") s=s ",\"transport\":{\"type\":\"ws\",\"path\":" q(f[18]) ",\"headers\":{\"Host\":" q(f[19]) "}}"
+      else if (f[17]=="grpc") s=s ",\"transport\":{\"type\":\"grpc\",\"service_name\":" q(f[18]!=""?f[18]:"/") "}"
+      else if (f[17]=="httpupgrade") s=s ",\"transport\":{\"type\":\"httpupgrade\",\"path\":" q(f[18]) ",\"host\":" q(f[19]) "}"
+      else if (f[17]=="xhttp") s=s ",\"transport\":{\"type\":\"xhttp\",\"path\":" q(f[18]) ",\"host\":" q(f[19]) "}"
     }
     if (p=="vmess") {
       s=s ",\"uuid\":" q(f[6]) ",\"security\":\"auto\",\"alter_id\":" (f[10]~/^[0-9]+$/?f[10]:0)
       if (f[17]=="ws") s=s ",\"transport\":{\"type\":\"ws\",\"path\":" q(f[18]) ",\"headers\":{\"Host\":" q(f[19]) "}}"
+      else if (f[17]=="grpc") s=s ",\"transport\":{\"type\":\"grpc\",\"service_name\":" q(f[18]!=""?f[18]:"/") "}"
+      else if (f[17]=="httpupgrade") s=s ",\"transport\":{\"type\":\"httpupgrade\",\"path\":" q(f[18]) ",\"host\":" q(f[19]) "}"
+      else if (f[17]=="xhttp") s=s ",\"transport\":{\"type\":\"xhttp\",\"path\":" q(f[18]) ",\"host\":" q(f[19]) "}"
       # Imported VMess links carry the TLS name in the WS Host (f[19]) when
       # sni (f[7]) is empty and the server is a bare IP; fall back to it so
       # certificate verification has a name to check.  Plain ws nodes with
