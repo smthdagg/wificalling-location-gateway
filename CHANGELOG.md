@@ -2,6 +2,35 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.2.2] - 2026-08-19
+
+Manual-mode exit-probe fix, compiler endpoint filtering, and LuCI follow-device logic corrections.
+
+### Changed
+
+- **Manual mode no longer probes the exit IP** (`src/app.rs`): exit probing
+  only drives auto-follow, so in manual mode it is skipped entirely and the
+  status `exit` block reports no IP. The LuCI monitor shows
+  "Manual mode - not applicable" for the Exit IP row.
+- **Compiler filters unreferenced WireGuard endpoints too**: `compiler.sh`
+  now skips endpoints whose node is not referenced by a device policy
+  (`used[]` check with `n_wg_used` counting), so sing-box.json keeps only
+  nodes actually in use; the empty endpoints block is no longer emitted.
+- **LuCI Follow device fixes** (`wloc.js`): the dropdown now treats
+  `source_ip` as a DynamicList (array) - previously an array was used as
+  the value and selecting a device could write a wrong `assigned_device`;
+  and only ENABLED devices are listed (a disabled device's node is
+  filtered from sing-box.json, so following it silently probed a fallback
+  node). The monitor warns "disabled! Enable it to follow its node" when
+  the followed device is disabled.
+- **Mode switch is persisted immediately** (`wloc.js`): switching
+  auto/manual now saves `geo_source` right away, so a later Follow-device
+  save can no longer carry a stale pending mode value over and flip the
+  service back to manual.
+- **LuCI monitor syntax fix** (`wloc-monitor.js`): the Exit IP cell was
+  rewritten with a plain `exitVal` variable (a nested ternary had one
+  extra `(` that broke the whole page with `SyntaxError: missing )`).
+
 ## [1.2.1] - 2026-08-19
 
 Compiler optimization: only load proxy nodes that are actually referenced by device policies.
