@@ -102,12 +102,17 @@ return view.extend({
 		function geoRows(s) {
 			var g = s.geo || {};
 			var deviceLabel = '-';
+			var deviceDisabled = false;
 			if (s.assigned_device) {
 				// source_ip is a DynamicList value (array) on the device policy.
 				var dev = uci.sections('wificalling-gateway', 'device').find(function(d) {
 					return (d.source_ip || []).indexOf(s.assigned_device) >= 0;
 				});
 				deviceLabel = (dev && dev.label ? dev.label : s.assigned_device) + ' (' + s.assigned_device + ')';
+				deviceDisabled = !!(dev && dev.enabled === '0');
+			}
+			if (deviceDisabled) {
+				deviceLabel += ' — ' + wlocI18n.t('disabled! Enable it to follow its node');
 			}
 			return [
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Service phase')), E('td', { class: 'td' }, phaseLabel(s.service_phase))]),
@@ -119,7 +124,7 @@ return view.extend({
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('GPS (lat / lon)')), E('td', { class: 'td' }, gpsOf(g))]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Geo state')), E('td', { class: 'td' }, g.state || '-')]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Observed at')), E('td', { class: 'td' }, fmtTime(s.observed_at))]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Exit IP')), E('td', { class: 'td' }, (s.exit && s.exit.ip) ? s.exit.ip : ((s.exit && s.exit.last_error) ? wlocI18n.t(s.exit.last_error) : '-'))])
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Exit IP')), E('td', { class: 'td' }, (s.geo_source === 'manual') ? wlocI18n.t('Manual mode - not applicable') : ((s.exit && s.exit.ip) ? s.exit.ip : ((s.exit && s.exit.last_error) ? wlocI18n.t(s.exit.last_error) : '-'))])
 			];
 		}
 		function renderGeo(s) { dom.content(geoBody, geoRows(s)); }

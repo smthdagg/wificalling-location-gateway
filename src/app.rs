@@ -190,6 +190,12 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     /// Probe and resolve evidence when the cached observation is missing,
     /// stale, or the last probe failed.
     fn refresh_evidence_at(&mut self, now_unix: u64) {
+        // Manual mode pins the location to the preset coordinates; exit
+        // probing exists only to drive auto-follow, so it is skipped
+        // entirely in manual mode (no reverse probe, no misleading IP).
+        if matches!(self.geo_source, GeoSource::Manual { .. }) {
+            return;
+        }
         let fingerprint = self.probe.config_fingerprint();
         let fresh = matches!(
             &self.exit_evidence,
@@ -317,7 +323,12 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                 _ => (None, None, None, None, None),
             },
         };
-        let exit_ip = self.last_exit_ip().map(|ip| ip.to_string());
+        // In manual mode the exit IP is not meaningful (no probing runs);
+        // only auto-follow reports the observed exit.
+        let exit_ip = match self.geo_source {
+            GeoSource::Manual { .. } => None,
+            GeoSource::Auto => self.last_exit_ip().map(|ip| ip.to_string()),
+        };
         let status = serde_json::json!({
             "generation": inputs.generation,
             "observed_at": inputs.observed_at_unix,
