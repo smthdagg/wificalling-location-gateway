@@ -1,4 +1,3 @@
-root@192.168.31.1's password: 
 #!/bin/sh
 set -eu
 
