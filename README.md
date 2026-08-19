@@ -52,6 +52,11 @@ The core boundary of the project is "**independent, precise, and revertible**": 
 - WireGuard nodes are fully supported: pre-shared keys, standard
   `[Interface]`/`[Peer]` config import, real-handshake health checks, and
   WLOC follow-device exit probing through sing-box endpoints.
+- Only the proxy nodes referenced by active device policies are compiled
+  into `sing-box.json` and loaded into memory - unreferenced WireGuard
+  tunnels and protocol stacks stay off, so memory scales with the nodes
+  actually in use rather than the total configured (measured on AX6S:
+  sing-box RSS ~19-23 MB → ~15 MB).
 - Per-node **nodeTest** button: run a fresh connection test on demand -
   a real WireGuard handshake (bypassing the monitor's result cache) or a
   TCP reachability probe for other protocols - with the verified exit IP
@@ -258,14 +263,15 @@ Builds use the official OpenWrt SDK pinned by digest; after dependency preparati
 
 ## Language composition
 
-A GitHub Linguist byte snapshot of the current main branch (2026-08-13). Python mostly drives reproducible builds, fixture governance, and CI; the router product runtime is mainly Rust, with Shell handling OpenWrt lifecycle and network integration.
+A GitHub Linguist byte snapshot of the current main branch (2026-08-19). The router product runtime is mainly Rust, with JavaScript driving the LuCI admin UI and Shell handling OpenWrt lifecycle and network integration; Python is mostly used for reproducible builds, fixture governance, and CI.
 
 ```mermaid
 pie showData
     title GitHub Linguist language snapshot
-    "Python · 59.03%" : 63959
-    "Rust · 22.40%" : 24273
-    "Shell · 18.56%" : 20112
+    "Rust · 46.36%" : 435146
+    "JavaScript · 26.18%" : 245706
+    "Shell · 17.28%" : 162237
+    "Python · 9.93%" : 93223
 ```
 
 > The numbers drift as main updates; whether LuCI JavaScript, docs, and generated/excluded files count depends on GitHub Linguist rules. Do not judge the project's primary language by helper-tool bytes alone.
@@ -347,6 +353,7 @@ Wi‑Fi Calling Location Gateway 将两个原本分离的流程组织在同一�
 - root-only Unix Socket 控制 API，以及经 rpcd 授权的 LuCI 管理桥接。
 - Wi‑Fi Calling 隧道状态、WLOC 当前目标与脱敏事件日志。
 - 每个节点提供 **nodeTest** 测试按钮：随时执行一次新的连接测试——WireGuard 节点进行真实握手（绕过监控循环的结果缓存），其他协议执行 TCP 连通性探测；结果显示出口 IP 或分类失败原因（配置缺失 / 超时 / 不可达），横幅带关闭按钮且不会自动消失。
+- 只把设备策略实际引用的代理节点编译进 `sing-box.json` 并加载到内存——未引用的 WireGuard 隧道和协议栈不驻留，内存随实际使用节点数而非配置总数增长（AX6S 实测：sing-box RSS 从约 19-23 MB 降到约 15 MB）。
 - IPK（OpenWrt 24.10 / iStoreOS 24.10）与原生 APK v3（OpenWrt 25.12）打包。
 - 固定 SDK/工具链、离线锁定编译、依赖审计、覆盖率门禁和 Docker 启动验证。
 
@@ -546,14 +553,15 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
 
 ## 语言组成
 
-下面是 GitHub Linguist 在 2026-08-13 对当前主分支给出的代码字节快照。Python 主要用于可复现构建、fixture 治理和 CI；路由器产品运行时以 Rust 为主，Shell 负责 OpenWrt 生命周期与网络集成。
+下面是 GitHub Linguist 在 2026-08-19 对当前主分支给出的代码字节快照。路由器产品运行时以 Rust 为主，JavaScript 驱动 LuCI 管理界面，Shell 负责 OpenWrt 生命周期与网络集成；Python 主要用于可复现构建、fixture 治理和 CI。
 
 ```mermaid
 pie showData
     title GitHub Linguist language snapshot
-    "Python · 59.03%" : 63959
-    "Rust · 22.40%" : 24273
-    "Shell · 18.56%" : 20112
+    "Rust · 46.36%" : 435146
+    "JavaScript · 26.18%" : 245706
+    "Shell · 17.28%" : 162237
+    "Python · 9.93%" : 93223
 ```
 
 > 统计会随主分支更新而变化；LuCI JavaScript、文档和生成/排除文件是否计入，以 GitHub Linguist 规则为准。项目的技术主语言不应只按仓库辅助工具的字节数判断。
