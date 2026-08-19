@@ -58,7 +58,12 @@ function parseUrl(uri, protocol) {
 			out.short_id = (p.get('sid') || p.get('shortId') || '').replace(/ /g, '+');
 		out.fingerprint = p.get('fp') || p.get('fingerprint') || 'chrome';
 		var vless_type = p.get('type') || '';
-		if (vless_type === 'ws' || vless_type === 'grpc' || vless_type === 'httpupgrade' || vless_type === 'xhttp') {
+		if (vless_type === 'xhttp') {
+			// XHTTP is a clash/mihomo transport; sing-box has no xhttp
+			// transport, so the node would never connect here.
+			throw new Error(_('xhttp transport is not supported by sing-box (use ws/grpc/httpupgrade)'));
+		}
+		if (vless_type === 'ws' || vless_type === 'grpc' || vless_type === 'httpupgrade') {
 			out.transport = vless_type;
 			out.host = p.get('host') || '';
 			// grpc carries no path; its service_name goes in the path slot
@@ -90,7 +95,10 @@ function parseVmess(uri) {
 		security: raw.tls === 'tls' ? 'tls' : ''
 	};
 	var raw_net = raw.net || '';
-	if (raw_net === 'ws' || raw_net === 'grpc' || raw_net === 'httpupgrade' || raw_net === 'xhttp') {
+	if (raw_net === 'xhttp') {
+		throw new Error(_('xhttp transport is not supported by sing-box (use ws/grpc/httpupgrade)'));
+	}
+	if (raw_net === 'ws' || raw_net === 'grpc' || raw_net === 'httpupgrade') {
 		out.transport = raw_net;
 		out.host = raw.host || '';
 		// grpc: service_name goes in the path slot.
