@@ -4,10 +4,10 @@
 
 **An all-in-one Wi‑Fi Calling + Apple WLOC gateway for OpenWrt / ImmortalWrt**
 
-Without touching the stable data plane of Wi‑Fi Calling Gateway 1.7, a standalone Rust service handles exit geolocation, WLOC response rewriting, certificate lifecycle, precise traffic isolation, and LuCI management.
+A standalone Rust service handles exit geolocation, WLOC response rewriting, certificate lifecycle, precise traffic isolation, and LuCI management — all integrated into a single installable package.
 
 [![CI](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v1.0.2-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.0.2)
+[![Release](https://img.shields.io/badge/release-v1.2.1-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.2.1)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Rust 1.90](https://img.shields.io/badge/Rust-1.90-orange.svg?logo=rust)](Cargo.toml)
 [![OpenWrt](https://img.shields.io/badge/OpenWrt-24.10%20%7C%2025.12-00B5E2.svg?logo=openwrt)](#support-and-validation-status)
@@ -31,11 +31,11 @@ Without touching the stable data plane of Wi‑Fi Calling Gateway 1.7, a standal
 
 Wi‑Fi Calling Location Gateway brings two previously separate flows together on one router:
 
-1. **Wi‑Fi Calling Gateway 1.7** selects a sing-box node for designated LAN devices and keeps the ePDG/IPsec channel (UDP 500/4500) independent.
+1. **Wi‑Fi Calling Gateway** selects a sing-box node for designated LAN devices and keeps the ePDG/IPsec channel (UDP 500/4500) independent.
 2. **The WLOC service** handles only TCP 443 traffic from the designated test device to the Apple WLOC hosts. In auto mode it resolves the target region from the exit IP of the node bound to that device; in manual mode it uses administrator-chosen coordinates.
 3. **The LuCI interface** provides nodes, device policies, auto/manual location, certificate installation, runtime status, and a sanitized event log.
 
-The core boundary of the project is "**independent, precise, and revertible**": WLOC uses its own process, UCI config, Unix socket, nftables table, and logs. It never takes over the Wi‑Fi Calling Gateway 1.7 table and never intercepts UDP 500/4500. When the protocol is unknown, Geo data is invalid, or the service is unhealthy, no default fake coordinates are produced.
+The core boundary of the project is "**independent, precise, and revertible**": WLOC uses its own process, UCI config, Unix socket, nftables table, and logs. It never takes over the Gateway's nftables table and never intercepts UDP 500/4500. When the protocol is unknown, Geo data is invalid, or the service is unhealthy, no default fake coordinates are produced.
 
 ## Features
 
@@ -67,7 +67,7 @@ The core boundary of the project is "**independent, precise, and revertible**": 
 
 ```mermaid
 flowchart LR
-    I["Authorized test iPhone"] -->|"Wi‑Fi Calling · UDP 500/4500"| G["Wi‑Fi Calling Gateway 1.7"]
+    I["Authorized test iPhone"] -->|"Wi‑Fi Calling · UDP 500/4500"| G["Wi‑Fi Calling Gateway"]
     G --> N["Bound sing-box node"]
     I -->|"Apple WLOC · TCP 443"| D["Precise DNS / nftables isolation"]
     D --> R["wloc-service · Rust"]
@@ -131,10 +131,10 @@ The Redmi AX6S uses a single architecture-specific integrated package:
 
 - `wificalling-location-gateway_<version>_aarch64_cortex-a53.ipk`
 
-It bundles Wi‑Fi Calling Gateway 1.7, the WLOC service, control tools, and the unified LuCI; installing `luci-app-wificalling-gateway` or `wloc-service` separately is not required. On reinstall or upgrade, opkg preserves `/etc/config/wificalling-gateway` and `/etc/config/wloc-service`.
+It bundles the Wi‑Fi Calling Gateway, the WLOC service, control tools, and the unified LuCI; installing `luci-app-wificalling-gateway` or `wloc-service` separately is not required. On reinstall or upgrade, opkg preserves `/etc/config/wificalling-gateway` and `/etc/config/wloc-service`.
 
 Since the formal 1.0 line, every platform gets exactly one complete integrated package named
-`wificalling-location-gateway` — Wi‑Fi Calling Gateway 1.7, WLOC service, control tools, and unified LuCI in one; users no longer install component packages separately.
+`wificalling-location-gateway` — Wi‑Fi Calling Gateway, WLOC service, control tools, and unified LuCI in one; users no longer install component packages separately.
 
 Two ways to install:
 
@@ -169,13 +169,13 @@ Do not run `opkg remove` first; installing directly restores missing components 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.2.0-r1_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.2.1-r1_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12 (native APK v3)
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.0-r1.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.1-r1.apk
 ```
 
 `--allow-untrusted` applies only to locally built packages that are not yet signed in a repository. Formal releases use repository signing; never rename an IPK into an APK.
@@ -237,12 +237,12 @@ This pins the OpenWrt 24.10.8 `mediatek/mt7622` toolchain, Rust version, and SHA
   --out-dir "$PWD/dist/runtime/x86_64"
 
 ./scripts/openwrt/build-release-packages.sh \
-  --version 1.0.2 \
+  --version 1.2.1 \
   --release 1 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
   --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \
-  --gateway-ipk /absolute/path/luci-app-wificalling-gateway_1.7.3-1_all.ipk \
+  --gateway-ipk /absolute/path/luci-app-wificalling-gateway_<version>_all.ipk \
   --gateway-sha256 <verified-sha256> \
   --out-dir "$PWD/dist/openwrt-release"
 ```
@@ -251,7 +251,7 @@ This pins the OpenWrt 24.10.8 `mediatek/mt7622` toolchain, Rust version, and SHA
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir "$PWD/dist/v1.0.2"
+  --dist-dir "$PWD/dist/v1.2.1"
 ```
 
 Builds use the official OpenWrt SDK pinned by digest; after dependency preparation, product compilation runs locked/offline with read-only sources in a network-disabled container. Full boundaries and results: [OpenWrt packaging and Docker matrix](docs/testing/OPENWRT_PACKAGE_DOCKER_MATRIX.md).
@@ -318,7 +318,7 @@ If this project helps your OpenWrt / Wi‑Fi Calling experiments, a Star, a repr
 
 This project is licensed under the [MIT License](LICENSE). Third-party dependencies and external projects remain under their own licenses; the MIT grant does not change the isolation requirements for external AGPL implementation material defined in the [clean-room boundary ADR](docs/adr/0001-license-boundary.md).
 
-Wi‑Fi Calling Gateway 1.7 continues to be maintained by its own repository. This repository does not vendor its source; formal builds accept only published IPKs validated by identity, version, and SHA-256, and combine them into a single installable package at build time.
+The Wi‑Fi Calling Gateway component was originally a separate project. This repository integrates it as a single installable package; formal builds accept only published IPKs validated by identity, version, and SHA-256.
 
 ---
 
@@ -328,11 +328,11 @@ Wi‑Fi Calling Gateway 1.7 continues to be maintained by its own repository. Th
 
 Wi‑Fi Calling Location Gateway 将两个原本分离的流程组织在同一台路由器上：
 
-1. **Wi‑Fi Calling Gateway 1.7** 为指定局域网设备选择 sing-box 节点，并保持 UDP 500/4500 的 ePDG/IPsec 通道独立运行。
+1. **Wi‑Fi Calling Gateway** 为指定局域网设备选择 sing-box 节点，并保持 UDP 500/4500 的 ePDG/IPsec 通道独立运行。
 2. **WLOC 服务**只处理指定测试设备发往 Apple WLOC 主机的 TCP 443 流量；自动模式根据该设备绑定节点的出口 IP 解析目标地区，手动模式使用管理员选择的坐标。
 3. **LuCI 界面**提供节点、设备策略、自动/手动位置、证书安装、运行状态和脱敏日志入口。
 
-项目的核心边界是“**独立、精确、可回退**”：WLOC 使用自己的进程、UCI 配置、Unix Socket、nftables 表和日志，不接管 Wi‑Fi Calling Gateway 1.7 的表，也不拦截 UDP 500/4500。遇到未知协议、无效地理数据或服务异常时，不生成默认虚假坐标。
+项目的核心边界是”**独立、精确、可回退**”：WLOC 使用自己的进程、UCI 配置、Unix Socket、nftables 表和日志，不接管 Gateway 的 nftables 表，也不拦截 UDP 500/4500。遇到未知协议、无效地理数据或服务异常时，不生成默认虚假坐标。
 
 ## 主要能力
 
@@ -354,7 +354,7 @@ Wi‑Fi Calling Location Gateway 将两个原本分离的流程组织在同一�
 
 ```mermaid
 flowchart LR
-    I["授权测试 iPhone"] -->|"Wi‑Fi Calling · UDP 500/4500"| G["Wi‑Fi Calling Gateway 1.7"]
+    I["授权测试 iPhone"] -->|"Wi‑Fi Calling · UDP 500/4500"| G["Wi‑Fi Calling Gateway"]
     G --> N["绑定的 sing-box 节点"]
     I -->|"Apple WLOC · TCP 443"| D["精确 DNS / nftables 隔离"]
     D --> R["wloc-service · Rust"]
@@ -418,10 +418,10 @@ Redmi AX6S 使用单一的架构专用集成包：
 
 - `wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk`
 
-该包内含 Wi‑Fi Calling Gateway 1.7、WLOC 服务、控制工具和统一 LuCI，不依赖另行安装 `luci-app-wificalling-gateway` 或 `wloc-service`。重新安装或升级时，opkg 会保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
+该包内含 Wi‑Fi Calling Gateway、WLOC 服务、控制工具和统一 LuCI，不依赖另行安装 `luci-app-wificalling-gateway` 或 `wloc-service`。重新安装或升级时，opkg 会保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
 
 正式版 1.0 对每个平台只提供一个完整集成包。包名统一为
-`wificalling-location-gateway`，内含 Wi‑Fi Calling Gateway 1.7、WLOC
+`wificalling-location-gateway`，内含 Wi‑Fi Calling Gateway、WLOC
 服务、控制工具和统一 LuCI；不再要求用户分别安装组件包。
 
 两种安装方式：
@@ -457,13 +457,13 @@ opkg install /tmp/wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.2.0-r1_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.2.1-r1_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.0-r1.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.1-r1.apk
 ```
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。
@@ -525,12 +525,12 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
   --out-dir "$PWD/dist/runtime/x86_64"
 
 ./scripts/openwrt/build-release-packages.sh \
-  --version 1.0.2 \
+  --version 1.2.1 \
   --release 1 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
   --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \
-  --gateway-ipk /absolute/path/luci-app-wificalling-gateway_1.7.3-1_all.ipk \
+  --gateway-ipk /absolute/path/luci-app-wificalling-gateway_<version>_all.ipk \
   --gateway-sha256 <verified-sha256> \
   --out-dir "$PWD/dist/openwrt-release"
 ```
@@ -539,7 +539,7 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir "$PWD/dist/v1.0.2"
+  --dist-dir "$PWD/dist/v1.2.1"
 ```
 
 构建使用固定摘要的官方 OpenWrt SDK；依赖准备之后，产品编译采用 locked/offline、只读源码和禁网容器。完整边界和结果见 [OpenWrt 发布打包与 Docker 矩阵](docs/testing/OPENWRT_PACKAGE_DOCKER_MATRIX.md)。
@@ -606,4 +606,4 @@ docs/                        API、安全、部署、测试和双语用户教程
 
 本项目采用 [MIT License](LICENSE)。第三方依赖及外部项目仍分别遵循其自身许可证；MIT 授权不改变 [clean-room 边界 ADR](docs/adr/0001-license-boundary.md) 中对外部 AGPL 实现材料的隔离要求。
 
-Wi‑Fi Calling Gateway 1.7 仍由独立仓库维护。本仓库不 vendor 它的源码；正式包构建只接受经过身份、版本和 SHA-256 校验的已发布 IPK，并在构建时组合为单一安装包。
+Wi‑Fi Calling Gateway 组件原为独立项目。本仓库将其整合为单一安装包；正式包构建只接受经过身份、版本和 SHA-256 校验的已发布 IPK。

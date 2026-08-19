@@ -98,19 +98,30 @@ tar -xf "$gateway_ipk" -C "$stage/gateway"
 gateway_control=$(tar -xOf "$stage/gateway/control.tar.gz" ./control)
 printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null ||
 	fail 'Gateway IPK has an unexpected package identity'
-printf '%s\n' "$gateway_control" | grep -E '^Version: 1\.7\.[0-9]+-[0-9]+$' >/dev/null ||
-	fail 'Gateway IPK must be a validated 1.7.x release'
+printf '%s\n' "$gateway_control" | grep -E '^Version: (1\.7|1\.2)\.[0-9]+-[0-9]+$' >/dev/null ||
+	fail 'Gateway IPK must be a validated 1.7.x or 1.2.x release'
 tar -tzf "$stage/gateway/data.tar.gz" | while IFS= read -r member; do
 	case "$member" in /*|../*|*/../*|*/..) fail 'Gateway IPK contains an unsafe path' ;; esac
 done
 tar -xzf "$stage/gateway/data.tar.gz" -C "$package_dir/files"
 
-# The Gateway 1.7.x compiler has no WireGuard pre-shared key support; the
-# patch adds it (fail-closed against future Gateway versions).
-"$repo_root/scripts/openwrt/patch-wireguard-psk.sh" "$package_dir/files"
-"$repo_root/scripts/openwrt/patch-wireguard-health.sh" "$package_dir/files"
-"$repo_root/scripts/openwrt/patch-node-status-compact.sh" "$package_dir/files"
-"$repo_root/scripts/openwrt/patch-gateway-device-guard.sh" "$package_dir/files"
+# Gateway 1.2.x already includes WireGuard PSK, device-guard, node-status,
+# and health-check features; only apply compatibility patches for 1.7.x.
+gw_version=$(printf '%s\n' "$gateway_control" | sed -n 's/^Version: //p')
+case "$gw_version" in
+  1.7.*)
+    "$repo_root/scripts/openwrt/patch-wireguard-psk.sh" "$package_dir/files"
+    "$repo_root/scripts/openwrt/patch-wireguard-health.sh" "$package_dir/files"
+    "$repo_root/scripts/openwrt/patch-node-status-compact.sh" "$package_dir/files"
+    "$repo_root/scripts/openwrt/patch-gateway-device-guard.sh" "$package_dir/files"
+    ;;
+  1.2.*)
+    echo "build-release-packages: gateway $gw_version — skipping 1.7.x patches"
+    ;;
+  *)
+    fail "unexpected gateway version: $gw_version"
+    ;;
+esac
 
 # Overlay the integrated UI, then the architecture-specific WLOC runtime.
 cp -R "$repo_root/openwrt/luci-app-wificalling-location-gateway/files/." "$package_dir/files/"
@@ -140,7 +151,7 @@ define Package/wificalling-location-gateway
   PROVIDES:=wloc-service luci-app-wificalling-location-gateway luci-app-wificalling-gateway
 endef
 define Package/wificalling-location-gateway/description
-  Complete Wi-Fi Calling Gateway 1.7, WLOC service, control client, and unified LuCI UI.
+  Complete Wi-Fi Calling Gateway, WLOC service, control client, and unified LuCI UI.
 endef
 define Build/Compile
 endef

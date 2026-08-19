@@ -2,6 +2,27 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.2.1] - 2026-08-19
+
+Compiler optimization: only load proxy nodes that are actually referenced by device policies.
+
+### Changed
+
+- **Compiler node filtering**: `compiler.sh` now tracks which nodes are
+  referenced by active device policies and only compiles those into
+  `sing-box.json`. Unreferenced nodes are excluded from the outbound
+  list and WireGuard endpoint block, reducing the generated config from
+  ~4.5 KB to ~0.8 KB when only one device policy is active (tested on
+  AX6S with 10 configured nodes, 1 active device).
+- **Reduced sing-box memory footprint**: on a Redmi AX6S the
+  wificalling-gateway sing-box instance RSS dropped from ~23 MB to
+  ~19 MB when only one vmess node was referenced, because unused
+  WireGuard tunnels and protocol stacks are no longer loaded.
+- **README housekeeping**: removed outdated "Wi‑Fi Calling Gateway 1.7"
+  references throughout; the project is now a single integrated package.
+  Updated release badge, build script examples, and Docker matrix paths
+  to match the current 1.2.0 version.
+
 ## [1.2.0] - 2026-08-17
 
 WireGuard node reliability and connection testing overhaul.
