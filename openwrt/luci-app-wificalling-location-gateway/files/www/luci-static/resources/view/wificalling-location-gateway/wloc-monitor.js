@@ -14,6 +14,12 @@
 var STATUS_FILE = '/var/run/wloc-service/status.json';
 var EVENTS_FILE = '/var/run/wloc-service/events.jsonl';
 
+var clearLog = rpc.declare({
+	object: 'luci.wloc',
+	method: 'clear_log',
+	params: [ 'log' ]
+});
+
 // 手动刷新按钮的忙碌状态；轮询重渲染表格时据此保持按钮为“刷新中”。
 var refreshingIp = false;
 
@@ -172,11 +178,12 @@ return view.extend({
 			ui.showModal(wlocI18n.t('Clear WLOC usage log?'), [E('p', {}, wlocI18n.t('This clears the local history of WLOC location events. Location interception settings are not affected.')),
 				E('div', { class: 'right' }, [E('button', { class: 'btn', click: ui.hideModal }, wlocI18n.t('Cancel')),
 				E('button', { class: 'btn cbi-button-negative', click: function() {
-					fs.write(EVENTS_FILE, '').then(function() {
+					clearLog('wloc').then(function() {
 						renderLog('');
 						ui.hideModal();
 						ui.addNotification(null, E('p', {}, wlocI18n.t('WLOC usage log cleared.')), 'info');
 					}).catch(function(err) {
+						ui.hideModal();
 						ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to clear log: ') + ' ' + err.message), 'error');
 					});
 				} }, wlocI18n.t('Clear log'))])]);

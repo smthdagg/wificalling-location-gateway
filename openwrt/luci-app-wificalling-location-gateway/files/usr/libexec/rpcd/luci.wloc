@@ -55,6 +55,8 @@ list)
 	json_close_object
 	json_add_object restart_gateway
 	json_close_object
+	json_add_object clear_log
+	json_close_object
 	json_add_object verify_fingerprint
 	json_close_object
 	json_add_object health
@@ -232,6 +234,22 @@ call)
 			exit 1
 		fi
 		/usr/sbin/wloc-health.sh
+		exit 0
+		;;
+	clear_log)
+		# Truncate a usage log immediately with a shell redirect (O_TRUNC).
+		# The old path went through LuCI's fs.write ubus call, which could
+		# stall while a monitor process holds the file open, leaving the
+		# confirm modal open until the write returned.
+		read -r input
+		json_load "$input"
+		json_get_var log log
+		case "$log" in
+			wfc) : > /var/run/wificalling-gateway/events.log ;;
+			wloc) : > /var/run/wloc-service/events.jsonl ;;
+			*) echo '{"error":"unknown log target"}'; exit 1 ;;
+		esac
+		echo '{"ok":true}'
 		exit 0
 		;;
 	node_test)

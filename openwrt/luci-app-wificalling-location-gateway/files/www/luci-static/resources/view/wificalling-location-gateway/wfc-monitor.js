@@ -1,6 +1,7 @@
 'use strict';
 'require view';
 'require wificalling-location-gateway.i18n as wlocI18n';
+'require rpc';
 'require fs';
 'require poll';
 'require dom';
@@ -8,6 +9,12 @@
 'require uci';
 
 // Wi-Fi Calling 监控与日志（合并页）：设备隧道状态 + 加密 IMS 活动日志。
+
+var clearLog = rpc.declare({
+	object: 'luci.wloc',
+	method: 'clear_log',
+	params: [ 'log' ]
+});
 
 return view.extend({
 	load: function() {
@@ -84,7 +91,7 @@ return view.extend({
 			ui.showModal(wlocI18n.t('Clear activity log?'), [E('p', {}, wlocI18n.t('This permanently removes only the Wi-Fi Calling activity history. Settings and system logs are not affected.')),
 				E('div', { class: 'right' }, [E('button', { class: 'btn', click: ui.hideModal }, wlocI18n.t('Cancel')),
 				E('button', { class: 'btn cbi-button-negative', click: function() {
-					fs.write('/var/run/wificalling-gateway/events.log', '').then(function() { renderLog(''); ui.hideModal(); ui.addNotification(null, E('p', {}, wlocI18n.t('Activity log cleared.')), 'info'); }).catch(function(err) { ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to clear log: ') + ' ' + err.message), 'error'); });
+					clearLog('wfc').then(function() { renderLog(''); ui.hideModal(); ui.addNotification(null, E('p', {}, wlocI18n.t('Activity log cleared.')), 'info'); }).catch(function(err) { ui.hideModal(); ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to clear log: ') + ' ' + err.message), 'error'); });
 				} }, wlocI18n.t('Clear log'))])]);
 		} }, wlocI18n.t('Clear log'));
 

@@ -12,7 +12,8 @@
           "verify_fingerprint",
           "health",
           "restart_gateway",
-          "node_test"
+          "node_test",
+          "clear_log"
         ],
         "file": [
           "read"
