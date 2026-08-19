@@ -32,6 +32,8 @@ pub enum ExitState {
     Verified,
     Stale,
     Unavailable,
+    /// Manual mode: exit probing is skipped by design, not an error.
+    Manual,
 }
 
 /// Evidence state for the Geo resolution. Coordinates are never included in
@@ -42,6 +44,8 @@ pub enum GeoState {
     Unavailable,
     Fresh,
     Uncertain,
+    /// Manual mode: the manual preset is the source of truth, not a probe.
+    Manual,
 }
 
 /// How the proxy patch target is chosen: follow the node exit () or a

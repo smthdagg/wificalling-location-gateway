@@ -530,17 +530,26 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
 
     /// Build the status snapshot inputs from the current evidence at `now_unix`.
     pub fn status_inputs_at(&self, now_unix: u64) -> StatusInputs {
-        let (exit_state, exit_checked_at) = match &self.exit_evidence {
-            ExitEvidence::Verified(observation) => {
-                (ExitState::Verified, Some(observation.checked_at_unix()))
-            }
-            ExitEvidence::Unavailable => (ExitState::Unavailable, None),
-            ExitEvidence::None => (ExitState::Unknown, None),
+        let (exit_state, exit_checked_at) = match &self.geo_source {
+            // Manual mode: exit probing is skipped by design; report the
+            // healthy "manual" state instead of unknown/unavailable.
+            GeoSource::Manual { .. } => (ExitState::Manual, None),
+            GeoSource::Auto => match &self.exit_evidence {
+                ExitEvidence::Verified(observation) => {
+                    (ExitState::Verified, Some(observation.checked_at_unix()))
+                }
+                ExitEvidence::Unavailable => (ExitState::Unavailable, None),
+                ExitEvidence::None => (ExitState::Unknown, None),
+            },
         };
-        let (geo_state, geo_expires_at) = match &self.geo_resolution {
-            GeoResolution::Fresh(record) => (GeoState::Fresh, Some(record.expires_at_unix)),
-            GeoResolution::Uncertain => (GeoState::Uncertain, None),
-            GeoResolution::Unavailable => (GeoState::Unavailable, None),
+        let (geo_state, geo_expires_at) = match &self.geo_source {
+            // Manual mode: the manual preset is the source of truth.
+            GeoSource::Manual { .. } => (GeoState::Manual, None),
+            GeoSource::Auto => match &self.geo_resolution {
+                GeoResolution::Fresh(record) => (GeoState::Fresh, Some(record.expires_at_unix)),
+                GeoResolution::Uncertain => (GeoState::Uncertain, None),
+                GeoResolution::Unavailable => (GeoState::Unavailable, None),
+            },
         };
         let (engine_health, engine_uptime) = match self.state.phase() {
             ServicePhase::Intercepting => (EngineHealth::Healthy, 0),

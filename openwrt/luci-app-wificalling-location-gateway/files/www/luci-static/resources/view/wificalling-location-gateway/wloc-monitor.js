@@ -130,7 +130,7 @@ return view.extend({
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('City')), E('td', { class: 'td' }, g.city || '-')]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Timezone')), E('td', { class: 'td' }, g.timezone || '-')]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('GPS (lat / lon)')), E('td', { class: 'td' }, gpsOf(g))]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Geo state')), E('td', { class: 'td' }, g.state || '-')]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Geo state')), E('td', { class: 'td' }, (g.state === 'manual') ? wlocI18n.t('Manual location') : (g.state || '-'))]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Observed at')), E('td', { class: 'td' }, fmtTime(s.observed_at))]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Exit IP')), E('td', { class: 'td' }, exitVal)])
 			];
