@@ -161,15 +161,11 @@ return view.extend({
 					notify(wlocI18n.t('Mode switch failed'), response.error);
 					return false;
 				}
-				// Persist the mode immediately. If this stays pending, a
-				// later "Follow device" save (uci.save on the whole
-				// wloc-service package) would carry this stale value over
-				// and flip the service back to the previous mode.
-				uci.set('wloc-service', 'main', 'geo_source', value);
-				return uci.save('wloc-service').then(function() {
-					return ui.changes.apply(true);
-				});
-			}).then(function() {
+				// The backend mode-set already persisted geo_source (and the
+				// manual coordinates) via uci commit; the browser must not
+				// start its own UCI save/apply, which would race the form and
+				// could carry a stale pending geo_source over on a later
+				// Follow-device save.
 				return true;
 			}).catch(function(e) {
 				notify(wlocI18n.t('Mode switch failed'), String(e));
