@@ -346,7 +346,9 @@ impl ProfileRuntimeControl for OpenWrtRuntime {
 /// and each profile's redirect; this adapter keeps the profile's probe/Geo
 /// state machine independent without spawning another engine.
 #[derive(Default)]
-struct ProfileServiceRuntime;
+struct ProfileServiceRuntime {
+    logical_redirect_present: bool,
+}
 
 impl RuntimeControl for ProfileServiceRuntime {
     fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure> {
@@ -362,15 +364,21 @@ impl RuntimeControl for ProfileServiceRuntime {
     }
 
     fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        // The profile redirect is installed by ProfileRuntimeManager. This
+        // handler still needs a local lifecycle bit so WlocService's safety
+        // state machine can verify its own enable/disable transaction without
+        // trying to inspect or mutate another profile's nft table.
+        self.logical_redirect_present = true;
         Ok(())
     }
 
     fn remove_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        self.logical_redirect_present = false;
         Ok(())
     }
 
     fn redirect_present(&mut self) -> Result<bool, RuntimeFailure> {
-        Ok(false)
+        Ok(self.logical_redirect_present)
     }
 
     fn disarm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
@@ -660,7 +668,7 @@ fn build_profile_handler(
         .unwrap_or_else(|_| "/var/run/wloc-service/profiles".to_owned());
     let profile_dir = Path::new(&state_dir).join(&profile.id);
     let mut service = WlocService::new(
-        ProfileServiceRuntime,
+        ProfileServiceRuntime::default(),
         build_probe(&assigned_device, uci.probe_port),
         build_geo_provider(geo_provider),
         WlocServiceConfig {
@@ -1291,6 +1299,16 @@ mod tests {
 
         assert!(!RuntimeControl::engine_healthy(&mut runtime).unwrap());
         assert!(!ProfileRuntimeControl::shared_engine_healthy(&mut runtime).unwrap());
+    }
+
+    #[test]
+    fn profile_handler_runtime_tracks_its_logical_redirect_lifecycle() {
+        let mut runtime = ProfileServiceRuntime::default();
+        assert!(!runtime.redirect_present().unwrap());
+        runtime.install_exact_redirect().unwrap();
+        assert!(runtime.redirect_present().unwrap());
+        runtime.remove_redirect().unwrap();
+        assert!(!runtime.redirect_present().unwrap());
     }
 
     #[cfg(unix)]

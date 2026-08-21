@@ -12,8 +12,12 @@ cat > "$tmp/bin/uci" <<'EOF'
 #!/bin/sh
 case "$*" in
   '-q show wloc-service')
-    printf '%s\n' 'wloc-service.phone=device' 'wloc-service.tablet=device'
+    printf '%s\n' 'wloc-service.default=device' 'wloc-service.phone=device' 'wloc-service.tablet=device'
     ;;
+  '-q get wloc-service.default.label') printf '%s\n' 'Default device' ;;
+  '-q get wloc-service.default.enabled') printf '%s\n' '1' ;;
+  '-q get wloc-service.default.assigned_device') printf '%s\n' '192.168.1.9' ;;
+  '-q get wloc-service.default.node_ref') printf '%s\n' 'node-default' ;;
   '-q get wloc-service.phone.label') printf '%s\n' 'Living room phone' ;;
   '-q get wloc-service.phone.enabled') printf '%s\n' '1' ;;
   '-q get wloc-service.phone.assigned_device') printf '%s\n' '192.168.1.10' ;;
@@ -28,6 +32,7 @@ EOF
 cat > "$tmp/bin/nft" <<'EOF'
 #!/bin/sh
 case "$*" in
+  'list table inet wloc_profile_default') exit 0 ;;
   'list table inet wloc_profile_phone') exit 0 ;;
   *) exit 1 ;;
 esac
@@ -35,6 +40,8 @@ EOF
 chmod 0755 "$tmp/bin/uci" "$tmp/bin/nft"
 
 output=$(PATH="$tmp/bin:$PATH" "$status")
+printf '%s\n' "$output" | grep -F '"id":"default"' >/dev/null
+printf '%s\n' "$output" | grep -F '"id":"default"' | grep -F '"phase":"intercepting"' >/dev/null
 printf '%s\n' "$output" | grep -F '"id":"phone"' >/dev/null
 printf '%s\n' "$output" | grep -F '"phase":"intercepting"' >/dev/null
 printf '%s\n' "$output" | grep -F '"id":"tablet"' >/dev/null
