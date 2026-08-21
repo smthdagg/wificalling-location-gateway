@@ -12,7 +12,7 @@ package, UCI file, init script, or runtime dependency was installed.
 - The installed `2.0.0-24` package was explicitly removed before the final
   migration test, as required for the small overlay. The modified UCI
   conffile and WLOC/CA state were backed up locally on the router first. The
-  provider was retained. Later `2.0.0-25` and `2.0.0-26` installs were
+  provider was retained. Later `2.0.0-25`, `2.0.0-26`, and `2.0.0-27` installs were
   package-upgrade checks; opkg preserved the modified UCI conffile and placed
   the package candidate beside it as `.opkg`.
 - Provider packages: system sing-box and PassWall were retained; no second
@@ -24,10 +24,10 @@ package, UCI file, init script, or runtime dependency was installed.
   `2.0.0-24` was first installed after removing the previous package and passed
   the service, API, provider, health, restart, target-metadata, and
   standalone-boundary checks. The final package `2.0.0-26` was installed after
-  the audit fixes; its SHA-256 was:
+  the audit fixes; the final package `2.0.0-27` SHA-256 was:
 
   ```text
-  91458e4da7d9d78b24bece9afd0eb5c514a1d0bf1399c19ba9947d8c23e1e4d1
+  78c9a159a4e8da732ea7a8358b8f95eac2ed973ffa4dbd838e196fd5ff93479b
   ```
 - The WLOC UCI profile and CA backups were taken before removal. The final
   provider path uses PassWall's persistent generated configuration under
@@ -76,6 +76,7 @@ package, UCI file, init script, or runtime dependency was installed.
 | Final 2.0.0-26 restart settling and health recovery | pass |
 | Controlled unified-supervisor stop withdraws redirect; start restores it | pass |
 | Direct package install clears stale component-update status | pass |
+| Package post-install uses init lifecycle without direct process kill | pass |
 | Exact firmware target `mediatek/mt7622` matched package metadata | pass |
 | Standalone package compatibility file and package boundary check | pass |
 | V2 `Packages` and `Packages.gz` signatures verified by AX6S `usign` | pass |
@@ -145,7 +146,7 @@ matrix installed and started all four cases: AX6S/OpenWrt 24.10.5,
 OpenWrt 24.10.8 x86_64, OpenWrt 25.12.3 x86_64, and iStoreOS 24.10.5 x86_64.
 The exact host-side package hashes are recorded in the release staging
 directory's `SHA256SUMS`; the final AX6S package hash is
-`91458e4da7d9d78b24bece9afd0eb5c514a1d0bf1399c19ba9947d8c23e1e4d1` and was
+`78c9a159a4e8da732ea7a8358b8f95eac2ed973ffa4dbd838e196fd5ff93479b` and was
 verified on the router before installation. The AArch64 binaries were the
 previously verified pinned-build outputs because the pinned cross-build image
 was not cached locally during this final shell/UI/package-only rebuild.

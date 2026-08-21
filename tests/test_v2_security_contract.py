@@ -60,6 +60,15 @@ class V2SecurityContractTests(unittest.TestCase):
             self.assertIn("if /etc/init.d/wificalling-location-gateway restart", section)
             self.assertIn('echo \'{"error":"unified WLOC restart failed"}\'', section)
 
+    def test_package_postinstall_uses_init_lifecycle_without_direct_kill(self):
+        for relative in (
+            "scripts/build-luci-ipk.sh",
+            "scripts/openwrt/build-release-packages.sh",
+        ):
+            source = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertNotIn("killall -q wloc-service", source)
+            self.assertIn("/etc/init.d/wloc-service stop", source)
+
 
 if __name__ == "__main__":
     unittest.main()

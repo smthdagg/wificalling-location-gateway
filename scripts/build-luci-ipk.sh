@@ -163,9 +163,8 @@ PY
 # previous transaction result visible as if it described this package.
 rm -f /var/lib/wificalling-location-gateway/update/status.json
 /etc/init.d/wloc-service disable >/dev/null 2>&1 || true
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-location-gateway enable >/dev/null 2>&1 || true
-killall -q wloc-service >/dev/null 2>&1 || true
-rm -f /var/run/wloc-service/control.sock
 if [ -x /usr/libexec/wificalling-location-gateway/singbox-runtime.sh ]; then
   /usr/libexec/wificalling-location-gateway/singbox-runtime.sh path >/dev/null 2>&1 || echo "wificalling-location-gateway: install sing-box tiny/lite or a PassWall sing-box provider" >&2
 fi
