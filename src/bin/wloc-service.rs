@@ -1246,10 +1246,7 @@ mod tests {
             Ok(())
         }
 
-        fn search_location(
-            &mut self,
-            query: &str,
-        ) -> Result<serde_json::Value, DispatchError> {
+        fn search_location(&mut self, query: &str) -> Result<serde_json::Value, DispatchError> {
             Ok(serde_json::json!({"query": query}))
         }
 
@@ -1349,7 +1346,10 @@ mod tests {
             })
             .unwrap();
         group.clear_manual_location().unwrap();
-        assert_eq!(group.search_location("Singapore").unwrap()["query"], "Singapore");
+        assert_eq!(
+            group.search_location("Singapore").unwrap()["query"],
+            "Singapore"
+        );
         group.refresh_periodic();
         group.refresh_evidence().unwrap();
 
