@@ -487,4 +487,23 @@ mod tests {
         assert!(names.iter().any(|n| n.ends_with("_patched.bin")));
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn debug_samples_are_bounded() {
+        let dir = std::env::temp_dir().join(format!("wloc-dump-bound-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let large = vec![b'x'; MAX_DEBUG_SAMPLE_BYTES * 2];
+        dump_wloc_samples(
+            dir.to_str().unwrap(),
+            "gs-loc.apple.com",
+            "192.168.31.175",
+            &large,
+            &large,
+            &large,
+        );
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            assert!(entry.unwrap().metadata().unwrap().len() <= MAX_DEBUG_SAMPLE_BYTES as u64);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
