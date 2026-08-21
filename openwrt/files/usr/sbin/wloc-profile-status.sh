@@ -29,11 +29,13 @@ profile_phase() {
 	profile_id=$1
 	enabled=$2
 	assigned_device=$3
+	table="wloc_profile_${profile_id}"
+	[ "$profile_id" = default ] && table=wloc_service
 	if [ "$enabled" != 1 ]; then
 		printf '%s' 'disabled|disabled'
-	elif [ -z "$assigned_device" ]; then
+	elif [ -z "$assigned_device" ] && [ "$profile_id" != default ]; then
 		printf '%s' 'degraded_passthrough|missing_device_binding'
-	elif "$NFT_BINARY" list table inet "wloc_profile_${profile_id}" >/dev/null 2>&1; then
+	elif "$NFT_BINARY" list table inet "$table" >/dev/null 2>&1; then
 		printf '%s' 'intercepting|intercepting'
 	else
 		printf '%s' 'passthrough|redirect_not_installed'
