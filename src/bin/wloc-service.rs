@@ -49,6 +49,7 @@ fn disabled_runtime_profile() -> RuntimeProfile {
     RuntimeProfile {
         id: "invalid".to_owned(),
         enabled: false,
+        runtime_supported: false,
         assigned_device: None,
         node_ref: "default".to_owned(),
         location_mode: LocationMode::Auto,
@@ -62,12 +63,25 @@ fn runtime_profile_from_uci(uci: &WlocUciConfig) -> RuntimeProfile {
         .profile_model()
         .and_then(|model| model.single_runtime_profile())
     {
-        Ok(profile) => profile,
+        Ok(mut profile) => {
+            if !profile.runtime_supported {
+                eprintln!(
+                    "wloc-service: profile {} has no IP runtime binding; staying disabled",
+                    profile.id
+                );
+                profile.enabled = false;
+            }
+            profile
+        }
         Err(error) => {
             eprintln!("wloc-service: profile is not runnable yet: {error}; staying disabled");
             disabled_runtime_profile()
         }
     }
+}
+
+fn runtime_scope_valid(config_valid: bool, profile: &RuntimeProfile) -> bool {
+    config_valid && profile.runtime_supported
 }
 
 /// No-op runtime control: every adapter step succeeds and the engine is
@@ -235,14 +249,17 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // file falls back to the defaults so the daemon still runs unconfigured.
     let uci_path = std::env::var("WLOC_UCI_CONFIG")
         .unwrap_or_else(|_| wificalling_location_gateway::config::uci::DEFAULT_UCI_PATH.into());
-    let uci = match WlocUciConfig::load(Path::new(&uci_path)) {
-        Ok(config) => config,
+    let (uci, config_valid) = match WlocUciConfig::load(Path::new(&uci_path)) {
+        Ok(config) => (config, true),
         Err(error) => {
             eprintln!("wloc-service: {error}; using disabled defaults");
-            WlocUciConfig {
-                enabled: false,
-                ..WlocUciConfig::default()
-            }
+            (
+                WlocUciConfig {
+                    enabled: false,
+                    ..WlocUciConfig::default()
+                },
+                false,
+            )
         }
     };
     let runtime_profile = runtime_profile_from_uci(&uci);
@@ -250,7 +267,9 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // chosen from LuCI; when unset, fall back to the first device policy of
     // the Gateway config so a fresh install follows something on any subnet
     // instead of a fixed example address.
-    let assigned_device = if runtime_profile
+    let assigned_device = if !runtime_profile.runtime_supported {
+        String::new()
+    } else if runtime_profile
         .assigned_device
         .as_deref()
         .unwrap_or_default()
@@ -299,7 +318,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             probe_limits: ProbeLimits {
                 max_observation_age: Duration::from_secs(uci.probe_interval_secs),
             },
-            scope_valid: true,
+            scope_valid: runtime_scope_valid(config_valid, &runtime_profile),
             ipv6_ready: true,
             assigned_device_configured: !assigned_device.is_empty(),
             assigned_device: if assigned_device.is_empty() {
@@ -670,5 +689,22 @@ mod tests {
         let profile = runtime_profile_from_uci(&config);
         assert!(!profile.enabled);
         assert_eq!(profile.id, "invalid");
+    }
+
+    #[test]
+    fn mac_profile_is_not_enabled_until_runtime_resolution_exists() {
+        let config = WlocUciConfig::parse(
+            "config device 'phone'\n\toption assigned_device 'aa:bb:cc:dd:ee:ff'\n",
+        )
+        .unwrap();
+        let profile = runtime_profile_from_uci(&config);
+        assert!(!profile.enabled);
+        assert!(!profile.runtime_supported);
+    }
+
+    #[test]
+    fn invalid_uci_cannot_be_enabled_from_the_control_socket() {
+        let profile = disabled_runtime_profile();
+        assert!(!runtime_scope_valid(false, &profile));
     }
 }

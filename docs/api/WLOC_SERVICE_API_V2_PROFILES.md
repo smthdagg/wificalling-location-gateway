@@ -48,8 +48,11 @@ profile is configured before the unified multi-device runtime lands, it stays
 disabled rather than selecting a profile implicitly. Explicit addresses must
 be usable unicast LAN bindings: unspecified, loopback, multicast, broadcast,
 IPv4 link-local, IPv6 link-local, zero MAC, and multicast MAC values are
-rejected. The legacy singleton projection may still have no address so an
-existing installation can continue its current Gateway-policy discovery path.
+rejected. MAC addresses are accepted in the profile schema for the future
+multi-device resolver, but the current single-runtime daemon accepts only IP
+bindings and stays disabled for a MAC-only profile. The legacy singleton
+projection may still have no address so an existing installation can continue
+its current Gateway-policy discovery path.
 
 ## v2 request envelope
 

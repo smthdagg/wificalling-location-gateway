@@ -99,6 +99,7 @@ pub struct ProfileModel {
 pub struct RuntimeProfile {
     pub id: String,
     pub enabled: bool,
+    pub runtime_supported: bool,
     pub assigned_device: Option<String>,
     pub node_ref: String,
     pub location_mode: LocationMode,
@@ -160,6 +161,11 @@ impl ProfileModel {
         Ok(RuntimeProfile {
             id: profile.id.clone(),
             enabled: profile.enabled,
+            runtime_supported: profile
+                .assigned_device
+                .as_deref()
+                .map(|address| address.parse::<IpAddr>().is_ok())
+                .unwrap_or(true),
             assigned_device: profile.assigned_device.clone(),
             node_ref: profile.node_ref.clone(),
             location_mode: profile.location_mode,
