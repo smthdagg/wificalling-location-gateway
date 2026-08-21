@@ -116,6 +116,20 @@ printf 'ok\n' > "$tmp/health"
 
 script="$repo_root/openwrt/files/usr/sbin/wloc-component-update.sh"
 
+cp "$new_package" "$tmp/unsigned.ipk"
+if sh "$script" preflight "$tmp/unsigned.ipk"; then
+    echo 'unsigned update package was accepted' >&2
+    exit 1
+fi
+cp "$new_package.manifest" "$tmp/tampered.manifest"
+sed 's/^Package-SHA256:.*/Package-SHA256: 0000000000000000000000000000000000000000000000000000000000000000/' \
+    "$tmp/tampered.manifest" > "$tmp/tampered.manifest.new"
+mv "$tmp/tampered.manifest.new" "$tmp/tampered.manifest"
+if WLOC_UPDATE_MANIFEST="$tmp/tampered.manifest" sh "$script" preflight "$new_package"; then
+    echo 'tampered update manifest was accepted' >&2
+    exit 1
+fi
+
 WLOC_UPDATE_CURRENT_PACKAGE="$old_package" sh "$script" apply "$new_package"
 grep '^install$' "$tmp/opkg.log" >/dev/null
 grep '^new-component$' "$root/usr/share/wificalling-location-gateway/component.txt" >/dev/null

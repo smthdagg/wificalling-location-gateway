@@ -220,7 +220,7 @@ POSTINST
 			# boundary and update/health helpers exposed by the LuCI page.
 			mkdir -p "$stage/data/usr/sbin" "$stage/data/etc/init.d" \
 				"$stage/data/usr/libexec/wificalling-location-gateway"
-			for helper in wloc-health.sh wloc-component-update.sh \
+			for helper in wloc-health.sh wloc-support-bundle.sh wloc-component-update.sh \
 				wloc-redirect-sync.sh wloc-profile-redirect.sh wloc-profile-status.sh; do
 				cp "$root/openwrt/files/usr/sbin/$helper" "$stage/data/usr/sbin/$helper"
 			done

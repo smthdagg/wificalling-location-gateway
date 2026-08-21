@@ -14,6 +14,7 @@ tar -xOf "$out" ./data.tar.gz > "$data"
 for member in \
 	./usr/sbin/wloc-component-update.sh \
 	./usr/sbin/wloc-health.sh \
+	./usr/sbin/wloc-support-bundle.sh \
 	./etc/init.d/wificalling-location-gateway \
 	./usr/libexec/wificalling-location-gateway/unified-supervisor.sh; do
 	tar -tzf "$data" | grep -Fx "$member" >/dev/null || {
