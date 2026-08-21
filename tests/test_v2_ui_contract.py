@@ -60,6 +60,8 @@ class V2UiContractTests(unittest.TestCase):
             self.assertIn("validateProfiles", source)
             self.assertIn("probe interval must be between", source)
             self.assertIn("ui.changes.apply(true)", source)
+            self.assertIn("removeProfile(section)", source)
+            self.assertEqual(source.count("uci.save('wloc-service')"), 1)
 
 
 if __name__ == "__main__":
