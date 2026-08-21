@@ -13,7 +13,7 @@ set -eu
 TABLE=wloc_service
 SET=apple_hosts
 
-HOSTS="gs-loc.apple.com gs-loc-cn.apple.com gs-loc-corpa.apple.com gs-loc.apple.com.cn bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com"
+HOSTS="gs-loc.apple.com gs-loc-cn.apple.com"
 
 # The router's own LAN IPv4 (the DNS hijack maps the WLOC names to it);
 # answers equal to it must not pollute the set.

@@ -19,10 +19,14 @@ GATEWAY_INIT=${GATEWAY_INIT:-/etc/init.d/wificalling-gateway}
 REDIRECT_HELPER=${WLOC_REDIRECT_HELPER:-/usr/sbin/wloc-redirect-sync.sh}
 CHECK_INTERVAL=${WLOC_SUPERVISOR_HEALTH_INTERVAL:-10}
 MAX_RUNTIME_SECONDS=${WLOC_SUPERVISOR_MAX_RUNTIME:-0}
+START_TIMEOUT=${WLOC_SUPERVISOR_START_TIMEOUT:-30}
 case "$CHECK_INTERVAL" in ''|*[!0-9]*) CHECK_INTERVAL=10;; esac
 [ "$CHECK_INTERVAL" -ge 1 ] || CHECK_INTERVAL=1
 [ "$CHECK_INTERVAL" -le 60 ] || CHECK_INTERVAL=60
 case "$MAX_RUNTIME_SECONDS" in ''|*[!0-9]*) MAX_RUNTIME_SECONDS=0;; esac
+case "$START_TIMEOUT" in ''|*[!0-9]*) START_TIMEOUT=30;; esac
+[ "$START_TIMEOUT" -ge 1 ] || START_TIMEOUT=1
+[ "$START_TIMEOUT" -le 120 ] || START_TIMEOUT=120
 gateway_running=0
 wloc_running=0
 redirect_present=0
@@ -67,19 +71,20 @@ withdraw_redirect() {
 
 cleanup_runtime() {
 	reason=$1
-	keep_gateway=${2:-0}
+	keep_gateway=${2:-1}
+	state_phase=${3:-degraded_passthrough}
 	withdraw_redirect
 	stop_child "$WLOC_INIT"
 	wloc_running=0
 	if [ "$keep_gateway" -eq 1 ]; then
-		# WLOC failure is fail-open for Wi-Fi Calling: leave the stable
-		# Gateway data plane alive in passthrough and report degradation.
+		# The stable Gateway is deliberately never stopped here. WLOC failure
+		# is fail-open, and explicit stop/reload only withdraws WLOC-owned
+		# rules; the stable Gateway table remains under its original owner.
 		gateway_running=1
-		write_state degraded_passthrough "$reason"
+		write_state "$state_phase" "$reason"
 	else
-		stop_child "$GATEWAY_INIT"
 		gateway_running=0
-		write_state stopped "$reason"
+		write_state "$state_phase" "$reason"
 	fi
 	rm -f "$PIDFILE"
 }
@@ -91,7 +96,7 @@ stop_supervisor() {
 		# The procd-owned process receives SIGTERM as well; cleanup is also
 		# idempotent here for direct upgrade/rollback invocations.
 	fi
-	cleanup_runtime requested_stop
+	cleanup_runtime requested_stop 1 stopped
 	rmdir "$LOCKDIR" 2>/dev/null || true
 }
 
@@ -108,6 +113,19 @@ health_ok() {
 	[ -S "${WLOC_SOCKET:-/var/run/wloc-service/control.sock}" ] || return 1
 }
 
+gateway_healthy() {
+	command -v pgrep >/dev/null 2>&1 || return 1
+	pgrep -f '/usr/bin/sing-box run' >/dev/null 2>&1
+}
+
+wait_for_health() {
+	deadline=$(( $(now) + START_TIMEOUT ))
+	while ! health_ok; do
+		[ "$(now)" -lt "$deadline" ] || return 1
+		sleep 1
+	done
+}
+
 start_supervisor() {
 	mkdir -p "$RUNDIR"
 	chmod 0700 "$RUNDIR"
@@ -118,7 +136,7 @@ start_supervisor() {
 	if ! mkdir "$LOCKDIR" 2>/dev/null; then
 		return 0
 	fi
-	trap 'cleanup_runtime signal; rmdir "$LOCKDIR" 2>/dev/null || true; exit 0' TERM INT
+	trap 'cleanup_runtime signal 1 stopped; rmdir "$LOCKDIR" 2>/dev/null || true; exit 0' TERM INT
 	echo "$$" > "$PIDFILE"
 	chmod 0600 "$PIDFILE"
 	gateway_running=0
@@ -132,15 +150,17 @@ start_supervisor() {
 	[ -x "$GATEWAY_INIT" ] && "$GATEWAY_INIT" disable >/dev/null 2>&1 || true
 	stop_child "$WLOC_INIT"
 
-	if ! WLOC_SUPERVISED=1 "$GATEWAY_INIT" start >/dev/null 2>&1; then
-		cleanup_runtime gateway_start_failed
-		exit 1
+	if ! gateway_healthy; then
+		if ! WLOC_SUPERVISED=1 "$GATEWAY_INIT" start >/dev/null 2>&1; then
+			cleanup_runtime gateway_start_failed 0 stopped
+			exit 1
+		fi
 	fi
 	gateway_running=1
 	write_state starting gateway_ready
 
-	if ! WLOC_SUPERVISED=1 WLOC_SKIP_REDIRECT=1 "$WLOC_INIT" start >/dev/null 2>&1; then
-		cleanup_runtime wloc_start_failed keep_gateway
+	if ! WLOC_SUPERVISED=1 WLOC_DEFER_REDIRECT=1 WLOC_SKIP_REDIRECT=1 "$WLOC_INIT" start >/dev/null 2>&1; then
+		cleanup_runtime wloc_start_failed 1
 		exit 1
 	fi
 	wloc_running=1
@@ -148,12 +168,12 @@ start_supervisor() {
 
 	# Redirect installation is the final step. It only edits the dedicated
 	# wloc_service table and policy route; it never touches Gateway tables.
-	if ! health_ok; then
-		cleanup_runtime child_health_failed keep_gateway
+	if ! wait_for_health; then
+		cleanup_runtime child_health_failed 1
 		exit 1
 	fi
 	if ! "$REDIRECT_HELPER" start >/dev/null 2>&1; then
-		cleanup_runtime redirect_install_failed keep_gateway
+		cleanup_runtime redirect_install_failed 1
 		exit 1
 	fi
 	redirect_present=1
@@ -162,12 +182,12 @@ start_supervisor() {
 	started=$(now)
 	while :; do
 		if ! health_ok; then
-			cleanup_runtime health_failed keep_gateway
+			cleanup_runtime health_failed 1
 			exit 1
 		fi
 		if [ "$MAX_RUNTIME_SECONDS" -gt 0 ] 2>/dev/null \
 			&& [ "$(($(now) - started))" -ge "$MAX_RUNTIME_SECONDS" ]; then
-			cleanup_runtime test_runtime_limit
+			cleanup_runtime test_runtime_limit 1 stopped
 			exit 0
 		fi
 		sleep "$CHECK_INTERVAL"

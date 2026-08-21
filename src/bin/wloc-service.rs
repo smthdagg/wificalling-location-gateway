@@ -54,15 +54,19 @@ fn now_unix() -> u64 {
 struct OpenWrtRuntime {
     redirect_helper: std::path::PathBuf,
     nft_binary: std::path::PathBuf,
+    defer_first_redirect: bool,
 }
 
 impl OpenWrtRuntime {
     fn from_env() -> Self {
-        Self::new(
+        let mut runtime = Self::new(
             std::env::var("WLOC_REDIRECT_HELPER")
                 .unwrap_or_else(|_| "/usr/sbin/wloc-redirect-sync.sh".to_owned()),
             std::env::var("WLOC_NFT_BINARY").unwrap_or_else(|_| "nft".to_owned()),
-        )
+        );
+        runtime.defer_first_redirect =
+            std::env::var("WLOC_DEFER_REDIRECT").as_deref() == Ok("1");
+        runtime
     }
 
     fn new(
@@ -72,7 +76,13 @@ impl OpenWrtRuntime {
         Self {
             redirect_helper: redirect_helper.into(),
             nft_binary: nft_binary.into(),
+            defer_first_redirect: false,
         }
+    }
+
+    #[cfg(test)]
+    fn defer_first_redirect(&mut self) {
+        self.defer_first_redirect = true;
     }
 
     fn run_redirect(&self, action: &str) -> Result<(), RuntimeFailure> {
@@ -95,6 +105,10 @@ impl RuntimeControl for OpenWrtRuntime {
         Ok(())
     }
     fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        if self.defer_first_redirect {
+            self.defer_first_redirect = false;
+            return Ok(());
+        }
         self.run_redirect("start")
     }
     fn remove_redirect(&mut self) -> Result<(), RuntimeFailure> {
@@ -256,7 +270,6 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             WlocUciConfig::default()
         }
     };
-    let supervised = std::env::var("WLOC_SUPERVISED").as_deref() == Ok("1");
     // The device whose node binding the location follows. It is normally
     // chosen from LuCI; when unset, fall back to the first device policy of
     // the Gateway config so a fresh install follows something on any subnet
@@ -441,7 +454,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             );
         }
     }
-    if uci.enabled && !supervised {
+    if uci.enabled {
         if let Err(error) = service.enable() {
             eprintln!("wloc-service: enable failed: {error:?}");
         }
@@ -667,10 +680,12 @@ mod tests {
         std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
 
         let mut runtime = OpenWrtRuntime::new(&helper, &helper);
+        runtime.defer_first_redirect();
         runtime.install_exact_redirect().unwrap();
         runtime.remove_redirect().unwrap();
+        runtime.install_exact_redirect().unwrap();
 
-        assert_eq!(std::fs::read_to_string(&log).unwrap(), "start\nstop\n");
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), "stop\nstart\n");
         let _ = std::fs::remove_dir_all(root);
     }
 }

@@ -71,7 +71,7 @@ for hosts_file in ${WLOC_HOSTS_FILES:-/etc/hosts\ /tmp/hosts/wloc-hosts}; do
     sed -i "/$HOSTS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
     cat >> "$hosts_file" <<EOF
 $HOSTS_MARKER
-$ROUTER_IP gs-loc.apple.com gs-loc-cn.apple.com gs-loc-corpa.apple.com gs-loc.apple.com.cn bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com
+$ROUTER_IP gs-loc.apple.com gs-loc-cn.apple.com
 # wloc-service end
 EOF
 done
