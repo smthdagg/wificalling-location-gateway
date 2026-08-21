@@ -54,11 +54,13 @@ return view.extend({
 		var wlocBody = E('div', {}, []);
 		var gwBody = E('div', {}, []);
 		var extraBody = E('div', {}, []);
+		var profileBody = E('tbody', {}, []);
 
 		function renderHealth(h) {
 			wlocBody.innerHTML = '';
 			gwBody.innerHTML = '';
 			extraBody.innerHTML = '';
+			profileBody.innerHTML = '';
 
 			var s = h.services || {};
 			var w = s.wloc || {};
@@ -125,6 +127,15 @@ return view.extend({
 			if (h.error) {
 				row(wlocBody, wlocI18n.t('Health check'), E('span', { style: 'color:#dc2626' }, h.error));
 			}
+			(h.profiles || []).forEach(function(profile) {
+				var good = profile.phase === 'intercepting' || profile.phase === 'disabled';
+				profileBody.appendChild(E('tr', { 'class': 'tr' }, [
+					E('td', { 'class': 'td' }, profile.id),
+					E('td', { 'class': 'td' }, profile.label || '-'),
+					E('td', { 'class': 'td' }, statusDot(good, profile.phase || '-')),
+					E('td', { 'class': 'td' }, profile.reason_code || '-')
+				]));
+			});
 		}
 
 		renderHealth(health);
@@ -196,6 +207,13 @@ return view.extend({
 			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Patches and nodes')),
 				extraBody
+			]),
+			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
+				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Device profiles')),
+				E('table', { 'class': 'table' }, [
+					E('tr', { 'class': 'tr table-titles' }, [wlocI18n.t('ID'), wlocI18n.t('Label'), wlocI18n.t('State'), wlocI18n.t('Reason')].map(function(title) { return E('th', { 'class': 'th' }, title); })),
+					profileBody
+				])
 			]),
 			restartButtons
 		]);

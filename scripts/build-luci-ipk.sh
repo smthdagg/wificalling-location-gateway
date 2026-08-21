@@ -174,6 +174,8 @@ PY
 			cp "$root/openwrt/files/etc/init.d/wloc-service" "$stage/data/etc/init.d/wloc-service"
 			cp "$root/openwrt/files/usr/sbin/wloc-redirect-sync.sh" "$stage/data/usr/sbin/wloc-redirect-sync.sh"
 			cp "$root/openwrt/files/usr/sbin/wloc-refresh-set.sh" "$stage/data/usr/sbin/wloc-refresh-set.sh"
+			cp "$root/openwrt/files/usr/sbin/wloc-profile-redirect.sh" "$stage/data/usr/sbin/wloc-profile-redirect.sh"
+			cp "$root/openwrt/files/usr/sbin/wloc-profile-status.sh" "$stage/data/usr/sbin/wloc-profile-status.sh"
 			cp "$root/openwrt/files/usr/sbin/wloc-health.sh" "$stage/data/usr/sbin/wloc-health.sh"
 			mkdir -p "$stage/data/etc/init.d" "$stage/data/usr/libexec/wificalling-location-gateway"
 			cp "$root/openwrt/files/etc/init.d/wificalling-location-gateway" "$stage/data/etc/init.d/wificalling-location-gateway"

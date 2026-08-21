@@ -12,6 +12,7 @@
           "verify_fingerprint",
           "health",
           "restart_gateway",
+          "restart_unified",
           "node_test",
           "clear_log"
         ],

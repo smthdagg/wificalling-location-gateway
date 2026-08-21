@@ -24,6 +24,11 @@ pub const WLOC_PATH: &str = "/clls/wloc";
 const MAX_FORWARD_BODY_BYTES: usize = 512 * 1024;
 /// Concurrent upstream streams per client connection.
 const MAX_STREAMS: usize = 8;
+/// Resource bounds for the per-client synthesis cache on small gateways.
+const MAX_SYNTHESIZED_CLIENTS: usize = 16;
+const MAX_SYNTHESIZED_CACHE_BYTES: usize = 64 * 1024;
+const MAX_SYNTHESIZED_PAYLOAD_BYTES: usize = 16 * 1024;
+const MAX_DEBUG_SAMPLE_BYTES: usize = 16 * 1024;
 
 /// HTTP/2 MITM proxy bound to one approved hostname's traffic.
 #[derive(Clone)]
@@ -206,7 +211,7 @@ impl MitmProxy {
                                 return Ok((request_body.len(), out));
                             }
                         } else if let Ok(mut cache) = self.synthesized_payloads.lock() {
-                            cache.insert(client_addr.to_string(), payload.to_vec());
+                            cache_synthesized_payload(&mut cache, client_addr, payload.to_vec());
                         }
                         eprintln!(
                             "wloc proxy: synthesized {} -> {} bytes (is_wloc={is_wloc})",
@@ -361,18 +366,23 @@ pub(crate) fn dump_wloc_samples(
         .unwrap_or(0);
     let _ = std::fs::create_dir_all(dir);
     let safe = hostname.replace(['/', ':', '.'], "_");
-    let _ = std::fs::write(
-        format!("{dir}/{stamp}_{client_addr}_{safe}_req.bin"),
+    write_bounded_sample(
+        &format!("{dir}/{stamp}_{client_addr}_{safe}_req.bin"),
         request,
     );
-    let _ = std::fs::write(
-        format!("{dir}/{stamp}_{client_addr}_{safe}_resp.bin"),
+    write_bounded_sample(
+        &format!("{dir}/{stamp}_{client_addr}_{safe}_resp.bin"),
         response,
     );
-    let _ = std::fs::write(
-        format!("{dir}/{stamp}_{client_addr}_{safe}_patched.bin"),
+    write_bounded_sample(
+        &format!("{dir}/{stamp}_{client_addr}_{safe}_patched.bin"),
         patched,
     );
+}
+
+fn write_bounded_sample(path: &str, bytes: &[u8]) {
+    let end = bytes.len().min(MAX_DEBUG_SAMPLE_BYTES);
+    let _ = std::fs::write(path, &bytes[..end]);
 }
 
 fn maybe_patch_body(body: &[u8], is_wloc: bool, patch: Option<&PatchTarget>) -> Vec<u8> {
@@ -380,6 +390,31 @@ fn maybe_patch_body(body: &[u8], is_wloc: bool, patch: Option<&PatchTarget>) -> 
         Some(patch) if is_wloc => patch_wloc_response(body, patch),
         _ => body.to_vec(),
     }
+}
+
+fn cache_synthesized_payload(
+    cache: &mut HashMap<String, Vec<u8>>,
+    client_addr: &str,
+    payload: Vec<u8>,
+) {
+    if payload.is_empty() || payload.len() > MAX_SYNTHESIZED_PAYLOAD_BYTES {
+        return;
+    }
+    cache.remove(client_addr);
+    while cache.len() >= MAX_SYNTHESIZED_CLIENTS
+        || cache
+            .values()
+            .map(Vec::len)
+            .sum::<usize>()
+            .saturating_add(payload.len())
+            > MAX_SYNTHESIZED_CACHE_BYTES
+    {
+        let Some(oldest) = cache.keys().next().cloned() else {
+            break;
+        };
+        cache.remove(&oldest);
+    }
+    cache.insert(client_addr.to_owned(), payload);
 }
 
 /// Proxy-level failure; the caller treats any error as "close this
@@ -411,6 +446,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn synthesized_client_cache_has_entry_and_byte_bounds() {
+        let mut cache = HashMap::new();
+        for index in 0..(MAX_SYNTHESIZED_CLIENTS * 2) {
+            cache_synthesized_payload(
+                &mut cache,
+                &format!("192.0.2.{index}"),
+                vec![0_u8; MAX_SYNTHESIZED_PAYLOAD_BYTES / 2],
+            );
+        }
+        assert!(cache.len() <= MAX_SYNTHESIZED_CLIENTS);
+        assert!(cache.values().map(Vec::len).sum::<usize>() <= MAX_SYNTHESIZED_CACHE_BYTES);
+
+        cache_synthesized_payload(
+            &mut cache,
+            "oversized",
+            vec![0_u8; MAX_SYNTHESIZED_PAYLOAD_BYTES + 1],
+        );
+        assert!(!cache.contains_key("oversized"));
+    }
+
+    #[test]
     fn dump_wloc_samples_writes_three_files() {
         let dir = std::env::temp_dir().join(format!("wloc-dump-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -434,6 +490,25 @@ mod tests {
         assert!(names.iter().any(|n| n.ends_with("_req.bin")));
         assert!(names.iter().any(|n| n.ends_with("_resp.bin")));
         assert!(names.iter().any(|n| n.ends_with("_patched.bin")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn debug_samples_are_bounded() {
+        let dir = std::env::temp_dir().join(format!("wloc-dump-bound-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let large = vec![b'x'; MAX_DEBUG_SAMPLE_BYTES * 2];
+        dump_wloc_samples(
+            dir.to_str().unwrap(),
+            "gs-loc.apple.com",
+            "192.168.31.175",
+            &large,
+            &large,
+            &large,
+        );
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            assert!(entry.unwrap().metadata().unwrap().len() <= MAX_DEBUG_SAMPLE_BYTES as u64);
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

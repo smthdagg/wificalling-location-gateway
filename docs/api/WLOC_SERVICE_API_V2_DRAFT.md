@@ -1,6 +1,9 @@
 # Unified Gateway/WLOC control API v2 draft
 
-Status: proposed; not implemented and does not change the frozen `wloc.service/v1` contract.
+Status: proposed contract; profile request decoding and bounded local runtime
+primitives are implemented, but the v2 dispatcher and production multi-profile
+Geo/patch routing are not complete. It does not change the frozen
+`wloc.service/v1` contract.
 
 ## Purpose
 
@@ -60,7 +63,8 @@ or unbounded command output.
 | `profile.wloc.set_location` | Set validated manual coordinates/preset | runtime/config |
 | `profile.wloc.clear_location` | Return profile to auto mode | runtime/config |
 
-`profile_id` is an opaque local identifier. A profile may expose its
+`profile_id` is a bounded local identifier (`[a-z0-9_-]{1,32}`) validated at
+the API boundary. A profile may expose its
 administrator-visible IP/MAC through the authenticated local LuCI facade, but
 the default wire status must not leak device material to arbitrary callers.
 
@@ -115,6 +119,11 @@ Each event uses a common envelope:
   "redaction_version": 1
 }
 ```
+
+The shipped runtime keeps the WLOC structured event file under 64 KiB and
+rejects individual events over 2 KiB. Gateway activity logs also enforce a
+64 KiB default byte cap after the per-device record cap; deployments may lower
+that cap through the local OpenWrt runtime environment.
 
 The API never returns raw WLOC request/response bodies, credentials, tokens,
 private keys, or arbitrary process output. Debug mode may expose bounded

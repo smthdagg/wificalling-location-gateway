@@ -12,6 +12,7 @@ set -eu
 
 TABLE=wloc_service
 SET=apple_hosts
+NFT_BINARY=${WLOC_NFT_BINARY:-nft}
 
 HOSTS="gs-loc.apple.com gs-loc-cn.apple.com"
 
@@ -51,6 +52,35 @@ ips=$(collect | grep -v "^$ROUTER_IP$" | sort -u | tr '
     exit 1
 }
 
-nft flush set inet "$TABLE" "$SET" 2>/dev/null || nft add set inet "$TABLE" "$SET" '{ type ipv4_addr; }'
-nft add element inet "$TABLE" "$SET" "{ $ips }"
+if "$NFT_BINARY" list table inet "$TABLE" >/dev/null 2>&1; then
+	"$NFT_BINARY" flush set inet "$TABLE" "$SET" 2>/dev/null || \
+		"$NFT_BINARY" add set inet "$TABLE" "$SET" '{ type ipv4_addr; }'
+	"$NFT_BINARY" add element inet "$TABLE" "$SET" "{ $ips }"
+fi
+
+# V2 profiles each have an isolated nft table and set. Refresh the same
+# approved Apple answers into every live profile table without touching the
+# stable Gateway namespace. Table names are validated before being reused as
+# nft arguments even though they originate from the local kernel listing.
+profile_tables=$(
+    "$NFT_BINARY" list tables inet 2>/dev/null \
+        | sed -n 's/^table inet \(wloc_profile_[a-z0-9_-]*\)$/\1/p' \
+        || true
+)
+while IFS= read -r profile_table; do
+    [ -n "$profile_table" ] || continue
+    case "$profile_table" in
+        wloc_profile_*|*[!a-z0-9_-]*)
+            case "$profile_table" in
+                *[!a-z0-9_-]*) continue ;;
+            esac
+            ;;
+        *) continue ;;
+    esac
+    "$NFT_BINARY" flush set inet "$profile_table" "$SET" 2>/dev/null || \
+        "$NFT_BINARY" add set inet "$profile_table" "$SET" '{ type ipv4_addr; }'
+    "$NFT_BINARY" add element inet "$profile_table" "$SET" "{ $ips }"
+done <<EOF
+$profile_tables
+EOF
 echo "wloc-refresh-set: updated $SET = { $ips }"

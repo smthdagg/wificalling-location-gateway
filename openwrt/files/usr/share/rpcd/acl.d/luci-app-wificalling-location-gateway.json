@@ -9,6 +9,7 @@
           "cert_info",
           "regen_ca",
           "restart_service",
+          "restart_unified",
           "verify_fingerprint",
           "health",
           "restart_gateway",
@@ -44,6 +45,7 @@
           "cert_info",
           "regen_ca",
           "restart_service",
+          "restart_unified",
           "verify_fingerprint",
           "node_test"
         ],

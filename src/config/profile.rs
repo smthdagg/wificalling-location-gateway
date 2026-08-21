@@ -46,6 +46,7 @@ pub struct DeviceProfile {
 pub enum ProfileError {
     TooManyProfiles,
     DuplicateId(String),
+    DuplicateAssignedDevice(String),
     MissingAssignedDevice,
     MultipleProfilesRequireUnifiedRuntime,
     EmptyField(&'static str),
@@ -63,6 +64,12 @@ impl fmt::Display for ProfileError {
         match self {
             Self::TooManyProfiles => write!(formatter, "too many device profiles"),
             Self::DuplicateId(id) => write!(formatter, "duplicate device profile id: {id}"),
+            Self::DuplicateAssignedDevice(address) => {
+                write!(
+                    formatter,
+                    "device is assigned to multiple profiles: {address}"
+                )
+            }
             Self::MissingAssignedDevice => {
                 formatter.write_str("assigned device address is required")
             }
@@ -212,6 +219,7 @@ impl ProfileModel {
             return Err(ProfileError::TooManyProfiles);
         }
         let mut ids = Vec::with_capacity(self.profiles.len());
+        let mut assigned_devices = Vec::with_capacity(self.profiles.len());
         for profile in &self.profiles {
             validate_profile_id(&profile.id)?;
             if !ids.iter().any(|id: &String| id == &profile.id) {
@@ -222,6 +230,11 @@ impl ProfileModel {
             validate_bounded_text("label", &profile.label, MAX_PROFILE_LABEL_BYTES)?;
             if let Some(address) = profile.assigned_device.as_deref() {
                 validate_device_address(address)?;
+                let normalized = normalize_device_address(address);
+                if assigned_devices.contains(&normalized) {
+                    return Err(ProfileError::DuplicateAssignedDevice(address.to_owned()));
+                }
+                assigned_devices.push(normalized);
             }
             validate_node_ref(&profile.node_ref)?;
             if let Some(reference) = profile.manual_location_ref.as_deref() {
@@ -335,6 +348,17 @@ fn is_valid_device_address(value: &str) -> bool {
         };
     }
     is_valid_mac(value)
+}
+
+fn normalize_device_address(value: &str) -> String {
+    if let Ok(address) = value.parse::<IpAddr>() {
+        return address.to_string();
+    }
+    value
+        .bytes()
+        .filter(|byte| *byte != b':' && *byte != b'-')
+        .map(|byte| byte.to_ascii_lowercase() as char)
+        .collect()
 }
 
 fn is_valid_mac(value: &str) -> bool {

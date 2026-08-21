@@ -57,6 +57,15 @@ fn explicit_profiles_reject_duplicates_and_invalid_addresses() {
         invalid,
         Err(ProfileError::InvalidDeviceAddress(_))
     ));
+
+    let duplicate_device = ProfileModel::new(vec![
+        profile("phone", "192.168.1.10"),
+        profile("tablet", "192.168.1.10"),
+    ]);
+    assert!(matches!(
+        duplicate_device,
+        Err(ProfileError::DuplicateAssignedDevice(_))
+    ));
 }
 
 #[test]
