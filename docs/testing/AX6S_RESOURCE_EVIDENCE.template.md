@@ -18,7 +18,7 @@ material. Use broad firmware and memory/storage values where possible.
 - Total memory / available memory bucket before install:
 - Persistent free-space bucket before install:
 - `/tmp` free-space bucket before install:
-- Existing Gateway 1.7 configuration backed up: `yes/no`
+- Existing unrelated router/provider configuration left untouched: `yes/no`
 
 ## Space-constrained migration evidence
 
@@ -26,7 +26,7 @@ AX6S must not be tested by installing the new package alongside the old
 application packages. Record package classes and coarse values only; do not
 copy package-manager output containing credentials or device-specific data.
 
-- Old Wificalling/WLOC application packages stopped and disabled: `yes/no`
+- Old WLOC application package stopped and disabled: `yes/no`
 - Old application package names removed (no provider packages):
 - Selected sing-box provider class retained (`tiny`/`lite`/`PassWall`):
 - Retained provider executable path category (not a private custom path):
@@ -51,7 +51,7 @@ copy package-manager output containing credentials or device-specific data.
 
 ## Functional checks
 
-- Gateway Wi-Fi Calling registration/traffic unaffected: `pass/fail`
+- Unrelated router/provider service state unaffected: `pass/fail`
 - UDP 500/4500 untouched: `pass/fail`
 - Only assigned device and exact Apple WLOC hosts were intercepted: `pass/fail`
 - Ordinary HTTPS remained outside the WLOC data plane: `pass/fail`

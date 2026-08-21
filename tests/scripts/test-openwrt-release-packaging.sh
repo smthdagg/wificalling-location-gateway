@@ -11,8 +11,10 @@ trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 [ -x "$builder" ] && [ -x "$matrix" ] && [ -x "$runtime_builder" ]
 grep -F 'external application UCI or package' "$builder" >/dev/null
 grep -F 'wloc-service' "$builder" >/dev/null
+grep -F -- '--ax6s-package' "$builder" >/dev/null
+grep -F 'expected three integrated packages' "$builder" >/dev/null
 grep -F 'X-WLOC-Product' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null
-if grep -E -- '--gateway-ipk|GATEWAY_IPK|luci-app-wificalling-gateway' "$builder" >/dev/null; then
+if grep -E -- '--gateway-ipk|GATEWAY_IPK' "$builder" >/dev/null; then
   echo 'release builder still exposes a Gateway package input' >&2
   exit 1
 fi

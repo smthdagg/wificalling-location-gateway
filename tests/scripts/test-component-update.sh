@@ -14,6 +14,10 @@ printf '1.0.0-1\n' > "$state/current.version"
 cat > "$tmp/bin/opkg" <<'EOF'
 #!/bin/sh
 set -eu
+if [ "${1:-}" = print-architecture ]; then
+    printf '%s\n' 'arch all 1' 'arch noarch 1' 'arch aarch64_cortex-a53 10'
+    exit 0
+fi
 force=0
 while [ "${1:-}" != install ] && [ "$#" -gt 0 ]; do
     [ "$1" = --force-downgrade ] && force=1
@@ -39,7 +43,7 @@ cat > "$tmp/bin/health" <<'EOF'
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = fail-always ] && exit 1
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = fail-once ] && { printf 'ok\n' > "$WLOC_UPDATE_HEALTH_STATE"; exit 1; }
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = ok ] || exit 1
-printf '%s\n' '{"services":{"wloc":{"running":1,"socket":1,"status_fresh":1},"provider":{"available":1,"valid":1,"config_present":1,"config_valid":1}}}'
+printf '%s\n' '{"services":{"wloc":{"running":1,"socket":1,"status_fresh":1},"provider":{"available":1,"valid":1,"config_present":1,"config_valid":1},"redirect":{"table_present":1,"rules":1}}}'
 EOF
 chmod 0755 "$tmp/bin/opkg" "$tmp/bin/supervisor" "$tmp/bin/health"
 cat > "$tmp/bin/usign" <<'EOF'

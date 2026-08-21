@@ -10,6 +10,7 @@ release=1
 arch=x86_64
 service_bin=
 ctl_bin=
+ax6s_package=
 out_dir="$repo_root/dist/openwrt-release"
 plan_only=0
 
@@ -28,6 +29,7 @@ Options:
   --arch ARCH                OpenWrt runtime architecture (default: x86_64)
   --service-bin PATH         Static wloc-service binary (required)
   --ctl-bin PATH             Static wloc-ctl binary (required)
+  --ax6s-package PATH        Architecture-correct AX6S AArch64 IPK (required for a release build)
   --out-dir PATH             Output directory
   --plan                     Print the immutable build plan without Docker
 EOF
@@ -40,6 +42,7 @@ while [ "$#" -gt 0 ]; do
 		--arch) [ "$#" -ge 2 ] || fail 'missing --arch value'; arch=$2; shift 2 ;;
 		--service-bin) [ "$#" -ge 2 ] || fail 'missing --service-bin value'; service_bin=$2; shift 2 ;;
 		--ctl-bin) [ "$#" -ge 2 ] || fail 'missing --ctl-bin value'; ctl_bin=$2; shift 2 ;;
+		--ax6s-package) [ "$#" -ge 2 ] || fail 'missing --ax6s-package value'; ax6s_package=$2; shift 2 ;;
 		--out-dir) [ "$#" -ge 2 ] || fail 'missing --out-dir value'; out_dir=$2; shift 2 ;;
 		--plan) plan_only=1; shift ;;
 		-h|--help) usage; exit 0 ;;
@@ -58,7 +61,6 @@ esac
 [ -n "$ctl_bin" ] || fail '--ctl-bin is required'
 [ -x "$service_bin" ] || fail "service binary is not executable: $service_bin"
 [ -x "$ctl_bin" ] || fail "control binary is not executable: $ctl_bin"
-
 cat <<EOF
 24.10 SDK: $OPENWRT_24_SDK
 25.12 SDK: $OPENWRT_25_SDK
@@ -75,6 +77,12 @@ case "${out_dir##*/}" in
 esac
 case "$out_dir" in /|"$repo_root") fail 'unsafe --out-dir' ;; esac
 [ ! -L "$out_dir" ] || fail '--out-dir must not be a symbolic link'
+if [ "$plan_only" -eq 0 ]; then
+	[ -n "$ax6s_package" ] || fail '--ax6s-package is required for a release build'
+	case "$ax6s_package" in /*) ;; *) fail '--ax6s-package must be absolute' ;; esac
+	[ -f "$ax6s_package" ] || fail "AX6S package is not a regular file: $ax6s_package"
+	[ ! -L "$ax6s_package" ] || fail 'AX6S package must not be a symbolic link'
+fi
 
 stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-openwrt-package.XXXXXX")
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
@@ -182,13 +190,61 @@ find "$out_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk'
 	-o -name 'wificalling-location-gateway*.apk' -o -name 'SHA256SUMS' \
 	-o -name 'docker-matrix-report.txt' \) -delete
 find "$stage/output" -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp {} "$out_dir/" \;
+cp "$ax6s_package" "$out_dir/"
+
+validate_ax6s_package() {
+	package=$1
+	tar -tzf "$package" >/dev/null 2>&1 || fail 'AX6S package is not a valid gzip IPK'
+	tar -tzf "$package" | awk '
+		/^\// || /(^|\/)\.\.($|\/)/ { bad=1 }
+		END { exit bad ? 1 : 0 }
+	' || fail 'AX6S package archive contains an unsafe path'
+	tar -tzf "$package" | awk '$0 == "./control.tar.gz" || $0 == "control.tar.gz" { found=1 } END { exit found ? 0 : 1 }' \
+		|| fail 'AX6S package lacks control archive'
+	tar -tzf "$package" | awk '$0 == "./data.tar.gz" || $0 == "data.tar.gz" { found=1 } END { exit found ? 0 : 1 }' \
+		|| fail 'AX6S package lacks data archive'
+	control_archive=$(mktemp "$stage/control.XXXXXX.tar.gz")
+	data_archive=$(mktemp "$stage/data.XXXXXX.tar.gz")
+	tar -xOzf "$package" control.tar.gz > "$control_archive" 2>/dev/null \
+		|| tar -xOzf "$package" ./control.tar.gz > "$control_archive"
+	tar -xOzf "$package" data.tar.gz > "$data_archive" 2>/dev/null \
+		|| tar -xOzf "$package" ./data.tar.gz > "$data_archive"
+	for archive in "$control_archive" "$data_archive"; do
+		tar -tzf "$archive" | awk '
+			/^\// || /(^|\/)\.\.($|\/)/ { bad=1 }
+			END { exit bad ? 1 : 0 }
+		' || fail 'AX6S package member archive contains an unsafe path'
+	done
+	control=$(tar -xOzf "$control_archive" ./control)
+	printf '%s\n' "$control" | grep -Fx 'Package: wificalling-location-gateway' >/dev/null \
+		|| fail 'AX6S package has the wrong package identity'
+	printf '%s\n' "$control" | grep -Fx "Version: ${version}-${release}" >/dev/null \
+		|| fail "AX6S package version must be ${version}-${release}"
+	printf '%s\n' "$control" | grep -Fx 'Architecture: aarch64_cortex-a53' >/dev/null \
+		|| fail 'AX6S package must target aarch64_cortex-a53'
+	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Product: wificalling-location-gateway/v2' >/dev/null \
+		|| fail 'AX6S package is missing standalone product metadata'
+	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Api: wloc.service/v2' >/dev/null \
+		|| fail 'AX6S package is missing WLOC API metadata'
+	if printf '%s\n' "$control" | grep -E 'Wi-Fi Calling Gateway|luci-app-wificalling-gateway|X-WFC' >/dev/null; then
+		fail 'AX6S package contains Gateway coupling metadata'
+	fi
+}
+
+validate_ax6s_package "$out_dir/$(basename "$ax6s_package")"
+
 count=$(find "$out_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk' \
 	-o -name 'wificalling-location-gateway*.apk' \) | wc -l | tr -d ' ')
-[ "$count" -eq 2 ] || fail "expected two integrated packages, found $count"
+[ "$count" -eq 3 ] || fail "expected three integrated packages, found $count"
 for package in "$out_dir"/wificalling-location-gateway*.ipk \
 	"$out_dir"/wificalling-location-gateway*.apk; do
 	[ -f "$package" ] || continue
 	"$repo_root/scripts/ci/verify-package-budget.sh" "$package"
+	case "$package" in
+		*.ipk) "$repo_root/scripts/create-update-manifest.sh" "$package" >/dev/null ;;
+		*.apk) : ;; # APK v3 is installed by apk; the IPK updater does not consume it.
+		*) fail "unexpected release package format: $package" ;;
+	esac
 done
 (cd "$out_dir" && shasum -a 256 wificalling-location-gateway*.ipk \
 	wificalling-location-gateway*.apk > SHA256SUMS)

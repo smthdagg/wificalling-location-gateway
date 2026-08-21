@@ -42,16 +42,20 @@ Then build the release packages:
   --arch x86_64 \
   --service-bin /absolute/path/wloc-service \
   --ctl-bin /absolute/path/wloc-ctl \
+  --ax6s-package /absolute/path/wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk \
   --out-dir /absolute/path/dist/openwrt-release
 ```
 
 The builder uses immutable official OpenWrt SDK containers for 24.10.8 and
 25.12.3. Product packaging runs with networking disabled and `--pull never`.
-Images therefore must be fetched explicitly once. The output includes one IPK,
-one native APK v3 package, and `SHA256SUMS`. The builder accepts no Gateway
-IPK input. Package preflight validates the router architecture, OpenWrt release
-family, package format, required kernel/module capabilities, and available
-space.
+Images therefore must be fetched explicitly once. The output includes the AX6S
+AArch64 IPK, the x86_64 24.x IPK, the native APK v3 package, per-IPK update
+manifests, and `SHA256SUMS`. The AX6S package is an architecture-correct WLOC
+package produced by the standalone builder; it is validated for identity,
+version, architecture, and standalone metadata before being included. The
+builder accepts no Gateway IPK input. Package preflight validates the router
+architecture, OpenWrt release family, package format, required kernel/module
+capabilities, and available space.
 
 ## Every release asset: four-environment Docker verification
 
@@ -80,14 +84,22 @@ not claim that sing-box, nftables interception, DNS behavior, Wi-Fi Calling,
 or an iPhone were exercised. Those remain AX6S/real-device gates. The V2
 candidate has these target assets:
 
+- `wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk` for AX6S;
 - `wificalling-location-gateway_2.0.0-r1_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
 - `wificalling-location-gateway-2.0.0-r1.apk` for OpenWrt 25.x.
 
-The current host-side plan/static package checks pass. The final Docker install
-matrix and AX6S installation/upgrade/rollback result remain release gates and
-must not be filled with a host-only result:
+The host-side release build, SHA-256 verification, and four-environment Docker
+install matrix passed on 2026-08-22. Each case installed the single WLOC
+package, enabled/restarted the service, created the control socket, and
+returned a valid `wloc.service/v1` status:
 
 ```text
-Docker matrix: pending final release artifacts
-AX6S migration/resource/rollback: pending real-device evidence
+Redmi AX6S / OpenWrt 24.10.5|OpenWrt 24.10.5 aarch64_generic|installed|started|socket-ok|status-ok
+OpenWrt 24.10.8|OpenWrt 24.10.8 x86_64|installed|started|socket-ok|status-ok
+OpenWrt 25.12.3|OpenWrt 25.12.3 x86_64|installed|started|socket-ok|status-ok
+iStoreOS 24.10.5|iStoreOS 24.10.5 x86_64|installed|started|socket-ok|status-ok
 ```
+
+This matrix does not claim sing-box, nftables interception, DNS behavior,
+Wi-Fi Calling, or real iPhone traffic. Those remain separate runtime/fixture
+coverage items.

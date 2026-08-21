@@ -13,8 +13,12 @@ package, UCI file, init script, or runtime dependency was installed.
   package was installed, as required for the small overlay.
 - Provider packages: system sing-box and PassWall were retained; no second
   full-size sing-box binary was installed.
-- Tested standalone package: `wificalling-location-gateway` 2.0.0-14,
-  `aarch64_cortex-a53`.
+- Tested standalone package family: `wificalling-location-gateway`,
+  `aarch64_cortex-a53`. The real-device baseline was 2.0.0-14; transactional
+  update evidence used 2.0.0-17 -> 2.0.0-18 and an injected health-failure
+  target 2.0.0-19 -> automatic rollback to 2.0.0-18. The release candidate
+  package 2.0.0-1 was built and verified after the device run; it is not being
+  misrepresented as installed on the device.
 - The WLOC UCI profile and CA backups were taken before removal. The final
   provider path uses PassWall's persistent generated configuration under
   `/var/etc/passwall`; the provider process itself remains PassWall-owned.
@@ -23,7 +27,7 @@ package, UCI file, init script, or runtime dependency was installed.
 
 - Persistent storage: 87,620 KiB total; 15,868 KiB free after the final
   package was installed.
-- Temporary storage: 121,128 KiB total; 45,672 KiB free after installation.
+- Temporary storage: 121,128 KiB total; 45,664 KiB free after installation.
 - Memory: 242,260 KiB total; 36,156 KiB available in the final steady-state
   snapshot; no swap configured.
 - WLOC RSS: 1,948 KiB, three threads.
@@ -50,6 +54,9 @@ package, UCI file, init script, or runtime dependency was installed.
 | Missing provider config after reboot keeps redirect withdrawn | pass |
 | Delayed PassWall config generation auto-recovers WLOC | pass |
 | Final reboot persistence window | pass |
+| Signed component update preflight and 2.0.0-17 -> 2.0.0-18 update | pass |
+| Health-gate failure rolls back 2.0.0-19 -> 2.0.0-18 | pass |
+| Rollback removes the transaction directory and restores `current.version` | pass |
 | Independent LuCI basic/devices/monitor/update assets present | pass |
 | Real iPhone WLOC traffic and packet capture | not run; no device fixture supplied |
 
@@ -70,11 +77,45 @@ package, UCI file, init script, or runtime dependency was installed.
    optional deletes are idempotent.
 6. The component updater relied on GNU tar auto-detection and `/usr/bin/opkg`.
    AX6S requires explicit gzip extraction and discovers `/bin/opkg`.
+7. AX6S `opkg print-architecture` reports both `all` and `noarch`; the updater
+   now ignores both and selects the real target architecture. The health gate
+   also requires the WLOC-owned redirect table/rule, so it cannot commit an
+   update while the service is running but traffic remains fail-open.
+
+## Component update evidence
+
+The real successful preflight reported `current_version=2.0.0-17`,
+`target_version=2.0.0-18`, and 35,732 KiB available. The apply operation
+completed with `phase=applied`, `reason=ready`, and current version
+2.0.0-18. A second run deliberately made the health command fail only while
+2.0.0-19 was installed. The updater reported:
+
+```text
+phase=rolled_back
+reason=health_check_failed
+target_version=2.0.0-19
+current_version=2.0.0-18
+```
+
+After rollback, `opkg` and `current.version` both reported 2.0.0-18, the
+transaction directory was absent, and the redacted health report showed
+`wloc`, provider, and redirect all healthy. A hard power cut during opkg and a
+real flash-full fault were not simulated; the repository interruption-recovery
+test remains the evidence for that path.
+
+## Host release evidence
+
+The three-package release build and Docker matrix passed on 2026-08-22. The
+matrix installed and started all four cases: AX6S/OpenWrt 24.10.5,
+OpenWrt 24.10.8 x86_64, OpenWrt 25.12.3 x86_64, and iStoreOS 24.10.5 x86_64.
+The exact host-side package hashes are recorded in the release staging
+directory's `SHA256SUMS`; publication still requires the release signing key
+and explicit external release approval.
 
 ## Acceptance status
 
-AX6S standalone runtime, migration, resource, provider, reboot, and fail-open
-gates: **pass**.
+AX6S standalone runtime, migration, resource, provider, reboot, fail-open, and
+transactional health-rollback gates: **pass**.
 
 The real-device WLOC client traffic path was not exercised because no test
 device/fixture was supplied during this run. That is a separate functional

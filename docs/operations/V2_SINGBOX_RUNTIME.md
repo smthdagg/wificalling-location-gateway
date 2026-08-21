@@ -1,24 +1,24 @@
 # V2 sing-box runtime provider
 
-V2 does not install a second full-size sing-box binary. The unified Gateway
-and WLOC supervisor resolves one executable from the following order:
+V2 does not install a second full-size sing-box binary. The standalone WLOC
+supervisor resolves one executable from the following order:
 
 1. `WLOC_SINGBOX_BIN` supplied by the service lifecycle;
-2. `wificalling-gateway.main.singbox_bin` in UCI;
+2. `wloc-service.main.singbox_bin` in the standalone WLOC UCI section;
 3. the first usable system provider: `sing-box-tiny`, `sing-box-lite`, a
    PassWall sing-box path, then the normal `/usr/bin/sing-box` fallback.
 
 “Usable” means an absolute executable path that successfully answers
-`version`. The selected binary is still started and supervised by this
-project. Reusing the binary does not attach to or alter a PassWall-owned
-process or configuration.
+`version`. The selected binary is started and supervised only for standalone
+WLOC. Reusing the binary does not attach to or alter a PassWall-owned process
+or configuration.
 
 ## AX6S acceptance
 
 On the space-constrained test device, back up configuration and remove the old
-Wificalling/WLOC application packages before installing the integrated package.
-Keep the selected tiny/lite or PassWall provider installed. Do not remove it
-as an application dependency and do not use forced dependency removal.
+WLOC application package before installing the standalone package. Keep the
+selected tiny/lite or PassWall provider installed. Do not remove it as an
+application dependency and do not use forced dependency removal.
 
 After installation, verify the provider before enabling traffic interception:
 

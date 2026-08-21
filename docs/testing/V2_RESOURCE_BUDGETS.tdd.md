@@ -55,12 +55,11 @@ binaries. The release package builder invokes `verify-package-budget.sh` for
 each generated IPK/APK, so package size is checked against the same installed
 contract when a real package exists.
 
-## AX6S acceptance gap
+## AX6S acceptance
 
-Hardware acceptance is intentionally not claimed in this change until an
-actual staging AX6S is available. Fill
-`docs/testing/AX6S_RESOURCE_EVIDENCE.template.md` using the target-side
-`scripts/ci/profile-resource.sh` (which has a `/proc` fallback and does not
-require GNU time or Python 3), with a bounded timeout and explicit failure when
-RSS cannot be sampled, or an equivalent BusyBox-compatible capture; then attach
-only redacted aggregate values to the Issue/PR.
+The AX6S resource gate is recorded in
+`docs/testing/AX6S_REAL_DEVICE_2026-08-22.md`: 242,260 KiB RAM, 36,156 KiB
+available in the steady-state snapshot, 1,948 KiB WLOC RSS, 30,176 KiB reused
+PassWall sing-box RSS, and 15,868 KiB persistent storage free after install.
+The remaining resource work is repeatable CPU sampling under real WLOC traffic
+and a flash-full update fault; no unredacted device data belongs in the repo.

@@ -33,8 +33,13 @@ that have not been observed.
   before AX6S installation while retaining the selected provider.
 - Added package and migration contract tests and integrated them into CI.
 - Final AX6S evidence is recorded in
-  `docs/testing/AX6S_REAL_DEVICE_2026-08-22.md`; publication and independent
-  review remain external release actions.
+  `docs/testing/AX6S_REAL_DEVICE_2026-08-22.md`, including successful
+  2.0.0-17 -> 2.0.0-18 update and health-failure rollback 2.0.0-19 ->
+  2.0.0-18; publication and independent review remain external release
+  actions.
+- Release packaging now emits and verifies three assets: AX6S AArch64 IPK,
+  OpenWrt 24.x x86_64 IPK, and OpenWrt 25.x APK. The four-case Docker matrix
+  passed with socket/status checks.
 
 ## Files changed
 
@@ -74,23 +79,30 @@ that have not been observed.
   AX6S uses `/var/etc/passwall` and the supervisor validates the provider file.
 - Docker image digest syntax in the OpenWrt cross-build helper was corrected;
   final AArch64 binaries were rebuilt with the pinned toolchain.
+- The component updater now ignores `all`/`noarch` architecture stanzas and
+  requires the WLOC redirect table/rule in its health gate before committing.
+- The release builder was corrected to include the AX6S package in the
+  three-package checksum/matrix set and to avoid sending APK v3 through the
+  IPK manifest parser.
 
 ## Final acceptance status
 
 - AX6S standalone runtime, migration, provider reuse, resource, fail-open,
-  profile CRUD, manual/auto location persistence, stop/start and reboot gates:
+  profile CRUD, manual/auto location persistence, stop/start, reboot, signed
+  update, and transactional health-rollback gates:
   **pass**.
 - Real iPhone WLOC traffic was not run because no client fixture was supplied.
-- Signed feed publication, PR review, merge, tag, and release publication are
-  not performed by this local execution.
+- Hard power-cut during opkg, flash-full injection, and real iPhone WLOC
+  traffic were not run. Signed feed publication, PR review, merge, tag, and
+  release publication are not performed by this local execution.
 
 ## Next executable steps
 
 1. Review the standalone diff and AX6S evidence with an independent reviewer.
 2. Run the supplied client fixture, if available, for real WLOC traffic and
    isolation evidence.
-3. Generate signed feed artifacts and perform the normal PR/merge/tag/release
-   workflow with explicit approval.
+3. Sign the generated package manifests with the protected release key and
+   perform the normal PR/merge/tag/release workflow with explicit approval.
 
 ## Capabilities required for the next Agent
 
@@ -98,8 +110,8 @@ that have not been observed.
 
 ## Environment assumptions
 
-- The branch is based on `origin/main` commit `501dea9` and must be reviewed
-  through PR #60 before integration.
+- The branch is based on the project handoff commit recorded in Git history;
+  no PR number is asserted here because external publication was not executed.
 - The AX6S test device is on a compatible 24.x OpenWrt/ImmortalWrt image and
   has a tested sing-box tiny/lite or PassWall provider available.
 - Host-side tests do not emulate procd, flash exhaustion, power loss, or live

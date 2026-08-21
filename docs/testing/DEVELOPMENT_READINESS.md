@@ -8,7 +8,9 @@ Date: 2026-08-11
 > [`OPENWRT_PACKAGE_DOCKER_MATRIX.md`](OPENWRT_PACKAGE_DOCKER_MATRIX.md), and
 > [`AX6S_RESOURCE_EVIDENCE.template.md`](AX6S_RESOURCE_EVIDENCE.template.md).
 > Do not use the old `implementation=BLOCKED` result as the current release
-> decision; real AX6S migration/resource/rollback evidence is still pending.
+> decision; real AX6S migration/resource/rollback evidence is now recorded in
+> the current evidence document. Authorized client-traffic coverage remains
+> intentionally separate.
 
 ## Result
 

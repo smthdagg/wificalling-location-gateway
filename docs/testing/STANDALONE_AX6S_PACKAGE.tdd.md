@@ -36,14 +36,17 @@ the existing WLOC configuration or CA.
 ## Scope and gap
 
 The current V2 package target is
-`wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk`. The latest local
-host release binaries are 1,654,336 bytes (`wloc-service`) and 369,488 bytes
-(`wloc-ctl`); they are not evidence of an AArch64 ELF cross-build. A final
-package SHA-256 and signed release manifest still require the
-architecture-correct release build.
+`wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk`. The final
+architecture-correct AArch64 cross-build is 2,035,872 bytes for
+`wloc-service` and 462,792 bytes for `wloc-ctl`; both are static ELF artifacts.
+The release package SHA-256 is emitted in `SHA256SUMS`. A detached release
+signature still requires the protected release signing key and is intentionally
+not committed.
 
-This document records package-construction evidence only. It does not claim
-that the final standalone package has been installed on AX6S; that claim
-requires the documented removal of the old WLOC package, preservation of the
-selected tiny/lite/PassWall provider, and redacted migration/resource/rollback
-evidence.
+This document records package-construction evidence and links to the separate
+redacted AX6S installation/resource/rollback evidence. The real device was
+tested after removing the old WLOC package, while preserving the selected
+tiny/lite/PassWall provider. The release candidate package was built and
+verified after that run; device-update evidence is recorded by package family
+and exact tested versions rather than being conflated with the later release
+filename.

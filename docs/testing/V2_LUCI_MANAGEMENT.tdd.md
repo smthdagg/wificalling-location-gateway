@@ -41,8 +41,9 @@ precise runtime probe data.
   per-device monitoring/log selection, and the unified apply boundary.
 - Transactional validation is enforced before persistence; the UCI-backed
   dispatcher commits with revert-on-failure, and LuCI Apply restarts through the
-  unified supervisor. A real-device interrupted-update/rollback test remains
-  a release gate.
+  unified supervisor. AX6S real-device update and health-failure rollback are
+  recorded; hard power-cut interruption recovery remains a separate release
+  gate.
 - Logs, support bundles, component update/rollback, and resource gates are
   implemented as bounded V2 surfaces; the UI must not add high-rate polling or
   unbounded browser-side history.

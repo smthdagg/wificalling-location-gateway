@@ -80,3 +80,9 @@ explicit local router operation so the update source is observable and bounded.
 An update status of `rollback_failed` is actionable and must not be presented
 as a successful update. The operator should keep the router in passthrough,
 restore the known-good IPK from local storage, and run `recover` again.
+
+AX6S validation has confirmed the normal update and health-failure rollback
+paths: 2.0.0-17 -> 2.0.0-18 commits only after WLOC, provider, and redirect
+health are all present; a deliberately failing 2.0.0-19 activation restores
+2.0.0-18 and removes the transaction directory. Hard power loss and flash-full
+recovery remain separate hardware tests.

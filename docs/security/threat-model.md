@@ -24,13 +24,22 @@ Interception is allowed only when all three predicates match: one assigned test 
 
 <!-- SECURITY_INVARIANT id="GATEWAY-01" -->
 
-The component may create only the dedicated `wificalling_location` table and its fully named objects. It must never modify, reuse, flush, or depend on the `wificalling_gateway` table. UDP 500/4500, ordinary HTTPS, router management, sing-box management/health traffic, and every non-assigned LAN device remain outside the WLOC path. Gateway 1.7 and its running sing-box configuration are read-only dependencies.
+The component may create only the dedicated `wificalling_location` table and
+its fully named objects. It must never modify, reuse, flush, or depend on the `wificalling_gateway` table. UDP 500/4500, ordinary HTTPS, router management,
+provider management/health traffic, and every non-assigned LAN device remain
+outside the WLOC path. Wi-Fi Calling Gateway 1.7 is outside this project's
+source, package, UCI, lifecycle, and acceptance boundary; a system sing-box or
+PassWall provider is an optional capability selected by the standalone WLOC
+adapter, not a Gateway dependency.
 
 The primary security objective is containment and recovery, not guaranteed location modification. Unknown inputs and component failures preserve the original network path or the verified original response; they never expand trust or synthesize a plausible-looking result.
 
 ## Assets and trust boundaries
 
-Protected assets are the assigned device's traffic and availability, the router-local CA and leaf keys, Apple upstream identity, node credentials, Geo cache integrity, the dedicated redirect state, Gateway 1.7 state, and privacy-sensitive logs or support bundles.
+Protected assets are the assigned device's traffic and availability, the
+router-local CA and leaf keys, Apple upstream identity, node credentials, Geo
+cache integrity, the dedicated redirect state, provider state, and
+privacy-sensitive logs or support bundles.
 
 ```mermaid
 flowchart LR
@@ -38,7 +47,7 @@ flowchart LR
     N --> T["TLS / ALPN / HTTP/2 ingress"]
     T --> P["Bounded protocol handling"]
     P -->|"validated upstream TLS"| A["Apple WLOC upstream"]
-    G["Gateway 1.7 device-to-node mapping"] --> E["Isolated exit probe"]
+    G["Standalone WLOC device-profile mapping"] --> E["Isolated exit probe"]
     E --> X["Untrusted exit-IP service"]
     X --> R["Bounded Geo resolver/cache"]
     Q["Untrusted Geo providers"] --> R

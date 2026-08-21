@@ -65,6 +65,7 @@ health_check() {
 	health_report=$($HEALTH 2>/dev/null) || return 1
 	printf '%s\n' "$health_report" | grep -F '"wloc":{"running":1,"socket":1,"status_fresh":1' >/dev/null || return 1
 	printf '%s\n' "$health_report" | grep -F '"provider":{"available":1,"valid":1,"config_present":1,"config_valid":1' >/dev/null || return 1
+	printf '%s\n' "$health_report" | grep -F '"redirect":{"table_present":1,"rules":1}' >/dev/null || return 1
 }
 
 wait_for_health() {
@@ -235,7 +236,8 @@ tar -xOzf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
 	if [ "$architecture" != all ]; then
 		expected=${WLOC_UPDATE_ARCHITECTURE:-}
 		if [ -z "$expected" ] && [ -x "$OPKG" ]; then
-			expected=$($OPKG print-architecture 2>/dev/null | awk '$2 != "all" { print $2; exit }')
+			expected=$($OPKG print-architecture 2>/dev/null \
+			| awk '$2 != "all" && $2 != "noarch" { print $2; exit }')
 		fi
 		[ -n "$expected" ] && [ "$architecture" = "$expected" ] || die 'update package architecture is incompatible'
 	fi
