@@ -84,8 +84,11 @@ fn manual_clear_withdraws_target_until_auto_refreshes() {
 
 #[test]
 fn invalid_source_and_unsupported_mac_never_fall_back() {
-    let model = ProfileModel::new(vec![profile("phone", "aa:bb:cc:dd:ee:ff", true)]);
-    assert!(model.is_err());
+    let model = ProfileModel::new(vec![profile("phone", "aa:bb:cc:dd:ee:ff", true)]).unwrap();
+    assert!(matches!(
+        ProfilePatchRouter::new(&model),
+        Err(ProfilePatchRouterError::UnsupportedDevice)
+    ));
 
     let model = ProfileModel::new(vec![profile("phone", "192.168.1.10", true)]).unwrap();
     let router = ProfilePatchRouter::new(&model).unwrap();
@@ -97,10 +100,10 @@ fn invalid_source_and_unsupported_mac_never_fall_back() {
 #[test]
 fn router_rejects_non_ipv4_runtime_binding_explicitly() {
     let model = ProfileModel::new(vec![profile("phone", "fd00::10", true)]).unwrap();
-    assert_eq!(
+    assert!(matches!(
         ProfilePatchRouter::new(&model),
         Err(ProfilePatchRouterError::UnsupportedDevice)
-    );
+    ));
 }
 
 #[test]

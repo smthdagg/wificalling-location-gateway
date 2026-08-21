@@ -12,6 +12,7 @@ use crate::APPROVED_WLOC_HOSTS;
 pub mod api;
 pub mod control;
 pub mod dispatch;
+pub mod profile_dispatch;
 pub mod profile_runtime;
 #[cfg(unix)]
 pub mod server;
