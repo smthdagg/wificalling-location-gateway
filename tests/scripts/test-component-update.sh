@@ -36,8 +36,10 @@ printf '%s\n' restart >> "$WLOC_UPDATE_SUPERVISOR_LOG"
 EOF
 cat > "$tmp/bin/health" <<'EOF'
 #!/bin/sh
+[ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = fail-always ] && exit 1
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = fail-once ] && { printf 'ok\n' > "$WLOC_UPDATE_HEALTH_STATE"; exit 1; }
-[ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = ok ]
+[ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = ok ] || exit 1
+printf '%s\n' '{"services":{"wloc":{"running":1,"socket":1,"status_fresh":1},"gateway":{"running":1,"monitor":1,"singbox":1,"config_present":1,"config_valid":1}}}'
 EOF
 chmod 0755 "$tmp/bin/opkg" "$tmp/bin/supervisor" "$tmp/bin/health"
 cat > "$tmp/bin/usign" <<'EOF'
@@ -103,6 +105,7 @@ export WLOC_UPDATE_OPKG_LOG="$tmp/opkg.log"
 export WLOC_UPDATE_SUPERVISOR="$tmp/bin/supervisor"
 export WLOC_UPDATE_SUPERVISOR_LOG="$tmp/supervisor.log"
 export WLOC_UPDATE_HEALTH="$tmp/bin/health"
+export WLOC_UPDATE_HEALTH_TIMEOUT=1
 export WLOC_UPDATE_HEALTH_STATE="$tmp/health"
 export WLOC_UPDATE_FREE_KB=65536
 export WLOC_UPDATE_ALLOW_ANY_SOURCE=1
@@ -154,16 +157,19 @@ grep '^old-component$' "$root/usr/share/wificalling-location-gateway/component.t
 WLOC_UPDATE_CURRENT_PACKAGE="$old_package" sh "$script" apply "$new_package"
 grep '^new-component$' "$root/usr/share/wificalling-location-gateway/component.txt" >/dev/null
 
-printf 'fail-once\n' > "$tmp/health"
+printf 'fail-always\n' > "$tmp/health"
 if WLOC_UPDATE_CURRENT_PACKAGE="$new_package" sh "$script" apply "$new_package"; then
     echo 'health failure was accepted' >&2
     exit 1
 fi
 grep '^new-component$' "$root/usr/share/wificalling-location-gateway/component.txt" >/dev/null
 grep '^old-config$' "$root/etc/config/wloc-service" >/dev/null
+grep 'rollback_failed' "$state/status.json" >/dev/null
+printf 'ok\n' > "$tmp/health"
+WLOC_UPDATE_CURRENT_PACKAGE="$new_package" sh "$script" recover
 grep 'rolled_back' "$state/status.json" >/dev/null
 
-printf 'fail-once\n' > "$tmp/health"
+printf 'fail-always\n' > "$tmp/health"
 if WLOC_UPDATE_FAIL_ROLLBACK=1 WLOC_UPDATE_CURRENT_PACKAGE="$new_package" \
     sh "$script" apply "$new_package"; then
     echo 'rollback failure was accepted' >&2
@@ -171,6 +177,7 @@ if WLOC_UPDATE_FAIL_ROLLBACK=1 WLOC_UPDATE_CURRENT_PACKAGE="$new_package" \
 fi
 grep 'rollback_failed' "$state/status.json" >/dev/null
 [ -d "$state/transaction" ]
+printf 'ok\n' > "$tmp/health"
 WLOC_UPDATE_CURRENT_PACKAGE="$new_package" sh "$script" recover
 grep 'rolled_back' "$state/status.json" >/dev/null
 [ ! -e "$state/transaction" ]

@@ -9,13 +9,23 @@ set -eu
 
 ROOT=${WLOC_UPDATE_ROOT:-/}
 STATE_DIR=${WLOC_UPDATE_STATE_DIR:-/var/lib/wificalling-location-gateway/update}
-OPKG=${WLOC_UPDATE_OPKG:-/usr/bin/opkg}
+OPKG=${WLOC_UPDATE_OPKG:-}
+if [ -z "$OPKG" ]; then
+	OPKG=$(command -v opkg 2>/dev/null || true)
+	[ -n "$OPKG" ] || OPKG=/usr/bin/opkg
+fi
 SUPERVISOR=${WLOC_UPDATE_SUPERVISOR:-/etc/init.d/wificalling-location-gateway}
 HEALTH=${WLOC_UPDATE_HEALTH:-/usr/sbin/wloc-health.sh}
+HEALTH_TIMEOUT=${WLOC_UPDATE_HEALTH_TIMEOUT:-30}
 STATUS=$STATE_DIR/status.json
 TXN=$STATE_DIR/transaction
 LOCK=$STATE_DIR/.lock
 WORK=
+case "$HEALTH_TIMEOUT" in
+	''|*[!0-9]*) HEALTH_TIMEOUT=30 ;;
+esac
+[ "$HEALTH_TIMEOUT" -ge 1 ] || HEALTH_TIMEOUT=1
+[ "$HEALTH_TIMEOUT" -le 120 ] || HEALTH_TIMEOUT=120
 
 die() {
 	printf '%s\n' "$1" >&2
@@ -49,6 +59,20 @@ cleanup_lock() {
 	cleanup_work
 	rm -f "$LOCK/pid"
 	rmdir "$LOCK" 2>/dev/null || true
+}
+
+health_check() {
+	health_report=$($HEALTH 2>/dev/null) || return 1
+	printf '%s\n' "$health_report" | grep -F '"wloc":{"running":1,"socket":1,"status_fresh":1' >/dev/null || return 1
+	printf '%s\n' "$health_report" | grep -F '"gateway":{"running":1,"monitor":1,"singbox":1,"config_present":1,"config_valid":1' >/dev/null || return 1
+}
+
+wait_for_health() {
+	deadline=$(( $(now) + HEALTH_TIMEOUT ))
+	while ! health_check; do
+		[ "$(now)" -lt "$deadline" ] || return 1
+		sleep 1
+	done
 }
 
 trap 'cleanup_work' EXIT HUP INT TERM
@@ -166,9 +190,9 @@ package_info() {
 		|| die 'update package lacks control archive'
 	tar -tzf "$package" | awk '$0 == "./data.tar.gz" || $0 == "data.tar.gz" { found=1 } END { exit found ? 0 : 1 }' \
 		|| die 'update package lacks data archive'
-	mkdir -p "$work/control"
-	tar -xOf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
-		|| tar -xOf "$package" ./control.tar.gz > "$work/control.tar.gz"
+mkdir -p "$work/control"
+tar -xOzf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
+		|| tar -xOzf "$package" ./control.tar.gz > "$work/control.tar.gz"
 	archive_safe "$work/control.tar.gz" || die 'control archive is unsafe or corrupt'
 	tar -xzf "$work/control.tar.gz" -C "$work/control" ./control
 	control="$work/control/control"
@@ -178,8 +202,8 @@ package_info() {
 	product=$(field X-WFC-Product "$control")
 	gateway=$(field X-WFC-Gateway "$control")
 	api=$(field X-WFC-Wloc-Api "$control")
-	tar -xOf "$package" data.tar.gz > "$work/data.tar.gz" 2>/dev/null \
-		|| tar -xOf "$package" ./data.tar.gz > "$work/data.tar.gz"
+	tar -xOzf "$package" data.tar.gz > "$work/data.tar.gz" 2>/dev/null \
+		|| tar -xOzf "$package" ./data.tar.gz > "$work/data.tar.gz"
 	archive_safe "$work/data.tar.gz" || die 'data archive is unsafe or corrupt'
 	verify_manifest "$package" "$work/control.tar.gz" "$work/data.tar.gz"
 	if [ -z "$product" ] || [ -z "$gateway" ] || [ -z "$api" ]; then
@@ -236,7 +260,7 @@ rollback_transaction() {
 	restore_configs || rollback_ok=0
 	if [ "$rollback_ok" -eq 1 ]; then
 		"$SUPERVISOR" restart >/dev/null 2>&1 || rollback_ok=0
-		"$HEALTH" >/dev/null 2>&1 || rollback_ok=0
+		wait_for_health || rollback_ok=0
 	fi
 	if [ "$rollback_ok" -eq 1 ]; then
 		if [ -f "$TXN/rollback.ipk" ]; then
@@ -334,7 +358,7 @@ apply_update() {
 		rollback_transaction restart_failed
 		exit 1
 	}
-	if ! "$HEALTH" >/dev/null 2>&1; then
+	if ! wait_for_health; then
 		rollback_transaction health_check_failed
 		exit 1
 	fi
