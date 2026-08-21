@@ -4,9 +4,9 @@
 
 - Source agent ID: codex-v2-lead
 - Capabilities used: rust,openwrt,test
-- Branch: codex/issue-35-v2-profile-runtime-codex-v2-lead-20260821044654
-- Checkpoint parent: dda770e
-- Updated at (UTC): 2026-08-21T07:00:00Z
+- Branch: codex/issue-35-v2-03-rebase-codex-v2-lead-20260821072700-da8b7948
+- Checkpoint parent: f84b41b
+- Updated at (UTC): 2026-08-21T07:31:00Z
 - Credentials included: no
 
 ## Objective
@@ -59,6 +59,9 @@ the frozen V1 facade and the OpenWrt fail-open traffic-isolation contract.
 - The first handoff capsule used a project-specific heading and was rejected
   by the repository handoff validator; it was corrected to the canonical
   template before publication.
+- The first integration attempt conflicted with the merged V2-01 profile
+  model; the rebase retained the profile-runtime implementation and the
+  merged profile validation/tests, then passed clippy.
 
 ## Unresolved decisions and blockers
 
