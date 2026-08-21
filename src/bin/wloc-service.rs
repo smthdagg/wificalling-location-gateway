@@ -1224,6 +1224,14 @@ mod tests {
         assert!(!runtime_scope_valid(false, &profile));
     }
 
+    #[test]
+    fn openwrt_runtime_health_does_not_assume_the_engine_is_alive() {
+        let mut runtime = OpenWrtRuntime::new("/bin/false", "/bin/false");
+
+        assert!(!RuntimeControl::engine_healthy(&mut runtime).unwrap());
+        assert!(!ProfileRuntimeControl::shared_engine_healthy(&mut runtime).unwrap());
+    }
+
     #[cfg(unix)]
     #[test]
     fn openwrt_runtime_delegates_only_component_redirect_actions() {
