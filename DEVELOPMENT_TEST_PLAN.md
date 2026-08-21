@@ -15,9 +15,35 @@
 - 不需要手机端 Shadowrocket WLOC 模块；
 - iPhone 只需安装并信任一次网关 CA；
 - 第一阶段建立独立实验项目 `wificalling-location-gateway`；
-- PoC 成熟后再拆成可选的 `wloc-mitm` 引擎，与稳定的 Wi-Fi Calling Gateway 集成；
-- `sing-box` 必须保留并复用，不能卸载；
-- 第一轮在 Redmi AX6S 上以 `/tmp` 临时运行的 ARM64 PoC 验证。
+- V1 PoC 的拆分设想已由 V2 产品设计取代：Gateway 与 WLOC 集成为一个
+  `wificalling-location-gateway` 产品包、一个统一 supervisor、一个管理界面和
+  一套日志/监控/更新/回滚生命周期；不再把两个服务作为最终产品并列交付；
+- `sing-box` 仍必须保留并复用，但 V2 不强制安装第二份完整二进制。优先复用
+  AX6S 已实测的 `sing-box-tiny`/`sing-box-lite` 或 PassWall 提供的 sing-box，
+  由运行时选择器验证路径和版本后交给统一 supervisor 管理；不接管 PassWall
+  已运行的进程或配置；
+- AX6S 持久空间不足时，测试前先备份配置/CA，停止并卸载旧的 Wificalling/WLOC
+  应用包，保留被选中的 sing-box provider，再安装集成 V2 包；不得使用强制
+  依赖删除；
+- 第一轮历史 PoC 使用 `/tmp` 临时运行的 ARM64 方式保留为回归参考，V2 验收以
+  架构正确的集成包、迁移、重启、低空间和回滚实测为准。
+
+### V2.0 authoritative addendum
+
+本文件早期章节保留了 Phase 0–2 PoC 的历史背景。以下 V2 约束覆盖其中与
+最终产品形态、运行时、打包和真机部署相冲突的旧建议：
+
+- **产品形态**：Gateway/WLOC 共用 `wificalling-location-gateway` 包和
+  `wificalling-location-gateway` procd supervisor；旧 init/配置入口只作为
+  一次迁移兼容层，不得独立拥有运行状态。
+- **设备模型**：每台设备有独立档案，包含节点绑定、WLOC 自动跟随、手动定位、
+  服务启用状态、健康状态、日志和监控；多档案共享 sing-box 进程/节点池，不
+  为每台设备复制完整代理进程。
+- **低资源策略**：包不声明不可表达“tiny/lite/PassWall 任一 provider”的
+  强制完整 sing-box 依赖；安装后检查器找不到 provider 时必须显式告警，统一
+  服务保持安全失败/透传。
+- **验收状态**：主机测试、静态包检查和交叉编译不能替代 AX6S 的 RSS、CPU、
+  存储、启动、升级中断恢复和回滚证据；没有脱敏真机证据不得标记 V2 发布通过。
 
 ## 2. 当前基线
 
@@ -41,9 +67,12 @@
 - 总内存约 236.6MiB，当时可用约 49.7MiB；
 - 持久存储约 85.6MiB，当时剩余约 21–26MiB；
 - `/tmp` 剩余约 84.8MiB；
-- 已安装 sing-box 1.13.16；
+- 历史参考机曾安装 sing-box 1.13.16；V2 测试机可使用已实测的 tiny/lite
+  版本或 PassWall 提供的 sing-box，具体 provider 必须记录在脱敏验收证据中；
 - Gateway 本体约 96KB，删除它只能释放约 0.1MiB；
-- sing-box 解压后二进制约 43.4MB，且由现有代理能力复用，不能删除。
+- 旧版完整 sing-box 二进制约 43.4MB；它属于历史资源基线。若测试机改用
+  tiny/lite/PassWall provider，必须确认该 provider 仍由现有代理能力或
+  统一 Gateway 生命周期复用，不能在没有替代 provider 的情况下删除 sing-box。
 
 ### 2.3 WLOC 参考实现
 
@@ -78,7 +107,7 @@
 - 不部署 Cloudflare Worker、KV 或 token；
 - 不拦截所有 HTTPS；
 - 不内置城市级 GeoIP 数据库；
-- 不支持多设备并发；
+- V1 PoC 不支持多设备并发；V2 产品必须支持有界的多设备独立档案；
 - 不首发多架构；
 - 不首期修改 Gateway 1.7 稳定代码；
 - 不承诺运营商激活、真实 GPS 或紧急呼叫位置准确。
@@ -92,7 +121,7 @@ flowchart LR
     C --> D["Geo Resolver"]
     D --> E["国家/城市/坐标/时区缓存"]
     A --> F["nftables：仅测试设备 + WLOC 域名"]
-    F --> G["wloc-mitm"]
+    F --> G["WLOC MITM handler（wloc-service 内）"]
     E --> G
     G --> H["Apple WLOC 上游"]
     G --> I["修改后的 WLOC 响应"]
@@ -145,7 +174,7 @@ PoC 使用在线 IP 地理位置服务并缓存：
 - 不回落到 Cupertino 或其他固定默认坐标；
 - 对经纬度、国家码、时区做严格校验。
 
-### 4.3 wloc-mitm
+### 4.3 WLOC MITM handler（V2 内嵌于 wloc-service）
 
 职责：
 
@@ -224,51 +253,41 @@ CA 生命周期必须自动化验收：
 | 节点出口探测失败 | 保留最后有效且未过期缓存；否则透传 |
 | 响应超过大小/解压上限 | 不解析、不缓存、不记录正文；按策略透传或受控失败 |
 
-## 5. 独立项目结构
+## 5. 项目结构
 
-建议新建独立仓库：
+V1 的独立实验结构已演进为当前仓库中的 V2 集成结构：
 
 ```text
 wificalling-location-gateway/
-  cmd/wloc-mitm/
-  internal/
-    ca/
-    exitprobe/
-    georesolver/
-    proxy/
-    wloc/
-  fixtures/
-    wloc/
-  openwrt/
-    root/etc/init.d/wificalling-location
-    root/etc/config/wificalling-location
-    root/usr/libexec/wificalling-location/
-    root/usr/share/luci/
-  scripts/
-    build-openwrt.sh
-    deploy-poc.sh
-    rollback-poc.sh
-  tests/
+  src/                    # Rust service, proxy, WLOC, Geo and runtime
+  openwrt/files/          # unified procd/UCI/network/package files
+  openwrt/luci-app-*/     # integrated LuCI, ACL and rpcd surface
+  scripts/                # package, migration, update and verification tools
+  tests/                  # unit, integration, package and resource contracts
+  docs/                   # API, deployment, operations and release evidence
   SECURITY.md
   LICENSE
   README.md
 ```
 
-实验项目不得直接在 Gateway 1.7 仓库内开发，以免引入 TLS/CA/二进制依赖和许可证污染。
+稳定 Gateway 1.7 源码仍不在本仓库内 vendor；集成包只在构建阶段接受经过
+版本/摘要校验的 Gateway payload，并对其执行受控补丁。
 
 ## 6. 技术选型门禁
 
 ### 6.1 实现语言
 
-会话建议第一版使用 Go，因为 TLS、HTTP/2、protobuf 和交叉编译支持成熟。资源门禁：
+V2 使用 Rust 实现统一服务，因为 TLS、HTTP/2、protobuf、静态 AArch64 交叉编译
+和当前代码验证链已经冻结。资源门禁：
 
-- ARM64 压缩包目标 ≤5–8MB；
-- 安装后目标 ≤8–18MB；
-- 空闲 RSS ≤20MB；
-- 单次请求峰值 RSS ≤35MB；
+- ARM64 集成运行时二进制合计 ≤8MiB；
+- 集成安装包 ≤20MiB；
+- 持久状态 ≤10MiB，日志/缓存各自 ≤1MiB；
+- 空闲 RSS ≤25MiB，峰值 RSS ≤35MiB；
 - AX6S 实测峰值必须 ≤25MB 才进入长期驻留评估。
 
-若 stripped Go 二进制持续超出 AX6S 门禁，再评估 Rust；不为省几 MB 直接选择手写 C TLS/HTTP2。
+Rust release 二进制、包大小、RSS/CPU/启动和低空间行为均须分别通过主机
+门禁与 AX6S 脱敏证据；主机门禁不得冒充真机 RSS 通过。
 
 ### 6.2 GeoIP
 
@@ -280,19 +299,18 @@ PoC：在线 provider + 本地缓存。
 - 城市库约 50–120MB 安装占用；
 - 当前 AX6S 剩余闪存不适合城市库。
 
-### 6.3 包拆分
+### 6.3 V2 包形态
 
-成熟后建议：
+V2 正式交付一个架构相关的集成包：
 
 ```text
-wificalling-location-engine
-  架构相关 wloc-mitm 二进制
-
-luci-app-wificalling-location
-  架构无关 LuCI、UCI、init、ACL
+wificalling-location-gateway
+  Gateway 1.7 payload、统一 supervisor、wloc-service/wloc-ctl、
+  LuCI、UCI、ACL、日志/诊断/更新/回滚脚本
 ```
 
-Gateway 1.7/后续版本只声明可选集成，不把引擎设为强制依赖。
+包内不复制第二份 sing-box；运行时选择 AX6S 已有 tiny/lite/PassWall
+provider。旧组件包仅用于一次升级迁移和回滚兼容，不是 V2 最终管理入口。
 
 ## 7. 资源预算
 
@@ -331,8 +349,8 @@ V2-08 将上述目标固化为包内的
 |---|---:|---:|
 | LuCI/脚本/配置 | 20–100KB | 100–300KB |
 | CA/缓存 | 可忽略 | 50–200KB |
-| wloc-mitm | 3–8MB | 8–18MB |
-| 合计 | 约 4–8MB | 约 10–20MB |
+| Rust wloc-service/wloc-ctl 及脚本 | 约 1–4MB | 约 2–8MB |
+| 合计集成包 | 以 20MiB 硬门禁为准 | 以 20MiB 硬门禁为准 |
 
 在 AX6S 上，只有实际安装后仍保留至少 10MiB 系统余量，才允许从 `/tmp` PoC 转为持久安装。
 
@@ -432,28 +450,23 @@ V2-08 将上述目标固化为包内的
 
 退出条件：成功可重复、失败可恢复、没有普通 HTTPS 扩大拦截。
 
-### Phase 7：LuCI 与持久包（4–6 天）
+### Phase 7：V2 LuCI 与持久包
 
-仅在 PoC 通过后开发：
+- 基础设置、统一启停、CA/指纹、provider 状态和资源提示；
+- 多设备独立档案：节点调用、自动跟随、手动定位、启用状态、健康、日志和监控；
+- 结构化日志、存储上限、支持包、组件更新、空间检查和回滚入口；
+- 不显示地图，不显示虚假的“Wi-Fi Calling 已激活”；
+- 一个架构相关集成 IPK/APK，旧组件入口仅作为迁移兼容层。
 
-- 开关、单设备选择、自动跟随出口；
-- 出口 IP、国家、城市、坐标、时区、缓存时间；
-- CA 下载、指纹、安装/撤销说明；
-- 引擎状态和最近错误；
-- 不显示地图；
-- 不显示虚假的“Wi-Fi Calling 已激活”；
-- IPK/APK、升级和卸载脚本。
+### Phase 8：V2 统一生命周期
 
-### Phase 8：Gateway 可选集成（3–5 天）
+- Gateway/WLOC 由统一 supervisor 管理，旧 init 不得独立 respawn 或拥有 redirect；
+- feature flag 默认关闭；WLOC 故障不得阻止 Gateway 继续提供安全 passthrough；
+- 配置迁移保留 UCI/CA，空间不足、更新中断和回滚必须有明确失败路径；
+- 真机验收前不得发布，真实 AX6S 证据必须覆盖低内存、低存储、重启、升级和回滚。
 
-- Gateway 检测可选 engine 是否安装；
-- 通过稳定 JSON/ubus 契约提供 node/device 映射；
-- feature flag 默认关闭；
-- 引擎故障不得阻止 Gateway 启动；
-- Gateway 1.7 旧配置零变化；
-- 独立包可单独卸载。
-
-总工作量：约 **35–55 个开发日**，适合分为 PoC、真机验证、产品化三个里程碑，不应按普通 LuCI 功能估算。
+V2 的代码、UI、迁移和真机验收按 GitHub Issue #41 的工作包和退出条件执行，
+不再使用早期 PoC 的 35–55 个开发日估算作为发布标准。
 
 ## 9. 测试矩阵
 
@@ -553,24 +566,23 @@ V2-08 将上述目标固化为包内的
 
 ## 11. 发布/回滚策略
 
-### PoC
+### V1 PoC historical path
 
 - 二进制和规则放 `/tmp`；
-- 不创建正式 package；
-- 不删除 sing-box；
 - 不覆盖 Gateway 配置；
 - 测试前备份 UCI/nftables/证书状态；
 - `rollback-poc.sh` 删除进程、规则、nft set 和临时证书；
 - 重启作为最终恢复手段。
 
-### 产品化
+### V2 product path
 
-- 独立 engine/LuCI 包；
-- feature flag 默认关闭；
-- 卸载前先停止和清理规则；
-- 卸载时 CA 私钥需用户确认后删除；
-- Gateway 对 engine 只做可选调用；
-- engine 不存在或失败时 Gateway 继续正常工作。
+- 一个 `wificalling-location-gateway` 集成包和统一 supervisor；
+- feature flag 默认关闭，WLOC 失败时 Gateway 保持可用/透传；
+- AX6S 安装前先停止、禁用并卸载旧 Wificalling/WLOC 应用包，保留选定的
+  tiny/lite/PassWall sing-box provider；
+- 卸载前先停止并清理规则；CA 私钥仅在用户明确选择时删除；
+- 更新事务必须保留配置/CA、检查空间、保留回滚包，并在中断后可恢复；
+- Gateway/WLOC 统一管理，但旧入口在一版迁移期内只提供兼容 facade。
 
 ## 12. 第一迭代任务清单
 

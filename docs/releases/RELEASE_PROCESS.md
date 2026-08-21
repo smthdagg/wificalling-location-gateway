@@ -54,7 +54,7 @@ This is also implemented as `scripts/openwrt/sign-feed.sh`.
      regression tests, packaging tests)
    - `cargo clippy --all-targets` and `cargo fmt --check`
    - privacy sweep: no real device IPs, credentials, or keys in the repo
-2. **Bump the version** (e.g. `1.0.6 -> 1.0.7`): `VERSION`, `Cargo.toml`
+2. **Bump the version** (V2 candidate `1.2.0`, then the next approved patch): `VERSION`, `Cargo.toml`
    (+ `Cargo.lock` via `cargo update -p wificalling-location-gateway
    --offline`), `scripts/openwrt/build-release-packages.sh`,
    `scripts/build-luci-ipk.sh`, both `openwrt/*/Makefile` files, the
@@ -69,14 +69,16 @@ This is also implemented as `scripts/openwrt/sign-feed.sh`.
    (aarch64) and `build-release-packages.sh` (x86_64 ipk + apk), then
    write `SHA256SUMS` in `dist/openwrt-release/`.
 5. **Install test**: `verify-docker-matrix.sh --dist-dir
-   dist/openwrt-release` (four environments) and a live upgrade on the
-   AX6S test router.
+   dist/openwrt-release` (four environments). On the space-constrained AX6S,
+   back up UCI/CA, stop and remove the old Wificalling/WLOC application
+   packages first, retain the selected tiny/lite/PassWall sing-box provider,
+   then perform the live install/upgrade, resource measurement and rollback.
 6. **Feed**: swap the release files in the feed repo `gh-pages` branch,
    regenerate `Packages`/`Packages.gz`
    (`scripts/gen-feed-index.sh`), sign with
    `scripts/openwrt/sign-feed.sh` (same key as always), push `gh-pages`
    and `main`. The `wloc.pub` does **not** change.
-7. **GitHub**: tag `v<version>`, create the Release with the three
+7. **GitHub**: only after Issue #41 acceptance is green, tag `v<version>`, create the Release with the three
    packages, `SHA256SUMS`, and the signed `Packages`/`Packages.gz`(+`.sig`)
    assets, bilingual notes (English first, Chinese after).
 8. **Verify** the feed signature on the AX6S (`opkg update` must print

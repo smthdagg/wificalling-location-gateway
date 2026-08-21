@@ -43,7 +43,7 @@ model, and bounded restart policy remain stricter component-level limits.
 |---|---|---|
 | RED | `sh tests/scripts/test-resource-budgets.sh` before the contract/harness existed | PASSING RED condition: missing budget/harness caused exit 1 |
 | GREEN | `sh tests/scripts/test-resource-budgets.sh` | PASS; report/package schema, procfs path where available, and oversized binary/package/resource rejection exercised |
-| GREEN | `cargo build --locked --release --bins && ./scripts/ci/verify-resource-budgets.sh` | PASS; combined runtime binaries: 2,892,256 bytes |
+| GREEN | `cargo build --locked --release --bins && ./scripts/ci/verify-resource-budgets.sh` | PASS; combined runtime binaries: 2,992,288 bytes |
 | Syntax | `sh -n scripts/ci/*.sh tests/scripts/test-resource-budgets.sh` | PASS |
 
 The total runtime size is a local measurement of the current release build,

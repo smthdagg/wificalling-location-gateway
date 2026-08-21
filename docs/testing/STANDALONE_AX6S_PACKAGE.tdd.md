@@ -1,4 +1,4 @@
-# Standalone AX6S package — TDD evidence
+# AX6S integrated package builder — TDD evidence
 
 ## User journey
 
@@ -16,7 +16,8 @@ As an AX6S administrator, I can install one architecture-specific IPK that resto
 - Command: `./tests/scripts/test-standalone-ax6s-package.sh`
 - Result: `standalone AX6S package tests passed`
 - Full command: `./scripts/ci/verify.sh`
-- Result: repository gates passed; 67 Python tests passed; Rust line coverage 80.32%; audit, deny, secret scan, release-size, shell and packaging gates passed.
+- Result: repository gates passed; 83 Python tests passed; Rust line coverage
+  80.11%; audit, deny, secret scan, release-size, shell and packaging gates passed.
 
 ## Guarantees
 
@@ -32,16 +33,15 @@ As an AX6S administrator, I can install one architecture-specific IPK that resto
 
 ## Scope and gap
 
-The formal release artifact is
-`wificalling-location-gateway_1.0.0-1_aarch64_cortex-a53.ipk`. Its product
-binaries were rebuilt from the version 1.0.0 source with the pinned mt7622
-toolchain: `wloc-service` is a static AArch64 ELF of 1,904,800 bytes and
-`wloc-ctl` is a static AArch64 ELF of 462,792 bytes. The package SHA-256 is
-`7565a77ae36917ce1898134b6f1a7e7c7b50790335f1a39ff2f89745148f8f0f`
-and is also recorded in the release `SHA256SUMS`.
+The current V2 package target is
+`wificalling-location-gateway_1.2.0-1_aarch64_cortex-a53.ipk`. The latest local
+host release binaries are 1,654,336 bytes (`wloc-service`) and 369,488 bytes
+(`wloc-ctl`); they are not evidence of an AArch64 ELF cross-build. A final
+package SHA-256 and signed release manifest still require the
+architecture-correct release build.
 
-The exact final asset was installed over the authorized ImmortalWrt 24.10.6
-AX6S. Both UCI hashes remained unchanged, both services ran, the restored
-Wi-Fi Calling settings rendered existing policies, and LuCI Manual → Auto →
-Manual completed without a socket error. “Standalone” means no separate
-Gateway or WLOC application package; normal OpenWrt facilities remain required.
+This document records package-construction evidence only. It does not claim
+that the final V2 package has been installed on AX6S; that claim requires the
+documented pre-install removal of the old application packages, preservation
+of the selected tiny/lite/PassWall provider, and redacted migration/resource/
+rollback evidence.

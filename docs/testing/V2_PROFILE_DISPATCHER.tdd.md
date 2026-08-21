@@ -43,6 +43,7 @@ unified supervisor shell tests above.
 
 ## Remaining release gates
 
-- Live v2 profile mutation dispatch and LuCI mutations remain Issue #37.
-- Real AX6S resource evidence remains Issue #40.
-- Update/rollback and migration rehearsal remain Issues #39 and #41.
+- UCI-backed profile mutation and LuCI Apply/restart are covered by the current
+  V2 integration branch and `docs/api/WLOC_SERVICE_API_V2_PROFILES.md`.
+- Real AX6S resource, migration, interrupted-update and rollback evidence remain
+  required by Issue #41; host tests do not close those gates.

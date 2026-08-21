@@ -2,9 +2,11 @@
 
 ## Scope
 
-This evidence covers Issue #33's unified Gateway/WLOC lifecycle slice. The
-device-profile, LuCI, update, migration, and AX6S live-RSS slices remain
-follow-up work from the V2 task breakdown.
+This evidence started with Issue #33's unified Gateway/WLOC lifecycle slice.
+The current V2 integration branch extends it with UCI-backed device profiles,
+LuCI management/monitoring, bounded diagnostics, component update/rollback
+contracts, and shared sing-box provider resolution. Live AX6S RSS and
+migration/rollback observations remain hardware gates.
 
 ## RED/GREEN checkpoints
 
@@ -23,8 +25,8 @@ Command:
 ./scripts/ci/verify.sh
 ```
 
-Result: PASS. The run included 69 Python tests, Rust all-target tests, Rust
-line coverage of 81.29%, OpenWrt cross-build/resource gates, release package
+Result: PASS. The run included 83 Python tests, Rust all-target tests, Rust
+line coverage of 80.11%, OpenWrt cross-build/resource gates, release package
 tests, standalone AX6S package tests, JavaScript tests, secret scanning,
 formatting, and dependency audit. Cargo audit reported no advisories; it did
 report the pre-existing duplicate `socket2` and `windows-sys` lock entries.
@@ -38,4 +40,4 @@ report the pre-existing duplicate `socket2` and `windows-sys` lock entries.
 | Cleanup uncertainty is visible as `CleanupUnsafe` | `tests/service_supervisor.rs:cleanup_failure_is_not_reported_as_stopped` |
 | Stable Gateway nftables namespace and UDP 500/4500 are not directly edited by WLOC cleanup | shell static gate and dedicated `wloc_service` stop mock |
 | Release packaging enables the unified entry point | `tests/scripts/test-openwrt-release-packaging.sh` and `tests/scripts/test-standalone-ax6s-package.sh` |
-| No claim is made for live AX6S RSS, procd behavior, or multi-device UI in this slice | Requires hardware/package-install acceptance in the next issue |
+| No claim is made for live AX6S RSS, procd behavior, or migration/rollback timing | Requires hardware/package-install acceptance in Issue #41 |

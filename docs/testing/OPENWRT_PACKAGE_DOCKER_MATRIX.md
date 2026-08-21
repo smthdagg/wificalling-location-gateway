@@ -8,7 +8,7 @@ Rust ELF executables, so the runtime package must name the real OpenWrt CPU
 architecture. Marking an AArch64 or x86-64 ELF as `all` is invalid and can
 install an unusable binary on another router.
 
-Release 1.0 contains one architecture-specific integrated package for each
+V2.0/1.2.0 contains one architecture-specific integrated package for each
 package-manager generation. It combines the verified Wi-Fi Calling Gateway
 1.7 payload, `wloc-service`, `wloc-ctl`, procd/UCI/network helpers, and the
 unified LuCI/rpcd UI. The Docker builder is deliberately limited to `x86_64`;
@@ -37,7 +37,7 @@ Then build the release packages:
 
 ```sh
 ./scripts/openwrt/build-release-packages.sh \
-  --version 1.0.0 \
+  --version 1.2.0 \
   --release 1 \
   --arch x86_64 \
   --service-bin /absolute/path/wloc-service \
@@ -67,7 +67,7 @@ Run:
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir /absolute/path/dist/v1.0.0
+  --dist-dir /absolute/path/dist/openwrt-release
 ```
 
 For each environment the verifier boots `/sbin/init`, waits for ubus, installs
@@ -78,17 +78,17 @@ the Docker evidence to the exact files intended for upload. The
 rootfs images do not contain the full dependency feeds used by a router, so
 the isolated install test bypasses unresolved optional dependencies; it does
 not claim that sing-box, nftables interception, DNS behavior, Wi-Fi Calling,
-or an iPhone were exercised. Those remain AX6S/real-device gates. Release 1.0
-has these exact x86-64 assets:
+or an iPhone were exercised. Those remain AX6S/real-device gates. The V2
+candidate has these target assets:
 
-- `wificalling-location-gateway_1.0.0-r1_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
-- `wificalling-location-gateway-1.0.0-r1.apk` for OpenWrt 25.x.
+- `wificalling-location-gateway_1.2.0-r1_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
+- `wificalling-location-gateway-1.2.0-r1.apk` for OpenWrt 25.x.
 
-The formal 1.0 verification result was:
+The current host-side plan/static package checks pass. The final Docker install
+matrix and AX6S installation/upgrade/rollback result remain release gates and
+must not be filled with a host-only result:
 
 ```text
-Redmi AX6S / OpenWrt 24.10.5|OpenWrt 24.10.5 aarch64_generic|installed|started|socket-ok|status-ok
-OpenWrt 24.10.8|OpenWrt 24.10.8 x86_64|installed|started|socket-ok|status-ok
-OpenWrt 25.12.3|OpenWrt 25.12.3 x86_64|installed|started|socket-ok|status-ok
-iStoreOS 24.10.5|iStoreOS 24.10.5 x86_64|installed|started|socket-ok|status-ok
+Docker matrix: pending final release artifacts
+AX6S migration/resource/rollback: pending real-device evidence
 ```

@@ -37,15 +37,15 @@ precise runtime probe data.
 ## Deliberate boundaries
 
 - The legacy WLOC page remains available for CA/profile export and advanced
-  location tools during the V2 migration. The new page owns profile lifecycle
-  and the unified apply boundary.
-- Transactional validation is enforced before persistence. A future backend
-  apply RPC may make commit/restart rollback atomic across daemon failures;
-  that is tracked with the broader V2 release work rather than silently
-  pretending the LuCI client can roll back a committed UCI transaction.
+  location tools during the V2 migration. The new page owns profile lifecycle,
+  per-device monitoring/log selection, and the unified apply boundary.
+- Transactional validation is enforced before persistence; the UCI-backed
+  dispatcher commits with revert-on-failure, and LuCI Apply restarts through the
+  unified supervisor. A real-device interrupted-update/rollback test remains
+  a release gate.
 - Logs, support bundles, component update/rollback, and resource gates are
-  separate V2 issues (#38–#40) and must not be implemented by adding high-rate
-  polling or unbounded browser-side history here.
+  implemented as bounded V2 surfaces; the UI must not add high-rate polling or
+  unbounded browser-side history.
 - The `restart_unified` RPC is write-only in both packaged ACL sources; the
   canonical and package ACL files are tested byte-for-byte to prevent a
   permission drift during packaging.
