@@ -832,6 +832,19 @@ fn status_file_and_target_events_are_written() {
         events_text.contains("target_updated"),
         "events must record target updates"
     );
+    let event: serde_json::Value = events_text
+        .lines()
+        .rfind(|line| !line.trim().is_empty())
+        .and_then(|line| serde_json::from_str(line).ok())
+        .expect("target event must be valid JSON");
+    assert_eq!(event["component"], "wloc");
+    assert_eq!(event["profile_scope"], "service");
+    assert_eq!(event["severity"], "info");
+    assert_eq!(event["event_code"], "target_updated");
+    assert!(event["message"].is_string());
+    assert!(event.get("latitude").is_none());
+    assert!(event.get("longitude").is_none());
+    assert!(event.get("assigned_device").is_none());
 
     let _ = std::fs::remove_file(&status_path);
     let _ = std::fs::remove_file(&events_path);

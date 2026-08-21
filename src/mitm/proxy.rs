@@ -16,6 +16,7 @@ use http::{HeaderValue, Request, Response};
 use tokio::net::TcpStream;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
+use crate::diagnostics::append_json_line;
 use crate::mitm::{CaBundle, MitmCertResolver, MitmError};
 use crate::wloc::{patch_wloc_response, PatchTarget};
 
@@ -168,7 +169,7 @@ impl MitmProxy {
                 .await
             {
                 Ok((original_len, patched_body)) => {
-                    self.append_rewrite_event(patch.as_ref(), original_len, patched_body.len());
+                    self.append_rewrite_event(original_len, patched_body.len());
                     let mut send = respond
                         .send_response(Response::new(()), patched_body.is_empty())
                         .map_err(|error| MitmProxyError::H2(error.to_string()))?;
@@ -307,7 +308,7 @@ impl MitmProxy {
     }
 
     /// Append one rewrite event per patched WLOC response.
-    fn append_rewrite_event(&self, patch: Option<&PatchTarget>, before: usize, after: usize) {
+    fn append_rewrite_event(&self, before: usize, after: usize) {
         let Some(events_file) = &self.events_file else {
             return;
         };
@@ -315,29 +316,21 @@ impl MitmProxy {
             return;
         }
         let event = serde_json::json!({
-            "type": "rewritten",
-            "time": std::time::SystemTime::now()
+            "timestamp": std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0),
-            "latitude": patch.map(|t| t.latitude),
-            "longitude": patch.map(|t| t.longitude),
-            "bytes_before": before,
-            "bytes_after": after,
+            "component": "wloc",
+            "profile_scope": "device-policy",
+            "severity": "info",
+            "event_code": "response_rewritten",
+            "message": "WLOC response rewritten",
+            "fields": {
+                "bytes_before": before,
+                "bytes_after": after,
+            },
         });
-        use std::io::Write as _;
-        let mut line = serde_json::to_string(&event).unwrap_or_default();
-        line.push('\n');
-        if let Some(parent) = events_file.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(events_file)
-        {
-            let _ = file.write_all(line.as_bytes());
-        }
+        append_json_line(events_file, &event);
     }
 }
 

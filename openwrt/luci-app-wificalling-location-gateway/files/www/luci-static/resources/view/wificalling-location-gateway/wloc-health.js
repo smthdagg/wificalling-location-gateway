@@ -25,6 +25,11 @@ var restartGateway = rpc.declare({
 	method: 'restart_gateway'
 });
 
+var createSupportBundle = rpc.declare({
+	object: 'luci.wloc',
+	method: 'support_bundle'
+});
+
 function notify(title, message, kind) {
 	ui.addNotification(null, E('p', [ E('strong', title + ': '), message ]), kind);
 }
@@ -172,6 +177,22 @@ return view.extend({
 			};
 		}
 
+		var supportButton = E('button', {
+			'class': 'cbi-button cbi-button-apply',
+			click: function() {
+				if (this.disabled) return;
+				this.disabled = true;
+				createSupportBundle().then(function(result) {
+					if (result && result.error) throw new Error(result.error);
+					notify(wlocI18n.t('Support bundle ready'),
+						(result && result.path ? result.path : '/tmp/wloc-support-bundle.tar.gz') +
+						' (' + ((result && result.bytes) || '?') + ' bytes)', 'info');
+				}).catch(function(error) {
+					notify(wlocI18n.t('Support bundle failed'), String(error), 'error');
+				}).then(function() { this.disabled = false; }.bind(this));
+			}
+		}, wlocI18n.t('Generate support bundle'));
+
 		var restartButtons = E('div', { 'class': 'cbi-section', style: 'margin-top:16px' }, [
 			E('h3', { style: 'margin-top:0' }, wlocI18n.t('Restart services')),
 			E('div', {}, [
@@ -192,7 +213,9 @@ return view.extend({
 				}, wlocI18n.t('Restart WLOC service'))
 			]),
 			E('p', { style: 'color:#666;font-size:12px;margin-bottom:0' },
-				wlocI18n.t('Restarting the gateway regenerates the proxy config and briefly interrupts device proxying.'))
+				wlocI18n.t('Restarting the gateway regenerates the proxy config and briefly interrupts device proxying.')),
+			E('p', { style: 'color:#666;font-size:12px;margin-bottom:0' },
+				wlocI18n.t('Support bundles contain bounded redacted diagnostics only; copy the generated file from /tmp before it expires.'), ' ', supportButton)
 		]);
 
 		return E([], [

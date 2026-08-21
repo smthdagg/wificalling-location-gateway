@@ -88,19 +88,19 @@ END {
     printf "\"sent_packets\":%d,\"reply_packets\":%d,\"delta_sent\":%d,\"delta_reply\":%d,\"last_activity\":%d,\"activity_evidence\":%s}", sent[i]+0,reply[i]+0,ds,dr,last,q(activity)
     if (log_enabled) {
       if (handshake_success && now-old_event[i]>=15) {
-        print now "|" label[i] "|" ip[i] "|handshake_success|" ds "|" dr "|call_or_sms_unknown|" wfc > event_out
+        printf "{\"timestamp\":%d,\"component\":\"gateway\",\"profile_scope\":\"device-policy\",\"severity\":\"info\",\"event_code\":\"handshake_success\",\"message\":\"Wi-Fi Calling handshake succeeded\",\"fields\":{\"state\":\"%s\",\"delta_sent\":%d,\"delta_reply\":%d}}\n", now, wfc, ds, dr > event_out
         old_event[i]=now; acc_sent=0; acc_reply=0
       } else if (handshake_failed && now-old_event[i]>=15) {
         # A flapping device state (registered <-> not_detected within a
         # second) used to write a handshake event on every flip, flooding
         # the log. Debounce to at most one handshake event per 15s.
-        print now "|" label[i] "|" ip[i] "|handshake_failed|" ds "|" dr "|call_or_sms_unknown|" wfc > event_out
+        printf "{\"timestamp\":%d,\"component\":\"gateway\",\"profile_scope\":\"device-policy\",\"severity\":\"warning\",\"event_code\":\"handshake_failed\",\"message\":\"Wi-Fi Calling handshake was not detected\",\"fields\":{\"state\":\"%s\",\"delta_sent\":%d,\"delta_reply\":%d}}\n", now, wfc, ds, dr > event_out
         old_event[i]=now; acc_sent=0; acc_reply=0
       } else if (sustained) {
         # Sustained bidirectional traffic after registration is the
         # signature of a voice call (ringing or in-call RTP); the tunnel
         # content stays encrypted, so this is an inference, not a decode.
-        print now "|" label[i] "|" ip[i] "|sustained_traffic|" acc_sent "|" acc_reply "|likely_call|" wfc > event_out
+        printf "{\"timestamp\":%d,\"component\":\"gateway\",\"profile_scope\":\"device-policy\",\"severity\":\"info\",\"event_code\":\"sustained_traffic\",\"message\":\"Sustained encrypted traffic observed\",\"fields\":{\"state\":\"%s\",\"delta_sent\":%d,\"delta_reply\":%d}}\n", now, wfc, acc_sent, acc_reply > event_out
         old_event[i]=now; acc_sent=0; acc_reply=0
       }
     }
@@ -112,8 +112,18 @@ END {
 
 cat "$event_tmp" >> "$events"
 awk -F '|' -v limit="$max_events" '
-FNR==NR { count[$2 FS $3]++; next }
-{ key=$2 FS $3; seen[key]++; if (seen[key] > count[key]-limit) print }
+FNR==NR {
+  if ($0 ~ /^\{/) { structured_count++; next }
+  count[$2 FS $3]++; next
+}
+{
+  if ($0 ~ /^\{/) {
+    structured_seen++
+    if (structured_seen > structured_count-limit) print
+    next
+  }
+  key=$2 FS $3; seen[key]++; if (seen[key] > count[key]-limit) print
+}
 ' "$events" "$events" > "$trim_tmp"
 mv "$trim_tmp" "$events"
 
@@ -124,7 +134,7 @@ mv "$trim_tmp" "$events"
 event_bytes=$(wc -c < "$events" | tr -d ' ')
 if [ "$event_bytes" -gt "$max_event_bytes" ]; then
 	tail -c "$max_event_bytes" "$events" \
-		| awk -F '|' 'NR == 1 && NF != 8 { next } { print }' > "$trim_tmp"
+		| awk -F '|' 'NR == 1 && $0 !~ /^\{/ && NF != 8 { next } { print }' > "$trim_tmp"
 	mv "$trim_tmp" "$events"
 fi
 chmod 644 "$tmp" "$events"

@@ -177,6 +177,7 @@ PY
 			cp "$root/openwrt/files/usr/sbin/wloc-profile-redirect.sh" "$stage/data/usr/sbin/wloc-profile-redirect.sh"
 			cp "$root/openwrt/files/usr/sbin/wloc-profile-status.sh" "$stage/data/usr/sbin/wloc-profile-status.sh"
 			cp "$root/openwrt/files/usr/sbin/wloc-health.sh" "$stage/data/usr/sbin/wloc-health.sh"
+			cp "$root/openwrt/files/usr/sbin/wloc-support-bundle.sh" "$stage/data/usr/sbin/wloc-support-bundle.sh"
 			mkdir -p "$stage/data/etc/init.d" "$stage/data/usr/libexec/wificalling-location-gateway"
 			cp "$root/openwrt/files/etc/init.d/wificalling-location-gateway" "$stage/data/etc/init.d/wificalling-location-gateway"
 			cp "$root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \

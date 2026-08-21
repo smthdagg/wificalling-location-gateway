@@ -7,6 +7,7 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 pub mod app;
 pub mod config;
+pub(crate) mod diagnostics;
 pub mod exitprobe;
 pub mod georesolver;
 pub mod mitm;

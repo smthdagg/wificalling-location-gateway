@@ -63,6 +63,8 @@ list)
 	json_close_object
 	json_add_object health
 	json_close_object
+	json_add_object support_bundle
+	json_close_object
 	json_add_object node_test
 	json_close_object
 	json_dump
@@ -244,6 +246,14 @@ call)
 		fi
 		/usr/sbin/wloc-health.sh
 		exit 0
+		;;
+	support_bundle)
+		if [ ! -x /usr/sbin/wloc-support-bundle.sh ]; then
+			echo '{"error":"support bundle helper is not installed"}'
+			exit 1
+		fi
+		/usr/sbin/wloc-support-bundle.sh
+		exit $?
 		;;
 	clear_log)
 		# Truncate a usage log immediately with a shell redirect (O_TRUNC).
