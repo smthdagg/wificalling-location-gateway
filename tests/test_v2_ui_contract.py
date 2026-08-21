@@ -39,6 +39,47 @@ class V2UiContractTests(unittest.TestCase):
             )
             self.assertEqual(0, result.returncode, result.stderr)
 
+    def test_profile_page_exposes_basic_settings_and_low_frequency_status_contract(self):
+        for relative in (
+            "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",
+            "openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",
+        ):
+            source = (self.root / relative).read_text(encoding="utf-8")
+            self.assertIn("Basic settings", source)
+            self.assertIn("probe_interval", source)
+            self.assertIn("reason_code", source)
+            self.assertIn("Apply & restart", source)
+            self.assertIn(", 15);", source)
+
+    def test_profile_page_has_one_apply_boundary_and_bounded_input_guards(self):
+        for relative in (
+            "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",
+            "openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",
+        ):
+            source = (self.root / relative).read_text(encoding="utf-8")
+            self.assertIn("validateProfiles", source)
+            self.assertIn("probe interval must be between", source)
+            self.assertIn("ui.changes.apply(true)", source)
+            self.assertIn("removeProfile(section)", source)
+            self.assertIn("normalizeDeviceAddress", source)
+            self.assertIn("device address must be a private IPv4 address or unicast MAC", source)
+            self.assertEqual(source.count("uci.save('wloc-service')"), 1)
+
+    def test_restart_rpc_is_write_only_and_acl_sources_match(self):
+        acl_sources = []
+        for prefix in (
+            self.root / "openwrt/files",
+            self.root / "openwrt/luci-app-wificalling-location-gateway/files",
+        ):
+            acl = prefix / "usr/share/rpcd/acl.d/luci-app-wificalling-location-gateway.json"
+            data = json.loads(acl.read_text(encoding="utf-8"))["luci-app-wificalling-location-gateway"]
+            read_methods = data["read"]["ubus"]["luci.wloc"]
+            write_methods = data["write"]["ubus"]["luci.wloc"]
+            self.assertNotIn("restart_unified", read_methods)
+            self.assertIn("restart_unified", write_methods)
+            acl_sources.append(acl.read_text(encoding="utf-8"))
+        self.assertEqual(acl_sources[0], acl_sources[1])
+
 
 if __name__ == "__main__":
     unittest.main()
