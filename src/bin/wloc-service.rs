@@ -1218,4 +1218,160 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(root);
     }
+
+    struct MockProfileDispatch;
+
+    impl ServiceDispatch for MockProfileDispatch {
+        fn status(&mut self) -> Result<serde_json::Value, DispatchError> {
+            Ok(serde_json::json!({"profile": "mock"}))
+        }
+
+        fn enable(&mut self) -> Result<(), DispatchError> {
+            Ok(())
+        }
+
+        fn disable(&mut self) -> Result<(), DispatchError> {
+            Ok(())
+        }
+
+        fn reload(&mut self) -> Result<(), DispatchError> {
+            Ok(())
+        }
+
+        fn set_manual_location(&mut self, _params: &RequestParams) -> Result<(), DispatchError> {
+            Ok(())
+        }
+
+        fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
+            Ok(())
+        }
+
+        fn search_location(
+            &mut self,
+            query: &str,
+        ) -> Result<serde_json::Value, DispatchError> {
+            Ok(serde_json::json!({"query": query}))
+        }
+
+        fn refresh_periodic(&mut self) {}
+
+        fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
+            Ok(())
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn profile_service_group_coordinates_shared_runtime_and_handlers() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let model = ProfileModel::new(vec![
+            DeviceProfile {
+                id: "phone".to_owned(),
+                label: "Phone".to_owned(),
+                assigned_device: Some("192.168.1.100".to_owned()),
+                node_ref: "phone-node".to_owned(),
+                node_mode: wificalling_location_gateway::config::NodeSelectionMode::Fixed,
+                location_mode: LocationMode::Auto,
+                manual_latitude: None,
+                manual_longitude: None,
+                manual_location_ref: None,
+                enabled: true,
+            },
+            DeviceProfile {
+                id: "tablet".to_owned(),
+                label: "Tablet".to_owned(),
+                assigned_device: Some("192.168.1.101".to_owned()),
+                node_ref: "tablet-node".to_owned(),
+                node_mode: wificalling_location_gateway::config::NodeSelectionMode::Fixed,
+                location_mode: LocationMode::Auto,
+                manual_latitude: None,
+                manual_longitude: None,
+                manual_location_ref: None,
+                enabled: true,
+            },
+        ])
+        .unwrap();
+        let router = std::sync::Arc::new(ProfilePatchRouter::new(&model).unwrap());
+        let mut handlers = HashMap::new();
+        handlers.insert(
+            "phone".to_owned(),
+            Box::new(MockProfileDispatch) as BoxedProfileService,
+        );
+        handlers.insert(
+            "tablet".to_owned(),
+            Box::new(MockProfileDispatch) as BoxedProfileService,
+        );
+
+        let root = std::env::temp_dir().join(format!(
+            "wloc-profile-group-test-{}-{}",
+            std::process::id(),
+            now_unix()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let helper = root.join("profile-redirect-helper.sh");
+        let script = format!(
+            "#!/bin/sh\nmarker='{}'/$2\ncase \"$1\" in\nstart) touch \"$marker\";;\nstop) rm -f \"$marker\";;\nstatus) test -f \"$marker\";;\nesac\n",
+            root.display()
+        );
+        std::fs::write(&helper, script).unwrap();
+        std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+        let mut group = ProfileServiceGroup::new(
+            model,
+            std::sync::Arc::clone(&router),
+            handlers,
+            OpenWrtRuntime::new(&helper, &helper),
+        );
+        group.activate_enabled_profiles();
+        assert_eq!(group.runtime.statuses().len(), 2);
+        assert!(group
+            .runtime
+            .statuses()
+            .iter()
+            .all(|status| status.phase
+                == wificalling_location_gateway::service::profile_runtime::ProfileRuntimePhase::Intercepting));
+        router
+            .set_target("phone", Some(PatchTarget::new(1.0, 2.0)))
+            .unwrap();
+        assert_eq!(
+            router.resolve_source("192.168.1.100").unwrap(),
+            PatchTarget::new(1.0, 2.0)
+        );
+
+        assert_eq!(group.status().unwrap()["profile"], "mock");
+        group.reload().unwrap();
+        group
+            .set_manual_location(&RequestParams {
+                query: None,
+                latitude: Some(1.0),
+                longitude: Some(2.0),
+            })
+            .unwrap();
+        group.clear_manual_location().unwrap();
+        assert_eq!(group.search_location("Singapore").unwrap()["query"], "Singapore");
+        group.refresh_periodic();
+        group.refresh_evidence().unwrap();
+
+        group.disable().unwrap();
+        assert!(router.resolve_source("192.168.1.100").is_none());
+        group.enable().unwrap();
+        assert!(router.resolve_source("192.168.1.100").is_none());
+
+        for error in [
+            ProfileRuntimeError::EngineStart,
+            ProfileRuntimeError::EngineUnhealthy,
+            ProfileRuntimeError::RedirectInstall,
+            ProfileRuntimeError::RedirectStillPresent,
+            ProfileRuntimeError::CleanupUnsafe,
+            ProfileRuntimeError::UnsupportedDevice,
+            ProfileRuntimeError::ProfileDisabled,
+            ProfileRuntimeError::UnknownProfile,
+        ] {
+            let mapped = map_profile_runtime_error(error);
+            assert!(!mapped.wire_code().is_empty());
+        }
+
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
