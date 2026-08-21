@@ -4,7 +4,7 @@
 
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test
-- Branch: codex/issue-40-ax6s-resource-gates-ci-fix2-codex-v2-lead-20260821122614-862fa284
+- Branch: codex/issue-40-ax6s-resource-gates-ci-fix3-codex-v2-lead-20260821123650-83b9ac5a
 - Final local checkpoint before handoff: pending independent review, CI, and AX6S hardware evidence
 - Credentials included: no
 
@@ -105,8 +105,12 @@ measurement template. Do not claim real-device measurements from the host.
   has a one-second deterministic observation window.
 - The first CI timeout assertion required the implementation-specific exit
   code 124, but GNU time/timeout combinations can preserve a different
-  non-zero wrapper code; the regression now requires failed status and any
-  non-zero command status while the report still records the exact code.
+  non-zero wrapper code; the regression now requires any non-zero command
+  status while the report still records the exact code.
+- A CI runner used a wrapper whose report status text differed while the
+  command status remained correctly non-zero; the timeout test now checks the
+  stable process contract (profiler fails and records non-zero command status)
+  and leaves report-status enforcement to the resource gate test.
 - The local commit hook reports `lefthook` unavailable in PATH; repository
   verification itself passed.
 
