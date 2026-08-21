@@ -7,33 +7,37 @@ package, UCI file, init script, or runtime dependency was installed.
 
 ## Platform and migration
 
-- Firmware family: ImmortalWrt 24.10.x, kernel 6.6.x, MediaTek MT7622,
+- Firmware family: ImmortalWrt 24.10.6, kernel 6.6.x, MediaTek MT7622,
   AArch64/cortex-a53.
-- Old WLOC package: `2.0.0-18`, stopped/disabled and removed before the final
-  release candidate was installed, as required for the small overlay.
+- Old WLOC package: the installed `2.0.0-1` release candidate was stopped,
+  disabled, and removed before the rebuilt `2.0.0-1` package was installed, as
+  required for the small overlay. The modified UCI conffile was preserved by
+  opkg and the pre-install UCI/CA backups remain under the router's temporary
+  backup directory.
 - Provider packages: system sing-box and PassWall were retained; no second
   full-size sing-box binary was installed.
 - Tested standalone package family: `wificalling-location-gateway`,
-  `aarch64_cortex-a53`. The real-device baseline was 2.0.0-14; transactional
-  update evidence used 2.0.0-17 -> 2.0.0-18 and an injected health-failure
-  target 2.0.0-19 -> automatic rollback to 2.0.0-18. The final release
-  candidate `2.0.0-1` was then installed after removing 2.0.0-18 and passed
-  the service, API, provider, restart, and mobileconfig checks.
+  `aarch64_cortex-a53`, firmware target `mediatek/mt7622`. The real-device
+  baseline was 2.0.0-14; transactional update evidence used 2.0.0-17 -> 2.0.0-18
+  and an injected health-failure target 2.0.0-19 -> automatic rollback to
+  2.0.0-18. The rebuilt release candidate `2.0.0-1` was then installed after
+  removing the prior package and passed the service, API, provider, health,
+  restart, target-metadata, and standalone-boundary checks.
 - The WLOC UCI profile and CA backups were taken before removal. The final
   provider path uses PassWall's persistent generated configuration under
   `/var/etc/passwall`; the provider process itself remains PassWall-owned.
 
 ## Resource observations
 
-- Persistent storage: 87,620 KiB total; 14,240 KiB free after the final
+- Persistent storage: 87,620 KiB total; 13,836 KiB free after the rebuilt
   package and configuration backup were present.
-- Temporary storage: 121,128 KiB total; 45,664 KiB free after installation.
-- Memory: 242,260 KiB total; 22,484 KiB available in the final steady-state
+- Temporary storage: 121,128 KiB total; 32,780 KiB free after installation.
+- Memory: 242,260 KiB total; 23,248 KiB available in the final steady-state
   snapshot; no swap configured.
-- WLOC RSS: 1,948 KiB, three threads.
+- WLOC RSS: 1,952 KiB, three threads.
 - Reused PassWall sing-box RSS: 30,176 KiB, eight threads; no duplicate WLOC
   provider process was launched.
-- The final AX6S package itself is 1,445,635 bytes and the AArch64 WLOC service
+- The final AX6S package itself is 1,445,912 bytes and the AArch64 WLOC service
   binary is 2,035,872 bytes; the OpenWrt cross-build gate also
   reported static AArch64 ELF with no dynamic dependency.
 
@@ -59,6 +63,8 @@ package, UCI file, init script, or runtime dependency was installed.
 | Rollback removes the transaction directory and restores `current.version` | pass |
 | Independent LuCI basic/devices/monitor/update assets present | pass |
 | Final release candidate remove/install/restart on AX6S | pass |
+| Exact firmware target `mediatek/mt7622` matched package metadata | pass |
+| Standalone package compatibility file and package boundary check | pass |
 | Final V2 device page, English source, and formal Chinese PO assets on AX6S | pass |
 | Mobileconfig generation with unique private intermediate and cleanup | pass |
 | Real iPhone WLOC traffic and packet capture | not run; no device fixture supplied |
@@ -84,6 +90,10 @@ package, UCI file, init script, or runtime dependency was installed.
    now ignores both and selects the real target architecture. The health gate
    also requires the WLOC-owned redirect table/rule, so it cannot commit an
    update while the service is running but traffic remains fail-open.
+8. Package updates now reject a firmware target mismatch: AX6S reports
+   `DISTRIB_TARGET='mediatek/mt7622'`, and the release package carries the same
+   `X-WLOC-Target` value. Host regression coverage also rejects an `x86/64`
+   package against the AX6S target.
 
 ## Component update evidence
 
@@ -112,10 +122,10 @@ The three-package release build and Docker matrix passed on 2026-08-22. The
 matrix installed and started all four cases: AX6S/OpenWrt 24.10.5,
 OpenWrt 24.10.8 x86_64, OpenWrt 25.12.3 x86_64, and iStoreOS 24.10.5 x86_64.
 The exact host-side package hashes are recorded in the release staging
-directory's `SHA256SUMS`; the final AX6S package hash is
-`58cc90e5ac5e05af26760984ac3b3a82a84cb32d93f554f37c067e01fc8f05cd`.
-Publication still requires the release signing key and explicit external
-release approval.
+directory's `SHA256SUMS`; the rebuilt AX6S package hash is
+`90762e2453ffae11341fef6caa42bef379ba52a9599d5aeb73bcc0a2952f231f` and was
+verified again on the router before installation. Publication still requires
+the release signing key and explicit external release approval.
 
 ## Acceptance status
 

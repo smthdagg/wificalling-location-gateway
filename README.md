@@ -47,7 +47,10 @@ opkg install /tmp/wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk
 Do not use forced dependency removal and do not remove the selected provider.
 The complete procedure is [AX6S deployment](docs/deployment/AX6S_DEPLOYMENT.md).
 The current real-device record is [AX6S evidence](docs/testing/AX6S_REAL_DEVICE_2026-08-22.md);
-it must be rerun for the final standalone package and final iPhone flow.
+the final package re-install evidence is recorded there. Real iPhone WLOC
+traffic remains a separate open test because no client fixture was supplied.
+
+The item-by-item audit is [V2 requirement audit](docs/testing/V2_REQUIREMENT_AUDIT.md).
 
 ## Build and verify
 
@@ -79,4 +82,3 @@ manifest before an update.
 The historical Wi-Fi Calling integration documents and adapter code are not
 part of V2. ADR 0003 is authoritative:
 [standalone product boundary](docs/adr/0003-standalone-wloc-product-boundary.md).
-

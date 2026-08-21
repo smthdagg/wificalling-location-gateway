@@ -1,6 +1,6 @@
 # 独立 WLOC 服务 LuCI 管理方案
 
-Status: design draft (2026-08-12)
+Status: implementation contract and historical design record (2026-08-22)
 Target: ImmortalWrt 24.10 / LuCI JS。
 > 边界修正（2026-08-22）：**本项目是独立 WLOC 项目**，不是 WLOC 集成进
 > Wi-Fi Calling，也不读取或依赖 Wi-Fi Calling Gateway 的服务、UCI、页面或

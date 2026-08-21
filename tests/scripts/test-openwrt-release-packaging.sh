@@ -14,6 +14,7 @@ grep -F 'wloc-service' "$builder" >/dev/null
 grep -F -- '--ax6s-package' "$builder" >/dev/null
 grep -F 'expected three integrated packages' "$builder" >/dev/null
 grep -F 'X-WLOC-Product' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null
+grep -F 'X-WLOC-Target: x86/64' "$builder" >/dev/null
 if grep -E -- '--gateway-ipk|GATEWAY_IPK' "$builder" >/dev/null; then
   echo 'release builder still exposes a Gateway package input' >&2
   exit 1
