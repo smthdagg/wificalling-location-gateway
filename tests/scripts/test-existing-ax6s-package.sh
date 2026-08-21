@@ -10,7 +10,8 @@ trap 'rm -f "$out" "$out.manifest" "$out.sig" "$data"' EXIT HUP INT TERM
 "$repo_root/scripts/build-luci-ipk.sh" "$version" ax6s-existing >/dev/null
 [ -s "$out.manifest" ]
 grep -E '^Package-SHA256: [0-9a-f]{64}$' "$out.manifest" >/dev/null
-tar -xOf "$out" ./data.tar.gz > "$data"
+tar -xOf "$out" data.tar.gz > "$data" 2>/dev/null \
+	|| tar -xOf "$out" ./data.tar.gz > "$data"
 for member in \
 	./usr/sbin/wloc-component-update.sh \
 	./usr/sbin/wloc-health.sh \
