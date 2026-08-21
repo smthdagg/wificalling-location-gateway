@@ -6,7 +6,7 @@
 - Capabilities used: rust,openwrt,test
 - Branch: codex/issue-33-unified-supervisor-codex-v2-lead-20260821044654
 - Checkpoint parent: 601097f
-- Updated at (UTC): 2026-08-21T06:16:40Z
+- Updated at (UTC): 2026-08-21T06:26:00Z
 - Credentials included: no
 
 ## Objective
@@ -27,7 +27,12 @@ rollback documentation.
   helper and `nft list table inet wloc_service` presence check.
 - Added the unified procd entry point and POSIX/busybox supervisor. WLOC
   startup suppresses the legacy redirect side effect; unified health checks
-  precede redirect installation; WLOC faults leave Gateway passthrough alive.
+  precede redirect installation; startup has a bounded readiness wait; WLOC
+  faults and stop/reload leave Gateway passthrough alive without calling its
+  stop path.
+- Applied the supervised first-enable/deferred-redirect handshake and narrowed
+  interception/DNS scope to the two exact Apple hostnames required by the
+  project contract.
 - Disabled independent child respawn in supervised mode so the outer
   supervisor owns bounded recovery.
 - Updated standalone and formal release package builders/postinst scripts to
@@ -59,7 +64,7 @@ rollback documentation.
 | `./tests/scripts/test-unified-supervisor.sh` | PASS | Ordering, ownership, fail-open, namespace guards |
 | `./tests/scripts/test-standalone-ax6s-package.sh` | PASS | Standalone AX6S package contents/postinst |
 | `./tests/scripts/test-openwrt-release-packaging.sh` | PASS | Formal release builder uses unified entry point |
-| `./scripts/ci/verify.sh` | PASS | 69 Python tests, Rust coverage 81.27% lines, OpenWrt/resource/package/security gates |
+| `./scripts/ci/verify.sh` | PASS | 69 Python tests, Rust coverage 81.29% lines, OpenWrt/resource/package/security gates |
 
 ## Failed attempts
 

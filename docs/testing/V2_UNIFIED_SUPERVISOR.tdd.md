@@ -24,7 +24,7 @@ Command:
 ```
 
 Result: PASS. The run included 69 Python tests, Rust all-target tests, Rust
-line coverage of 81.27%, OpenWrt cross-build/resource gates, release package
+line coverage of 81.29%, OpenWrt cross-build/resource gates, release package
 tests, standalone AX6S package tests, JavaScript tests, secret scanning,
 formatting, and dependency audit. Cargo audit reported no advisories; it did
 report the pre-existing duplicate `socket2` and `windows-sys` lock entries.
