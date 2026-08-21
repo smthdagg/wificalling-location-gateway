@@ -1,5 +1,5 @@
 use wificalling_location_gateway::config::{
-    DeviceProfile, LocationMode, NodeSelectionMode, ProfileModel,
+    DeviceProfile, LocationMode, NodeSelectionMode, ProfileError, ProfileModel,
 };
 use wificalling_location_gateway::service::profile_runtime::{
     ProfileRuntimeControl, ProfileRuntimeError, ProfileRuntimeManager, ProfileRuntimePhase,
@@ -202,25 +202,9 @@ fn every_new_profile_enable_rechecks_shared_engine_health() {
 }
 
 #[test]
-fn unsupported_mac_profile_is_rejected_without_runtime_operation() {
-    let model = ProfileModel::new(vec![profile("phone", "aa:bb:cc:dd:ee:ff")]).unwrap();
-    let mut manager = ProfileRuntimeManager::new(
-        model,
-        FakeRuntime {
-            healthy: true,
-            ..FakeRuntime::default()
-        },
-    );
-
-    assert_eq!(
-        manager.enable("phone"),
-        Err(ProfileRuntimeError::UnsupportedDevice)
-    );
-    assert_eq!(
-        manager.status("phone").unwrap().phase,
-        ProfileRuntimePhase::DegradedPassthrough
-    );
-    assert!(manager.runtime().operations.is_empty());
+fn unsupported_mac_profile_is_rejected_before_runtime_operation() {
+    let model = ProfileModel::new(vec![profile("phone", "aa:bb:cc:dd:ee:ff")]);
+    assert!(matches!(model, Err(ProfileError::InvalidDeviceAddress(_))));
 }
 
 #[test]
