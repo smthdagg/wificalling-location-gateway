@@ -307,6 +307,14 @@ Gateway 1.7/后续版本只声明可选集成，不把引擎设为强制依赖�
 | 并发测试设备 | 1 |
 | WLOC 拦截域名 | 2 |
 
+V2-08 将上述目标固化为包内的
+`/usr/share/wificalling-location-gateway/resource-budget.conf`：运行时三枚
+二进制合计不超过 8MiB，集成包不超过 20MiB，持久状态不超过 10MiB，日志与
+缓存各自总量不超过 1MiB，最多 8 个设备档案，启动不超过 10 秒，空闲 RSS
+不超过 25MiB、峰值 RSS 不超过 35MiB、探测 CPU 不超过 30%。二进制与可选
+包 artifact 在 CI 中硬拦截；RSS/CPU/启动时间通过统一脚本和 AX6S 脱敏证据
+验收，未取得真机证据前不得宣称硬件通过。
+
 运行时还必须限制：
 
 - 总连接数；

@@ -53,6 +53,9 @@ define Package/wloc-service/install
 	$(INSTALL_BIN) ./files/usr/sbin/wloc-health.sh $(1)/usr/sbin/
 	$(INSTALL_BIN) ./files/usr/sbin/wloc-support-bundle.sh $(1)/usr/sbin/
 	$(INSTALL_BIN) ./files/usr/sbin/wloc-component-update.sh $(1)/usr/sbin/
+	$(INSTALL_DIR) $(1)/usr/share/wificalling-location-gateway
+	$(INSTALL_DATA) ./files/usr/share/wificalling-location-gateway/resource-budget.conf \
+		$(1)/usr/share/wificalling-location-gateway/
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/etc/init.d/wloc-service $(1)/etc/init.d/
 	$(INSTALL_BIN) ./files/etc/init.d/wificalling-location-gateway $(1)/etc/init.d/
