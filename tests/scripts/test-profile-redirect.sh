@@ -22,7 +22,18 @@ exit 0
 EOF
 cat > "$tmp/bin/uci" <<'EOF'
 #!/bin/sh
-printf '%s\n' '192.168.1.1'
+case "$2" in
+  show)
+    printf '%s\n' 'wloc-service.phone=device' 'wloc-service.tablet=device'
+    ;;
+  get)
+    case "$3" in
+      network.lan.ipaddr) printf '%s\n' '192.168.1.1' ;;
+      wloc-service.phone.enabled) printf '%s\n' '1' ;;
+      wloc-service.tablet.enabled) printf '%s\n' '0' ;;
+    esac
+    ;;
+esac
 EOF
 cat > "$tmp/bin/nslookup" <<'EOF'
 #!/bin/sh
@@ -50,7 +61,16 @@ grep -F 'ip daddr @apple_hosts' "$tmp/commands.log" >/dev/null
 
 PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" "$refresh"
 grep -F 'nft flush set inet wloc_profile_phone apple_hosts' "$tmp/commands.log" >/dev/null
-grep -F 'nft flush set inet wloc_profile_tablet apple_hosts' "$tmp/commands.log" >/dev/null
+grep -F 'nft delete table inet wloc_profile_tablet' "$tmp/commands.log" >/dev/null
+if grep -F 'nft flush set inet wloc_profile_tablet apple_hosts' "$tmp/commands.log" >/dev/null; then
+  printf '%s\n' 'disabled profile tables must not be refreshed' >&2
+  exit 1
+fi
+
+: > "$tmp/commands.log"
+PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" "$helper" stop-all
+grep -F 'nft delete table inet wloc_profile_phone' "$tmp/commands.log" >/dev/null
+grep -F 'nft delete table inet wloc_profile_tablet' "$tmp/commands.log" >/dev/null
 
 if PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" \
   "$helper" start '../phone' 192.168.1.12; then

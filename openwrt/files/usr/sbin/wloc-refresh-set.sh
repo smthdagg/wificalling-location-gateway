@@ -65,8 +65,19 @@ fi
 profile_tables=$(
     "$NFT_BINARY" list tables inet 2>/dev/null \
         | sed -n 's/^table inet \(wloc_profile_[a-z0-9_-]*\)$/\1/p' \
-        || true
+		|| true
 )
+profile_is_live() {
+	profile_id=$1
+	command -v uci >/dev/null 2>&1 || return 1
+	uci -q show wloc-service 2>/dev/null \
+		| grep -F "wloc-service.${profile_id}=device" >/dev/null 2>&1 || return 1
+	enabled=$(uci -q get "wloc-service.${profile_id}.enabled" 2>/dev/null || true)
+	case "$enabled" in
+		''|1|true|on) return 0 ;;
+		*) return 1 ;;
+	esac
+}
 while IFS= read -r profile_table; do
     [ -n "$profile_table" ] || continue
     case "$profile_table" in
@@ -75,9 +86,17 @@ while IFS= read -r profile_table; do
                 *[!a-z0-9_-]*) continue ;;
             esac
             ;;
-        *) continue ;;
-    esac
-    "$NFT_BINARY" flush set inet "$profile_table" "$SET" 2>/dev/null || \
+		*) continue ;;
+	esac
+	profile_id=${profile_table#wloc_profile_}
+	if ! profile_is_live "$profile_id"; then
+		# A daemon crash, config removal, or upgrade can leave a kernel table
+		# behind. Do not refresh it back into an apparently live interception
+		# path; remove it at this bounded cleanup point.
+		"$NFT_BINARY" delete table inet "$profile_table" 2>/dev/null || true
+		continue
+	fi
+	"$NFT_BINARY" flush set inet "$profile_table" "$SET" 2>/dev/null || \
         "$NFT_BINARY" add set inet "$profile_table" "$SET" '{ type ipv4_addr; }'
     "$NFT_BINARY" add element inet "$profile_table" "$SET" "{ $ips }"
 done <<EOF

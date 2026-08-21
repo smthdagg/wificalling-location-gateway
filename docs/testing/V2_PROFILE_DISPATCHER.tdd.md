@@ -13,6 +13,10 @@ proxy resolves the source TCP address to exactly one profile target.
 - Unknown, invalid, disabled, degraded, or target-less routes return no target.
 - Manual target clear withdraws that profile until fresh auto evidence returns.
 - MAC and IPv6 bindings are rejected by the current IPv4 redirect adapter.
+- Multi-profile mode never installs the legacy all-device `wloc_service` table;
+  only verified profile-scoped tables may intercept.
+- Supervisor, init, and CA/reload cleanup paths remove all profile tables;
+  refresh deletes disabled or orphaned tables instead of refreshing them.
 
 ## Verification
 
@@ -24,6 +28,12 @@ proxy resolves the source TCP address to exactly one profile target.
 | `tests/scripts/test-profile-status.sh` | Passed |
 | `tests/scripts/test-unified-supervisor.sh` | Passed |
 | `python3 -m unittest tests.test_v2_ui_contract tests.test_wloc_luci_mode` | Passed |
+| `cargo llvm-cov --workspace --all-targets --locked --fail-under-lines 80` | Passed; 80.74% lines |
+
+The independent review initially returned `REQUEST_CHANGES` for global redirect
+ownership and stale profile-table cleanup. Those findings were fixed before
+handoff and are covered by the profile helper and unified supervisor shell
+tests above.
 
 ## Remaining release gates
 

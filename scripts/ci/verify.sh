@@ -23,6 +23,8 @@ done
 ./tests/scripts/test-standalone-ax6s-package.sh
 ./tests/scripts/test-release-version.sh
 ./tests/scripts/test-unified-supervisor.sh
+./tests/scripts/test-profile-redirect.sh
+./tests/scripts/test-profile-status.sh
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 ./scripts/scan_secrets.py
 

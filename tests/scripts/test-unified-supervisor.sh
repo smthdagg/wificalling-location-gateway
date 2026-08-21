@@ -20,13 +20,16 @@ grep -F 'procd_add_reload_trigger wloc-service' "$init" >/dev/null
 grep -F 'WLOC_SUPERVISED=1 WLOC_DEFER_REDIRECT=1 WLOC_SKIP_REDIRECT=1 "$WLOC_INIT" start' "$supervisor" >/dev/null
 grep -F 'WLOC_SUPERVISED=1 "$GATEWAY_INIT" start' "$supervisor" >/dev/null
 grep -F 'WLOC_DEFER_REDIRECT=1' "$supervisor" >/dev/null
+grep -F 'PROFILE_REDIRECT_HELPER' "$supervisor" >/dev/null
+grep -F 'stop-all' "$supervisor" >/dev/null
+grep -F 'multiple_profiles_configured' "$redirect" >/dev/null
 grep -F 'WLOC_SKIP_REDIRECT' "$wloc_init" >/dev/null
 grep -F 'WLOC_SUPERVISED' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null
 
 gateway_start=$(grep -n '"$GATEWAY_INIT" start' "$supervisor" | cut -d: -f1)
 wloc_start=$(grep -n '"$WLOC_INIT" start' "$supervisor" | cut -d: -f1)
 health=$(grep -n 'if ! wait_for_health' "$supervisor" | head -n 1 | cut -d: -f1)
-redirect_start=$(grep -n '"$REDIRECT_HELPER" start' "$supervisor" | cut -d: -f1)
+redirect_start=$(grep -n '^[[:space:]]*if ! install_redirect' "$supervisor" | cut -d: -f1)
 [ "$gateway_start" -lt "$wloc_start" ]
 [ "$wloc_start" -lt "$health" ]
 [ "$health" -lt "$redirect_start" ]
@@ -41,6 +44,26 @@ grep -F 'START_TIMEOUT' "$supervisor" >/dev/null
 if grep -E 'udp[[:space:]]+500|udp[[:space:]]+4500|wificalling_gateway' "$supervisor" "$redirect" >/dev/null; then
 	printf '%s\n' 'unified supervisor must not own Gateway nftables or UDP 500/4500' >&2
 	exit 1
+fi
+
+mkdir -p "$tmp/bin"
+cat > "$tmp/bin/uci" <<'EOF'
+#!/bin/sh
+if [ "$2" = show ]; then
+  printf '%s\n' 'wloc-service.phone=device' 'wloc-service.tablet=device'
+fi
+EOF
+chmod 0755 "$tmp/bin/uci"
+: > "$tmp/commands.log"
+if ! PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" \
+  "$redirect" start; then
+
+  printf '%s\n' 'legacy redirect helper must fail closed only on invalid input, not profile mode' >&2
+  exit 1
+fi
+if grep -E '^nft |^ip ' "$tmp/commands.log" >/dev/null; then
+  printf '%s\n' 'multi-profile mode must not install the legacy all-device redirect' >&2
+  exit 1
 fi
 if grep -E 'gs-loc-corpa|apple\.com\.cn|bluedot' "$redirect" "$wloc_refresh" >/dev/null; then
 	printf '%s\n' 'WLOC scope must remain limited to the two exact Apple hostnames' >&2

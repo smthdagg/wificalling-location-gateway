@@ -36,6 +36,8 @@ stop_service() {
 	[ -x "$SUPERVISOR" ] && "$SUPERVISOR" stop >/dev/null 2>&1 || true
 	# Idempotent defensive cleanup if the procd instance was already gone.
 	[ -x /usr/sbin/wloc-redirect-sync.sh ] && /usr/sbin/wloc-redirect-sync.sh stop >/dev/null 2>&1 || true
+	[ -x /usr/sbin/wloc-profile-redirect.sh ] && \
+		/usr/sbin/wloc-profile-redirect.sh stop-all >/dev/null 2>&1 || true
 }
 
 reload_service() {

@@ -17,17 +17,34 @@ PROXY_PORT="${WLOC_PROXY_PORT:-8443}"
 FWMARK=1
 ROUTE_TABLE=100
 action=${1:-start}
+NFT_BINARY=${WLOC_NFT_BINARY:-nft}
+
+multiple_profiles_configured() {
+	command -v uci >/dev/null 2>&1 || return 1
+	profiles=$(uci -q show wloc-service 2>/dev/null \
+		| sed -n 's/^wloc-service\.[a-z0-9_-]*=device$/x/p' \
+		| wc -l | tr -d ' ')
+	[ "${profiles:-0}" -gt 1 ] 2>/dev/null
+}
 
 if [ "$action" = stop ]; then
 	# Only remove the WLOC-owned table, policy route, and DNS marker. The
 	# stable Gateway 1.7 nftables table (and UDP 500/4500 handling) is never
 	# touched by this cleanup path.
-	nft delete table inet "$TABLE" 2>/dev/null || true
+	"$NFT_BINARY" delete table inet "$TABLE" 2>/dev/null || true
 	ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
 	ip route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+	[ -x "${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.sh}" ] && \
+		"${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.sh}" stop-all >/dev/null 2>&1 || true
 	for hosts_file in ${WLOC_HOSTS_FILES:-/etc/hosts\ /tmp/hosts/wloc-hosts}; do
 		sed -i '/# wloc-service DNS hijack (do not edit)/,/^# wloc-service end/d' "$hosts_file" 2>/dev/null || true
 	done
+	exit 0
+fi
+
+if [ "$action" = start ] && multiple_profiles_configured; then
+	# The profile dispatcher installs only verified, profile-scoped rules. The
+	# legacy all-device table must not be installed alongside it.
 	exit 0
 fi
 

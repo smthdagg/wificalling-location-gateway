@@ -53,11 +53,31 @@ valid_private_ipv4() {
 	esac
 }
 
+stop_all_profiles() {
+	# This is the crash/upgrade cleanup boundary. Only tables with the exact
+	# component-owned prefix are eligible; the stable Gateway namespace is
+	# never enumerated or modified here.
+	for table in $("$nft_binary" list tables inet 2>/dev/null \
+		| sed -n 's/^table inet \(wloc_profile_[a-z0-9_-]*\)$/\1/p'); do
+		case "$table" in
+			wloc_profile_*|*[!a-z0-9_-]*)
+				case "$table" in *[!a-z0-9_-]*) continue ;; esac
+				;;
+			*) continue ;;
+		esac
+		"$nft_binary" delete table inet "$table" 2>/dev/null || true
+	done
+}
+
 action=${1:-}
 profile_id=${2:-}
 nft_binary=${WLOC_NFT_BINARY:-nft}
 
 case "$action" in
+	stop-all)
+		[ "$#" -eq 1 ] || fail 'usage: stop-all'
+		stop_all_profiles
+		;;
 	start)
 		[ "$#" -eq 3 ] || fail 'usage: start PROFILE_ID PRIVATE_IPV4'
 		valid_profile_id "$profile_id" || fail 'invalid profile id'

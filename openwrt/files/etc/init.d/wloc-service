@@ -43,4 +43,6 @@ start_service() {
 
 stop_service() {
 	rm -f "$SOCKET"
+	[ -x /usr/sbin/wloc-profile-redirect.sh ] && \
+		/usr/sbin/wloc-profile-redirect.sh stop-all >/dev/null 2>&1 || true
 }
