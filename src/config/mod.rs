@@ -2,9 +2,10 @@
 //!
 //! The daemon reads `/etc/config/wloc-service` (UCI) once at startup and
 //! applies it to the control plane: enabled state, location mode, manual
-//! coordinates, presets, and the exit-probe wiring. LuCI (via `uci`) is the
-//! only writer; keeping the parser inside the daemon means the root-only
-//! control API stays the single runtime write path.
+//! coordinates, presets, and the exit-probe wiring. LuCI and the root-only
+//! profile control adapter both use the native `uci` transaction boundary;
+//! keeping the parser inside the daemon prevents unvalidated config from
+//! reaching runtime or nftables.
 
 pub mod profile;
 pub mod uci;

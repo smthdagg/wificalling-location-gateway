@@ -26,12 +26,14 @@ use wificalling_location_gateway::mitm::proxy::MitmProxy;
 use wificalling_location_gateway::mitm::CaBundle;
 use wificalling_location_gateway::service::api::RequestParams;
 use wificalling_location_gateway::service::control::{RuntimeControl, RuntimeFailure};
-use wificalling_location_gateway::service::dispatch::{DispatchError, ServiceDispatch};
+use wificalling_location_gateway::service::dispatch::{
+    DispatchError, ProfileDispatch, ServiceDispatch, UciProfileStore,
+};
 use wificalling_location_gateway::service::profile_dispatch::ProfilePatchRouter;
 use wificalling_location_gateway::service::profile_runtime::{
     ProfileRuntimeControl, ProfileRuntimeError, ProfileRuntimeManager,
 };
-use wificalling_location_gateway::service::server::ControlServer;
+use wificalling_location_gateway::service::server::{ControlServer, NoProfileDispatch};
 use wificalling_location_gateway::service::GeoRecord;
 use wificalling_location_gateway::wloc::PatchTarget;
 
@@ -1109,7 +1111,20 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     eprintln!("wloc-service MITM proxy listening on 0.0.0.0:{proxy_port}");
 
     eprintln!("wloc-service listening on {socket_path}");
-    let server = ControlServer::new(service);
+    let profile_dispatch: Box<dyn ProfileDispatch> = if config_valid {
+        let uci_binary =
+            std::env::var("WLOC_UCI_BINARY").unwrap_or_else(|_| "/sbin/uci".to_owned());
+        match UciProfileStore::from_config(&uci, uci_binary) {
+            Ok(store) => Box::new(store),
+            Err(error) => {
+                eprintln!("wloc-service: profile control plane unavailable: {error:?}");
+                Box::new(NoProfileDispatch)
+            }
+        }
+    } else {
+        Box::new(NoProfileDispatch)
+    };
+    let server = ControlServer::with_profile_dispatch(service, profile_dispatch);
     // Housekeeping runs every 10s so a node switch in the Gateway settings
     // is followed within seconds. The probe itself only runs when the
     // config fingerprint changed or cached evidence is stale (the check is

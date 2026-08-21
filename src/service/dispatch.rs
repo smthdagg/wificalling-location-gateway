@@ -6,6 +6,9 @@
 //! wraps the result payload. No device, location, provider, or credential
 //! material is added by the dispatcher.
 
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
 use serde_json::{json, Value};
 
 use super::api::{
@@ -13,7 +16,7 @@ use super::api::{
     ApiMethod, ApiRequest, ApiV2ProfileRequest, ProfileApiMethod, ProfileRequestParams,
     RequestParams, ResponseEncodeError,
 };
-use crate::config::{DeviceProfile, LocationMode, NodeSelectionMode, ProfileModel};
+use crate::config::{DeviceProfile, LocationMode, NodeSelectionMode, ProfileModel, WlocUciConfig};
 
 /// Runtime failures surfaced by service handlers. Each variant maps to a
 /// stable wire code, component, and retryable flag in the response envelope.
@@ -193,6 +196,225 @@ impl ProfileDispatch for InMemoryProfileStore {
         }
         self.replace_model(profiles)?;
         Ok(json!({"profile_id": profile_id}))
+    }
+}
+
+/// UCI-backed profile adapter used by the production control socket. The
+/// model is validated before any command is issued; UCI changes are staged by
+/// the native `uci` tool and committed once, while failures revert the staged
+/// transaction. The adapter never interpolates a shell command.
+pub struct UciProfileStore {
+    inner: InMemoryProfileStore,
+    uci_binary: PathBuf,
+    persisted_ids: Vec<String>,
+    synthetic_legacy: bool,
+}
+
+impl UciProfileStore {
+    pub fn from_config(
+        config: &WlocUciConfig,
+        uci_binary: impl Into<PathBuf>,
+    ) -> Result<Self, DispatchError> {
+        let model = config
+            .profile_model()
+            .map_err(|_| DispatchError::InvalidConfig)?;
+        let persisted_ids = config
+            .profiles
+            .iter()
+            .map(|profile| profile.id.clone())
+            .collect();
+        Ok(Self {
+            synthetic_legacy: config.profiles.is_empty(),
+            inner: InMemoryProfileStore { model },
+            uci_binary: uci_binary.into(),
+            persisted_ids,
+        })
+    }
+
+    pub fn from_path(path: &Path, uci_binary: impl Into<PathBuf>) -> Result<Self, DispatchError> {
+        let config = WlocUciConfig::load(path).map_err(|_| DispatchError::Unavailable)?;
+        Self::from_config(&config, uci_binary)
+    }
+
+    fn run_uci(&self, args: &[String]) -> Result<(), DispatchError> {
+        let status = Command::new(&self.uci_binary)
+            .arg("-q")
+            .args(args)
+            .status()
+            .map_err(|_| DispatchError::RuntimeFailure)?;
+        status
+            .success()
+            .then_some(())
+            .ok_or(DispatchError::RuntimeFailure)
+    }
+
+    fn persist(&mut self, profiles: &[DeviceProfile]) -> Result<(), DispatchError> {
+        let mut args = Vec::new();
+        for id in &self.persisted_ids {
+            if !profiles.iter().any(|profile| &profile.id == id) {
+                args.push(vec!["delete".to_owned(), format!("wloc-service.{id}")]);
+            }
+        }
+        for profile in profiles {
+            args.push(vec![
+                "set".to_owned(),
+                format!("wloc-service.{}=device", profile.id),
+            ]);
+            for (name, value) in profile_uci_options(profile) {
+                args.push(vec![
+                    "set".to_owned(),
+                    format!("wloc-service.{}.{}={value}", profile.id, name),
+                ]);
+            }
+            for name in ["manual_lat", "manual_lon", "manual_location_ref"] {
+                if !profile_uci_options(profile)
+                    .iter()
+                    .any(|(option, _)| *option == name)
+                {
+                    args.push(vec![
+                        "delete".to_owned(),
+                        format!("wloc-service.{}.{}", profile.id, name),
+                    ]);
+                }
+            }
+        }
+        for command in &args {
+            if let Err(error) = self.run_uci(command) {
+                let _ = self.run_uci(&["revert".to_owned(), "wloc-service".to_owned()]);
+                return Err(error);
+            }
+        }
+        if let Err(error) = self.run_uci(&["commit".to_owned(), "wloc-service".to_owned()]) {
+            let _ = self.run_uci(&["revert".to_owned(), "wloc-service".to_owned()]);
+            return Err(error);
+        }
+        self.persisted_ids = profiles.iter().map(|profile| profile.id.clone()).collect();
+        self.synthetic_legacy = false;
+        Ok(())
+    }
+
+    fn persist_after<F>(
+        &mut self,
+        before: Vec<DeviceProfile>,
+        mutate: F,
+    ) -> Result<Value, DispatchError>
+    where
+        F: FnOnce(&mut InMemoryProfileStore) -> Result<Value, DispatchError>,
+    {
+        let result = match mutate(&mut self.inner) {
+            Ok(result) => result,
+            Err(error) => {
+                self.inner
+                    .replace_model(before)
+                    .map_err(|_| DispatchError::RuntimeFailure)?;
+                return Err(error);
+            }
+        };
+        let candidate = self.inner.model.profiles().to_vec();
+        if let Err(error) = self.persist(&candidate) {
+            self.inner
+                .replace_model(before)
+                .map_err(|_| DispatchError::RuntimeFailure)?;
+            return Err(error);
+        }
+        Ok(result)
+    }
+}
+
+fn profile_uci_options(profile: &DeviceProfile) -> Vec<(&'static str, String)> {
+    let mut options = vec![
+        ("label", profile.label.clone()),
+        (
+            "assigned_device",
+            profile.assigned_device.clone().unwrap_or_default(),
+        ),
+        ("node_ref", profile.node_ref.clone()),
+        (
+            "node_mode",
+            match profile.node_mode {
+                NodeSelectionMode::Fixed => "fixed".to_owned(),
+                NodeSelectionMode::GatewayDefault => "gateway_default".to_owned(),
+            },
+        ),
+        (
+            "geo_source",
+            match profile.location_mode {
+                LocationMode::Auto => "auto".to_owned(),
+                LocationMode::Manual => "manual".to_owned(),
+            },
+        ),
+        (
+            "enabled",
+            if profile.enabled { "1" } else { "0" }.to_owned(),
+        ),
+    ];
+    if let Some(latitude) = profile.manual_latitude {
+        options.push(("manual_lat", latitude.to_string()));
+    }
+    if let Some(longitude) = profile.manual_longitude {
+        options.push(("manual_lon", longitude.to_string()));
+    }
+    if let Some(reference) = &profile.manual_location_ref {
+        options.push(("manual_location_ref", reference.clone()));
+    }
+    options
+}
+
+impl ProfileDispatch for UciProfileStore {
+    fn list_profiles(&mut self) -> Result<Value, DispatchError> {
+        self.inner.list_profiles()
+    }
+
+    fn get_profile(&mut self, profile_id: &str) -> Result<Value, DispatchError> {
+        self.inner.get_profile(profile_id)
+    }
+
+    fn create_profile(&mut self, params: &ProfileRequestParams) -> Result<Value, DispatchError> {
+        let before = self.inner.model.profiles().to_vec();
+        if self.synthetic_legacy
+            && before.len() == 1
+            && before[0].id == "default"
+            && before[0].assigned_device.is_none()
+        {
+            self.inner.replace_model(Vec::new())?;
+        }
+        self.persist_after(before, |store| store.create_profile(params))
+    }
+
+    fn update_profile(
+        &mut self,
+        profile_id: &str,
+        params: &ProfileRequestParams,
+    ) -> Result<Value, DispatchError> {
+        let before = self.inner.model.profiles().to_vec();
+        self.persist_after(before, |store| store.update_profile(profile_id, params))
+    }
+
+    fn delete_profile(&mut self, profile_id: &str) -> Result<Value, DispatchError> {
+        let before = self.inner.model.profiles().to_vec();
+        self.persist_after(before, |store| store.delete_profile(profile_id))
+    }
+}
+
+impl ProfileDispatch for Box<dyn ProfileDispatch> {
+    fn list_profiles(&mut self) -> Result<Value, DispatchError> {
+        (**self).list_profiles()
+    }
+    fn get_profile(&mut self, profile_id: &str) -> Result<Value, DispatchError> {
+        (**self).get_profile(profile_id)
+    }
+    fn create_profile(&mut self, params: &ProfileRequestParams) -> Result<Value, DispatchError> {
+        (**self).create_profile(params)
+    }
+    fn update_profile(
+        &mut self,
+        profile_id: &str,
+        params: &ProfileRequestParams,
+    ) -> Result<Value, DispatchError> {
+        (**self).update_profile(profile_id, params)
+    }
+    fn delete_profile(&mut self, profile_id: &str) -> Result<Value, DispatchError> {
+        (**self).delete_profile(profile_id)
     }
 }
 
@@ -464,4 +686,140 @@ fn encode_v2_dispatch_error(
         error.component(),
         error.retryable(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn profile(id: &str) -> DeviceProfile {
+        DeviceProfile {
+            id: id.to_owned(),
+            label: format!("{id} device"),
+            assigned_device: Some("192.168.1.20".to_owned()),
+            node_ref: "node-a".to_owned(),
+            node_mode: NodeSelectionMode::Fixed,
+            location_mode: LocationMode::Auto,
+            manual_latitude: None,
+            manual_longitude: None,
+            manual_location_ref: None,
+            enabled: true,
+        }
+    }
+
+    #[test]
+    fn uci_options_are_bounded_and_use_explicit_wire_values() {
+        let mut candidate = profile("phone");
+        candidate.location_mode = LocationMode::Manual;
+        candidate.manual_latitude = Some(1.25);
+        candidate.manual_longitude = Some(-2.5);
+        candidate.manual_location_ref = Some("preset".to_owned());
+        let options = profile_uci_options(&candidate);
+        assert!(options.contains(&("node_mode", "fixed".to_owned())));
+        assert!(options.contains(&("geo_source", "manual".to_owned())));
+        assert!(options.contains(&("manual_lat", "1.25".to_owned())));
+        assert!(options.contains(&("manual_lon", "-2.5".to_owned())));
+        assert!(options.contains(&("manual_location_ref", "preset".to_owned())));
+    }
+
+    #[cfg(unix)]
+    fn fake_uci(fail_commit: bool) -> (std::path::PathBuf, std::path::PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!(
+            "wloc-uci-test-{}-{}",
+            std::process::id(),
+            now_for_test()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let log = root.join("commands.log");
+        let script = root.join("uci");
+        let fail = if fail_commit {
+            "\n[ \"$1\" = commit ] && exit 1\n"
+        } else {
+            ""
+        };
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nshift\nprintf '%s\\n' \"$*\" >> '{}'{}\nexit 0\n",
+                log.display(),
+                fail
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        (script, root)
+    }
+
+    #[cfg(unix)]
+    fn now_for_test() -> u128 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn uci_profile_store_commits_changes_without_shell_interpolation() {
+        let (script, root) = fake_uci(false);
+        let config = WlocUciConfig {
+            profiles: vec![profile("phone")],
+            ..WlocUciConfig::default()
+        };
+        let mut store = UciProfileStore::from_config(&config, script).unwrap();
+        let params = ProfileRequestParams {
+            enabled: Some(false),
+            ..ProfileRequestParams::default()
+        };
+        store.update_profile("phone", &params).unwrap();
+        let log = std::fs::read_to_string(root.join("commands.log")).unwrap();
+        assert!(log.contains("set wloc-service.phone.enabled=0"));
+        assert!(log.contains("commit wloc-service"));
+        assert!(!store.inner.model.profiles()[0].enabled);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn uci_profile_store_reverts_memory_when_commit_fails() {
+        let (script, root) = fake_uci(true);
+        let config = WlocUciConfig {
+            profiles: vec![profile("phone")],
+            ..WlocUciConfig::default()
+        };
+        let mut store = UciProfileStore::from_config(&config, script).unwrap();
+        let params = ProfileRequestParams {
+            enabled: Some(false),
+            ..ProfileRequestParams::default()
+        };
+        assert_eq!(
+            store.update_profile("phone", &params),
+            Err(DispatchError::RuntimeFailure)
+        );
+        assert!(store.inner.model.profiles()[0].enabled);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn creating_from_legacy_drops_only_the_synthetic_default() {
+        let (script, root) = fake_uci(false);
+        let config = WlocUciConfig::default();
+        let mut store = UciProfileStore::from_config(&config, script).unwrap();
+        let params = ProfileRequestParams {
+            profile_id: Some("phone".to_owned()),
+            label: Some("Phone".to_owned()),
+            assigned_device: Some("192.168.1.20".to_owned()),
+            node_ref: Some("node-a".to_owned()),
+            node_mode: Some("fixed".to_owned()),
+            geo_source: Some("auto".to_owned()),
+            enabled: Some(true),
+            ..ProfileRequestParams::default()
+        };
+        store.create_profile(&params).unwrap();
+        assert_eq!(store.inner.model.profiles().len(), 1);
+        assert_eq!(store.inner.model.profiles()[0].id, "phone");
+        let _ = std::fs::remove_dir_all(root);
+    }
 }

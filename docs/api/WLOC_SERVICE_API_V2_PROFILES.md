@@ -1,6 +1,6 @@
 # WLOC service v2 profile slice
 
-This document records the V2-01 profile-management slice. It is additive to
+This document records the V2-01/V2-02 profile-management slice. It is additive to
 the existing `wloc.service/v1` API; no v1 request is interpreted as a profile
 request.
 
@@ -86,13 +86,15 @@ Profile status is redacted: it reports whether an assigned device or manual
 location is configured, but never returns the device address, node reference,
 coordinates, credentials, or private key material.
 
-The control-plane dispatcher now routes these methods through a bounded,
-in-memory profile adapter when a daemon instance supplies one to
-`ControlServer`. The adapter starts empty, validates every replacement through
-the existing `ProfileModel`, and exposes only redacted profile summaries: it
-does not persist UCI, select a default profile, install nftables rules, or
-copy node credentials. A server created through the legacy constructor returns
-an `unavailable` v2 error for profile operations until an adapter is supplied.
+The production control-plane dispatcher routes these methods through a bounded
+UCI-backed adapter. It validates the candidate model before issuing separate
+`uci` arguments, commits once, and reverts staged changes on failure; it never
+interpolates a shell command or returns node credentials, device addresses, or
+coordinates. The active runtime still follows the unified supervisor boundary:
+LuCI's Apply action restarts that boundary after UCI changes, while direct
+`wloc-ctl` profile mutations take effect after the next unified-service restart.
+A server created through the legacy constructor returns an `unavailable` v2
+error for profile operations until an adapter is supplied.
 
 `wloc-ctl` exposes `profile-list`, `profile-get`, `profile-create`,
 `profile-update`, and `profile-delete`; the existing v1 commands and envelope
