@@ -111,7 +111,6 @@ case "$dependency_mode" in
 			replaces='luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
 		else
 			depends='luci-app-wificalling-gateway, luci-base, rpcd-mod-rpcsys'
-			rm -f "$stage/data/www/luci-static/resources/view/wificalling-gateway/overview.js"
 		fi
 		view_suffix=$(printf '%s' "$version" | tr '.-' '__')
 		view_name="wloc_mode_fix_$view_suffix"
@@ -129,8 +128,13 @@ case "$dependency_mode" in
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$monitor_name.js"
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/faq.js" \
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$faq_name.js"
-		cp "$stage/data/www/luci-static/resources/view/wificalling-gateway/overview.js" \
-			"$stage/data/www/luci-static/resources/view/wificalling-gateway/$wfc_name.js"
+			cp "$stage/data/www/luci-static/resources/view/wificalling-gateway/overview.js" \
+				"$stage/data/www/luci-static/resources/view/wificalling-gateway/$wfc_name.js"
+		# The external Gateway owns the unversioned view; retain the copied,
+		# versioned integrated view so this package does not duplicate its menu.
+		if [ "$dependency_mode" != ax6s-standalone ]; then
+			rm -f "$stage/data/www/luci-static/resources/view/wificalling-gateway/overview.js"
+		fi
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js" \
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$health_name.js"
 		python3 - "$stage/data/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json" "$view_name" "$monitor_name" "$faq_name" "$wfc_name" "$health_name" <<'PY'
@@ -178,6 +182,7 @@ PY
 			cp "$root/openwrt/files/usr/sbin/wloc-profile-status.sh" "$stage/data/usr/sbin/wloc-profile-status.sh"
 			cp "$root/openwrt/files/usr/sbin/wloc-health.sh" "$stage/data/usr/sbin/wloc-health.sh"
 			cp "$root/openwrt/files/usr/sbin/wloc-support-bundle.sh" "$stage/data/usr/sbin/wloc-support-bundle.sh"
+			cp "$root/openwrt/files/usr/sbin/wloc-component-update.sh" "$stage/data/usr/sbin/wloc-component-update.sh"
 			mkdir -p "$stage/data/etc/init.d" "$stage/data/usr/libexec/wificalling-location-gateway"
 			cp "$root/openwrt/files/etc/init.d/wificalling-location-gateway" "$stage/data/etc/init.d/wificalling-location-gateway"
 			cp "$root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \
@@ -209,6 +214,24 @@ exit 0
 POSTINST
 			chmod 0755 "$stage/control/postinst"
 		fi
+		if [ "$dependency_mode" = ax6s-existing ]; then
+			# The legacy AX6S mode reuses the already-installed Gateway and
+			# wloc-service binaries, but it still needs the same V2 lifecycle
+			# boundary and update/health helpers exposed by the LuCI page.
+			mkdir -p "$stage/data/usr/sbin" "$stage/data/etc/init.d" \
+				"$stage/data/usr/libexec/wificalling-location-gateway"
+			for helper in wloc-health.sh wloc-support-bundle.sh wloc-component-update.sh \
+				wloc-redirect-sync.sh wloc-profile-redirect.sh wloc-profile-status.sh; do
+				cp "$root/openwrt/files/usr/sbin/$helper" "$stage/data/usr/sbin/$helper"
+			done
+			cp "$root/openwrt/files/etc/init.d/wificalling-location-gateway" \
+				"$stage/data/etc/init.d/wificalling-location-gateway"
+			cp "$root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \
+				"$stage/data/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
+			chmod 0755 "$stage/data/etc/init.d/wificalling-location-gateway" \
+				"$stage/data/usr/sbin/"*.sh \
+				"$stage/data/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
+		fi
 		;;
 	*)
 	echo "unsupported dependency mode: $dependency_mode" >&2
@@ -222,6 +245,9 @@ printf '%s\n' \
 	"Architecture: $architecture" \
 	'Maintainer: wificalling-location-gateway maintainers' \
 	"Depends: $depends" \
+	'X-WFC-Product: wificalling-location-gateway/v2' \
+	'X-WFC-Gateway: 1.7' \
+	'X-WFC-Wloc-Api: wloc.service/v2' \
 	'Section: luci' \
 	'Priority: optional' \
 	'License: MIT' \
@@ -235,5 +261,6 @@ make_archive "$stage/control" "$stage/control.tar.gz" .
 make_archive "$stage/data" "$stage/data.tar.gz" .
 rm -f "$out"
 make_archive "$stage" "$out" debian-binary data.tar.gz control.tar.gz
+"$root/scripts/create-update-manifest.sh" "$out" >/dev/null
 
 echo "$out"

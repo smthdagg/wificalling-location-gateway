@@ -12,7 +12,8 @@
           "verify_fingerprint",
           "health",
           "restart_gateway",
-          "node_test"
+          "node_test",
+          "update_status"
         ],
         "file": [
           "read"
@@ -49,7 +50,10 @@
           "verify_fingerprint",
           "node_test",
           "restart_gateway",
-          "clear_log"
+          "clear_log",
+          "update_preflight",
+          "update_apply",
+          "update_recover"
         ],
         "file": [
           "write"
