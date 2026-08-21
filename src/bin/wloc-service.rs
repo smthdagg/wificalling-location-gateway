@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 use std::error::Error;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -69,6 +69,39 @@ fn write_profile_marker(path: &std::path::Path) -> std::io::Result<()> {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
     }
     Ok(())
+}
+
+struct ServicePidMarker {
+    path: std::path::PathBuf,
+    pid: u32,
+}
+
+impl Drop for ServicePidMarker {
+    fn drop(&mut self) {
+        let current = std::fs::read_to_string(&self.path).ok();
+        if current.as_deref().map(str::trim) == Some(&self.pid.to_string()) {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
+fn write_service_pid_marker(path: &Path) -> std::io::Result<ServicePidMarker> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let pid = std::process::id();
+    let temporary = path.with_extension("tmp");
+    std::fs::write(&temporary, format!("{pid}\n"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&temporary, std::fs::Permissions::from_mode(0o600))?;
+    }
+    std::fs::rename(&temporary, path)?;
+    Ok(ServicePidMarker {
+        path: path.to_owned(),
+        pid,
+    })
 }
 
 fn wait_for_profile_marker(path: &std::path::Path, timeout: Duration) -> bool {
@@ -131,6 +164,8 @@ struct OpenWrtRuntime {
     redirect_helper: std::path::PathBuf,
     profile_redirect_helper: std::path::PathBuf,
     nft_binary: std::path::PathBuf,
+    control_socket: std::path::PathBuf,
+    proxy_port: u16,
     defer_first_redirect: bool,
 }
 
@@ -144,6 +179,9 @@ impl OpenWrtRuntime {
         runtime.profile_redirect_helper = std::env::var("WLOC_PROFILE_REDIRECT_HELPER")
             .unwrap_or_else(|_| "/usr/sbin/wloc-profile-redirect.sh".to_owned())
             .into();
+        runtime.control_socket =
+            profile_marker_path("WLOC_SOCKET", "/var/run/wloc-service/control.sock");
+        runtime.proxy_port = env_or("WLOC_PROXY_PORT", 8443_u16);
         runtime.defer_first_redirect = std::env::var("WLOC_DEFER_REDIRECT").as_deref() == Ok("1");
         runtime
     }
@@ -157,8 +195,21 @@ impl OpenWrtRuntime {
             profile_redirect_helper: redirect_helper.clone(),
             redirect_helper,
             nft_binary: nft_binary.into(),
+            control_socket: "/var/run/wloc-service/control.sock".into(),
+            proxy_port: 8443,
             defer_first_redirect: false,
         }
+    }
+
+    #[cfg(test)]
+    fn with_health_paths(
+        mut self,
+        control_socket: impl Into<std::path::PathBuf>,
+        proxy_port: u16,
+    ) -> Self {
+        self.control_socket = control_socket.into();
+        self.proxy_port = proxy_port;
+        self
     }
 
     #[cfg(test)]
@@ -195,6 +246,24 @@ impl OpenWrtRuntime {
                     .ok_or(ProfileRuntimeError::RedirectInstall)
             })
     }
+
+    fn service_evidence_present(&self) -> bool {
+        #[cfg(unix)]
+        let socket_ready = std::fs::metadata(&self.control_socket)
+            .map(|metadata| {
+                use std::os::unix::fs::FileTypeExt;
+                metadata.file_type().is_socket()
+            })
+            .unwrap_or(false);
+        #[cfg(not(unix))]
+        let socket_ready = false;
+        if !socket_ready {
+            return false;
+        }
+
+        let proxy_address = SocketAddr::from(([127, 0, 0, 1], self.proxy_port));
+        TcpStream::connect_timeout(&proxy_address, Duration::from_millis(250)).is_ok()
+    }
 }
 
 impl RuntimeControl for OpenWrtRuntime {
@@ -202,7 +271,7 @@ impl RuntimeControl for OpenWrtRuntime {
         Ok(())
     }
     fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure> {
-        Ok(true)
+        Ok(self.service_evidence_present())
     }
     fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
@@ -242,10 +311,7 @@ impl ProfileRuntimeControl for OpenWrtRuntime {
     }
 
     fn shared_engine_healthy(&mut self) -> Result<bool, ProfileRuntimeError> {
-        // The supervisor has already admitted the service before profile
-        // redirects are installed. A future health adapter can tighten this
-        // gate without changing the profile state machine.
-        Ok(true)
+        Ok(self.service_evidence_present())
     }
 
     fn install_profile_redirect(
@@ -899,10 +965,9 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let proxy = std::sync::Arc::new(proxy);
     let proxy_port: u16 = env_or("WLOC_PROXY_PORT", 8443_u16);
 
-    // Apply the persisted configuration to the control plane before serving:
-    // manual location preset first (so a manual target is already fresh), then
-    // the desired enabled state. Failures are logged, not fatal: the daemon
-    // still serves status and can be steered through the control API.
+    // Apply the persisted manual location before serving. Enabling is deferred
+    // until both the control socket and proxy listener are bound, so the
+    // runtime health gate never has to assume a listener that does not exist.
     if profile_model
         .as_ref()
         .is_none_or(|model| model.profiles().len() <= 1)
@@ -926,23 +991,6 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             );
         }
     }
-    if profile_model
-        .as_ref()
-        .is_none_or(|model| model.profiles().len() <= 1)
-        && runtime_profile.enabled
-    {
-        match service.enable() {
-            Ok(()) => {
-                if let Some(router) = profile_router.as_ref() {
-                    if let Err(error) = router.set_enabled(&runtime_profile.id, true) {
-                        eprintln!("wloc-service: enabling profile route failed: {error:?}");
-                    }
-                }
-            }
-            Err(error) => eprintln!("wloc-service: enable failed: {error:?}"),
-        }
-    }
-
     if let Some(parent) = Path::new(&socket_path).parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -971,6 +1019,25 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // REDIRECT, which rewrites the destination to this router and newer iOS
     // versions answer with RST.
     let proxy_listener = runtime.block_on(async { bind_tproxy_listener(proxy_port) })?;
+    let service_pid_path =
+        profile_marker_path("WLOC_SERVICE_PIDFILE", "/var/run/wloc-service/service.pid");
+    let _service_pid_marker = write_service_pid_marker(&service_pid_path)?;
+    if profile_model
+        .as_ref()
+        .is_none_or(|model| model.profiles().len() <= 1)
+        && runtime_profile.enabled
+    {
+        match service.enable() {
+            Ok(()) => {
+                if let Some(router) = profile_router.as_ref() {
+                    if let Err(error) = router.set_enabled(&runtime_profile.id, true) {
+                        eprintln!("wloc-service: enabling profile route failed: {error:?}");
+                    }
+                }
+            }
+            Err(error) => eprintln!("wloc-service: enable failed: {error:?}"),
+        }
+    }
     let multi_profile_mode = profile_model
         .as_ref()
         .is_some_and(|model| model.profiles().len() > 1);
@@ -1261,6 +1328,35 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn openwrt_runtime_health_accepts_its_socket_and_proxy_listener() {
+        use std::net::TcpListener;
+        use std::os::unix::net::UnixListener;
+
+        let root = std::env::temp_dir().join(format!(
+            "wloc-health-runtime-test-{}-{}",
+            std::process::id(),
+            now_unix()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let control_socket = root.join("control.sock");
+        let _control_listener = UnixListener::bind(&control_socket).unwrap();
+        let proxy_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_port = proxy_listener.local_addr().unwrap().port();
+        let mut runtime = OpenWrtRuntime::new("/bin/false", "/bin/false")
+            .with_health_paths(&control_socket, proxy_port);
+
+        assert!(RuntimeControl::engine_healthy(&mut runtime).unwrap());
+        assert!(ProfileRuntimeControl::shared_engine_healthy(&mut runtime).unwrap());
+
+        drop(proxy_listener);
+        drop(_control_listener);
+        let _ = std::fs::remove_file(&control_socket);
+        assert!(!RuntimeControl::engine_healthy(&mut runtime).unwrap());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn openwrt_runtime_delegates_profile_scoped_redirect_actions() {
         use std::os::unix::fs::PermissionsExt;
 
@@ -1348,7 +1444,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn profile_service_group_coordinates_shared_runtime_and_handlers() {
+        use std::net::TcpListener;
         use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::net::UnixListener;
 
         let model = ProfileModel::new(vec![
             DeviceProfile {
@@ -1401,12 +1499,16 @@ mod tests {
         );
         std::fs::write(&helper, script).unwrap();
         std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let control_socket = root.join("control.sock");
+        let _control_listener = UnixListener::bind(&control_socket).unwrap();
+        let proxy_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_port = proxy_listener.local_addr().unwrap().port();
 
         let mut group = ProfileServiceGroup::new(
             model,
             std::sync::Arc::clone(&router),
             handlers,
-            OpenWrtRuntime::new(&helper, &helper),
+            OpenWrtRuntime::new(&helper, &helper).with_health_paths(&control_socket, proxy_port),
         );
         group.activate_enabled_profiles();
         assert_eq!(group.runtime.statuses().len(), 2);

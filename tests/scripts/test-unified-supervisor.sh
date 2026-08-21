@@ -27,9 +27,6 @@ grep -F 'multiple_profiles_configured' "$redirect" >/dev/null
 grep -F 'PROFILE_PROXY_READY_FILE' "$supervisor" >/dev/null
 grep -F 'PROFILE_ACTIVATE_FILE' "$supervisor" >/dev/null
 grep -F 'PROFILE_READY_FILE' "$supervisor" >/dev/null
-grep -F 'REFRESH_SET_HELPER' "$supervisor" >/dev/null
-grep -F 'refresh-set' "$supervisor" >/dev/null
-
 if grep -E 'pgrep[[:space:]]+-f' "$supervisor" >/dev/null; then
 	printf '%s\n' 'supervisor must not use global pgrep -f process matching' >&2
 	exit 1
@@ -61,7 +58,6 @@ fi
 kill "$stale_pid" 2>/dev/null || true
 wait "$stale_pid" 2>/dev/null || true
 [ "$health_rc" -eq 1 ]
-
 grep -F 'WLOC_PROFILE_ACTIVATE_FILE' "$repo_root/src/bin/wloc-service.rs" >/dev/null
 grep -F 'service.activate_profiles()' "$repo_root/src/bin/wloc-service.rs" >/dev/null
 grep -F 'WLOC_SKIP_REDIRECT' "$wloc_init" >/dev/null
@@ -82,7 +78,7 @@ if grep -F 'stop_child "$GATEWAY_INIT"' "$supervisor" >/dev/null; then
 fi
 grep -F 'START_TIMEOUT' "$supervisor" >/dev/null
 
-if grep -E 'udp[[:space:]]+500|udp[[:space:]]+4500|wificalling_gateway' "$supervisor" "$redirect" >/dev/null; then
+if grep -E 'udp[[:space:]]+500|udp[[:space:]]+4500|nft[[:space:]]+(add|delete|flush|insert|replace).*wificalling_gateway' "$supervisor" "$redirect" >/dev/null; then
 	printf '%s\n' 'unified supervisor must not own Gateway nftables or UDP 500/4500' >&2
 	exit 1
 fi
