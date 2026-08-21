@@ -309,11 +309,11 @@ fn is_valid_device_address(value: &str) -> bool {
         return match address {
             IpAddr::V4(ip) => {
                 let octets = ip.octets();
-                !ip.is_unspecified()
-                    && !ip.is_loopback()
-                    && !ip.is_multicast()
-                    && ip != std::net::Ipv4Addr::BROADCAST
-                    && !(octets[0] == 169 && octets[1] == 254)
+                !(ip.is_unspecified()
+                    || ip.is_loopback()
+                    || ip.is_multicast()
+                    || ip == std::net::Ipv4Addr::BROADCAST
+                    || (octets[0] == 169 && octets[1] == 254))
             }
             IpAddr::V6(ip) => {
                 let first = ip.segments()[0];
