@@ -39,6 +39,28 @@ class V2UiContractTests(unittest.TestCase):
             )
             self.assertEqual(0, result.returncode, result.stderr)
 
+    def test_profile_page_exposes_basic_settings_and_low_frequency_status_contract(self):
+        for relative in (
+            "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",
+            "openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",
+        ):
+            source = (self.root / relative).read_text(encoding="utf-8")
+            self.assertIn("Basic settings", source)
+            self.assertIn("probe_interval", source)
+            self.assertIn("reason_code", source)
+            self.assertIn("Apply & restart", source)
+            self.assertIn(", 15);", source)
+
+    def test_profile_page_has_one_apply_boundary_and_bounded_input_guards(self):
+        for relative in (
+            "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",
+            "openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",
+        ):
+            source = (self.root / relative).read_text(encoding="utf-8")
+            self.assertIn("validateProfiles", source)
+            self.assertIn("probe interval must be between", source)
+            self.assertIn("ui.changes.apply(true)", source)
+
 
 if __name__ == "__main__":
     unittest.main()
