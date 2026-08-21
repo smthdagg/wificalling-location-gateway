@@ -65,6 +65,7 @@ package, UCI file, init script, or runtime dependency was installed.
 | Final release candidate remove/install/restart on AX6S | pass |
 | Exact firmware target `mediatek/mt7622` matched package metadata | pass |
 | Standalone package compatibility file and package boundary check | pass |
+| V2 `Packages` and `Packages.gz` signatures verified by AX6S `usign` | pass |
 | Final V2 device page, English source, and formal Chinese PO assets on AX6S | pass |
 | Mobileconfig generation with unique private intermediate and cleanup | pass |
 | Real iPhone WLOC traffic and packet capture | not run; no device fixture supplied |
@@ -126,6 +127,10 @@ directory's `SHA256SUMS`; the rebuilt AX6S package hash is
 `90762e2453ffae11341fef6caa42bef379ba52a9599d5aeb73bcc0a2952f231f` and was
 verified again on the router before installation. Publication still requires
 the release signing key and explicit external release approval.
+
+The locally prepared V2 feed index was copied to a temporary AX6S verification
+directory. Both detached signatures returned exit code 0 with the published
+`wloc.pub`; no opkg source or installed package was changed by this check.
 
 ## Acceptance status
 
