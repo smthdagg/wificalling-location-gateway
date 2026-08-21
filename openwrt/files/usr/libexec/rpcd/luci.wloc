@@ -220,16 +220,22 @@ call)
 		;;
 	restart_service)
 		# One lifecycle owner: the standalone WLOC supervisor.
-		/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1
-		sleep 2
-		echo '{"ok":true}'
-		exit 0
+		if /etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1; then
+			sleep 2
+			echo '{"ok":true}'
+			exit 0
+		fi
+		echo '{"error":"unified WLOC restart failed"}'
+		exit 1
 		;;
 	restart_unified)
-		/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1
-		sleep 2
-		echo '{"ok":true}'
-		exit 0
+		if /etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1; then
+			sleep 2
+			echo '{"ok":true}'
+			exit 0
+		fi
+		echo '{"error":"unified WLOC restart failed"}'
+		exit 1
 		;;
 	health)
 		if [ ! -x /usr/sbin/wloc-health.sh ]; then

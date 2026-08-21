@@ -57,6 +57,17 @@ class V2UiContractTests(unittest.TestCase):
             self.assertIn("Basic Settings", source)
             self.assertIn("probe_interval", source)
 
+    def test_basic_settings_load_is_read_only_and_profile_regeneration_is_explicit(self):
+        for relative in (
+            "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-basic.js",
+            "openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-basic.js",
+        ):
+            source = (self.root / relative).read_text(encoding="utf-8")
+            self.assertIn("window.location.hostname", source)
+            self.assertNotIn("L.resolveDefault(regenProfile()", source)
+            self.assertIn("click: function()", source)
+            self.assertIn("regenProfile().then", source)
+
     def test_profile_page_has_one_apply_boundary_and_bounded_input_guards(self):
         for relative in (
             "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",

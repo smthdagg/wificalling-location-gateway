@@ -53,6 +53,13 @@ class V2SecurityContractTests(unittest.TestCase):
         section = rpc.split("\tprovider_test)", 1)[1].split("\tupdate_status)", 1)[0]
         self.assertIn("check -c", section)
 
+    def test_restart_rpc_reports_supervisor_failure(self):
+        rpc = (ROOT / "openwrt/files/usr/libexec/rpcd/luci.wloc").read_text(encoding="utf-8")
+        for method in ("restart_service", "restart_unified"):
+            section = rpc.split(f"\t{method})", 1)[1].split("\t\t;;", 1)[0]
+            self.assertIn("if /etc/init.d/wificalling-location-gateway restart", section)
+            self.assertIn('echo \'{"error":"unified WLOC restart failed"}\'', section)
+
 
 if __name__ == "__main__":
     unittest.main()

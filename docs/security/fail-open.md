@@ -15,7 +15,7 @@ There is never a default or fallback coordinate. Invalid, missing, conflicting, 
 
 <!-- SECURITY_INVARIANT id="FAILOPEN-ENGINE" -->
 
-`engine_unhealthy`: remove redirect before stopping or restarting the engine. The external supervisor first blocks new installs, atomically removes the fully named `wificalling_location` redirect/table objects, verifies absence, drains or terminates the process, and cleans bounded temporary state. It never flushes the global ruleset and never changes unrelated provider or firewall state.
+`engine_unhealthy`: remove redirect before stopping or restarting the engine. The external supervisor first blocks new installs, atomically removes the fully named `wloc_service` and profile redirect/table objects, verifies absence, drains or terminates the process, and cleans bounded temporary state. It never flushes the global ruleset and never changes unrelated provider or firewall state.
 
 <!-- SECURITY_INVARIANT id="FAILOPEN-WATCHDOG" -->
 
@@ -23,7 +23,7 @@ There is never a default or fallback coordinate. Invalid, missing, conflicting, 
 
 <!-- SECURITY_INVARIANT id="FAILOPEN-LEASE" -->
 
-Every redirect is gated by membership of the assigned-device key in short-TTL nft set elements. The supervisor renews the lease only while engine, scope, and IPv6 health pass. On supervisor death or loss of scheduling, renewal ceases and the kernel automatically expires the lease without help from a userspace process. A rule may remain present but cannot redirect without a matching live lease; startup and reboot begin with no lease.
+Every profile redirect is gated by membership of that profile's assigned-device key in short-TTL nft set elements. The supervisor renews each lease only while the shared engine, profile scope, and IPv6 health pass. On supervisor death or loss of scheduling, renewal ceases and the kernel automatically expires the lease without help from a userspace process. A rule may remain present but cannot redirect without a matching live lease; startup and reboot begin with no lease.
 
 The lease is defense in depth, not a substitute for deterministic cleanup:
 active stop still deletes the redirect and verifies absence before engine

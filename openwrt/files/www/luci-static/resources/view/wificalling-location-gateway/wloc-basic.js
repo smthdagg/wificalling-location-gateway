@@ -9,7 +9,7 @@
 var regenProfile = rpc.declare({ object: 'luci.wloc', method: 'regen_profile' });
 
 return view.extend({
-  load: function() { return Promise.all([uci.load('wloc-service'), L.resolveDefault(regenProfile(), {})]); },
+  load: function() { return uci.load('wloc-service'); },
   render: function(data) {
     i18n.localizeTabs();
     var m = new form.Map('wloc-service', i18n.t('Basic Settings'),
@@ -27,15 +27,29 @@ return view.extend({
     port.datatype = 'port';
     var config = s.option(form.Value, 'singbox_config', i18n.t('sing-box provider configuration'));
     config.description = i18n.t('Optional path to an existing provider configuration. This project does not manage another application configuration.');
-    var profile = data[1] || {};
-    var link = profile.url ? E('a', { href: profile.url, target: '_blank' }, profile.url) : i18n.t('Profile unavailable');
+    var profileUrl = 'http://' + window.location.hostname + '/wloc-ca.mobileconfig';
+    var link = E('a', { href: profileUrl, target: '_blank' }, profileUrl);
+    var regenerate = E('button', { class: 'cbi-button', click: function() {
+      regenerate.disabled = true;
+      regenProfile().then(function(result) {
+        if (result && result.error) throw new Error(result.error);
+        if (result && result.url) {
+          profileUrl = result.url;
+          link.href = result.url;
+          link.textContent = result.url;
+        }
+        ui.addNotification(null, E('p', {}, i18n.t('Profile ready')), 'info');
+      }).catch(function(error) {
+        ui.addNotification(null, E('p', {}, i18n.t('Regenerate failed') + ': ' + error), 'error');
+      }).then(function() { regenerate.disabled = false; });
+    } }, i18n.t('Regenerate profile'));
     return m.render().then(function(node) {
       return E([], [node, E('div', { class: 'cbi-section' }, [
         E('h3', {}, i18n.t('iPhone certificate profile')),
         E('p', {}, i18n.t('Install the WLOC CA only on the authorized test device.')),
-        E('p', {}, link)
+        E('p', {}, link),
+        regenerate
       ])]);
     });
   }
 });
-

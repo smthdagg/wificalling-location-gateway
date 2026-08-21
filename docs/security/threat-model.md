@@ -14,18 +14,18 @@ the redacted AX6S evidence template. This document does not itself prove live
 device acceptance. The Phase 0 approval was for offline documentation and tests only; that historical restriction must not be read as evidence that the
 current V2 implementation is absent.
 
-This model covers one explicitly authorized test device and LAN, the isolated WLOC component, its future router integration boundary, and its upstream dependencies. It intentionally does not describe Apple private protocol fields.
+This model covers up to 8 device profiles on the authorized LAN, with one private IPv4 address per profile. The profiles share one isolated WLOC component and provider process; they do not create a dependency on another product. It intentionally does not describe Apple private protocol fields.
 
 ## Security objectives and scope
 
 <!-- SECURITY_INVARIANT id="SCOPE-01" -->
 
-Interception is allowed only when all three predicates match: one assigned test device, one of the two exact hostnames `gs-loc.apple.com` or `gs-loc-cn.apple.com`, and TCP 443. Matching only an IP address, a hostname suffix, a wildcard, a port, or a device subnet is insufficient. A second exact hostname check is required at TLS ingress because DNS addresses can be shared or poisoned.
+Interception is allowed only when all three predicates match: one profile's assigned private IPv4 address, one of the two exact hostnames `gs-loc.apple.com` or `gs-loc-cn.apple.com`, and TCP 443. Up to 8 profiles are independently bounded; matching only an IP address without its profile, a hostname suffix, a wildcard, a port, or a device subnet is insufficient. A second exact hostname check is required at TLS ingress because DNS addresses can be shared or poisoned.
 
 <!-- SECURITY_INVARIANT id="GATEWAY-01" -->
 
-The component may create only the dedicated `wificalling_location` table and
-its fully named objects. It must never modify, reuse, flush, or depend on the `wificalling_gateway` table. UDP 500/4500, ordinary HTTPS, router management,
+The component may create only its shared `wloc_service` table and fully named
+per-profile `wloc_profile_<id>` tables and objects. It must never modify, reuse, flush, or depend on the `wificalling_gateway` table. UDP 500/4500, ordinary HTTPS, router management,
 provider management/health traffic, and every non-assigned LAN device remain
 outside the WLOC path. Wi-Fi Calling Gateway 1.7 is outside this project's
 source, package, UCI, lifecycle, and acceptance boundary; a system sing-box or
@@ -79,9 +79,9 @@ implementation; this document does not itself prove AX6S live acceptance.
 | ID | Severity and abuse case | Mandatory control | Required evidence owner |
 |---|---|---|---|
 | S-01 | Critical: forged Apple upstream or invalid certificate is accepted | Verify the full upstream certificate chain, validity, SNI, and exact hostname with the system or reviewed trust store; never retry with verification disabled | TLS integration: invalid chain, expiry, unknown CA, and hostname mismatch |
-| S-02 | High: a spoofed or drifted source enters the redirect | Bind exactly one assigned device to validated address/lease identity and disable interception on binding drift | Network integration: other device, spoofed source, and DHCP drift |
+| S-02 | High: a spoofed or drifted source enters a profile redirect | Bind each profile to one validated private IPv4 identity and disable that profile on binding drift | Network integration: other device, spoofed source, duplicate profile, and DHCP drift |
 | S-03 | High: poisoned DNS or a shared CDN IP captures another origin | Populate sets from only the two exact names, then require an exact ingress hostname before leaf issuance or proxying | DNS/TLS integration: rotation, shared IP, absent/wrong SNI, ordinary HTTPS |
-| T-01 | Critical: WLOC changes the stable Gateway data plane | Operate only fully named `wificalling_location` objects; keep Gateway and sing-box state read-only | OpenWrt integration: before/after semantic diff and zero UDP 500/4500 hits |
+| T-01 | Critical: WLOC changes unrelated router data planes | Operate only fully named `wloc_service` and `wloc_profile_<id>` objects; keep external tables and provider state read-only | OpenWrt integration: before/after semantic diff and zero UDP 500/4500 hits |
 | T-02 | High: unknown or malformed protocol is patched or damaged | Patch only an authorized, frozen structure; preserve unknown fields and original bytes otherwise | Protocol: fixture round-trip, malformed, unknown version, order, and fuzz |
 | T-03 | High: poisoned, stale, conflicting, or wrong-exit Geo creates a location | Validate schema/ranges/timezone, bind cache to node plus exit IP, enforce expiry, and mark conflicts uncertain | Geo: bad schema, range, conflict, expiry, clock rollback, and exit change |
 | I-01 | Critical: CA or leaf private key escapes router-local storage | Generate locally with secure umask, store root-owned mode `0600`, export public certificate only, and exclude private keys from backup/support paths | CA: permissions, backup/support extraction, repository and artifact scans |
@@ -116,10 +116,10 @@ Before any real-device test, a reviewed deployment ADR must choose either a comp
 
 The V2 OpenWrt implementation uses a safety mechanism independent of the
 continued life of any userspace engine or watchdog. Redirect can match only
-when the assigned device key is present in dedicated short-TTL nft set
+when the profile's assigned device key is present in its short-TTL nft set
 elements. The nftables redirect expression must require both the normal
-device/destination/TCP scope and membership in this live lease set; creating a
-rule without that match is prohibited.
+profile/device/destination/TCP scope and membership in this live lease set;
+creating a rule without that match is prohibited.
 
 The external supervisor renews the lease only while engine, scope, and IPv6 health pass. If the supervisor is killed, OOM-terminated, wedged, or unable to check health, renewal stops and the kernel automatically expires the lease. A rule may remain present but cannot redirect without a matching live lease. Startup and reboot begin with no lease, so neither stale userspace state nor a surviving rule enables interception.
 
