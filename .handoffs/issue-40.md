@@ -4,7 +4,7 @@
 
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test
-- Branch: codex/issue-40-ax6s-resource-gates-review2-codex-v2-lead-20260821120115-0b0f2a16
+- Branch: codex/issue-40-ax6s-resource-gates-ci-fix-codex-v2-lead-20260821121438-72d38e2f
 - Final local checkpoint before handoff: pending independent review, CI, and AX6S hardware evidence
 - Credentials included: no
 
@@ -100,6 +100,9 @@ measurement template. Do not claim real-device measurements from the host.
 - The standalone builder initially exposed the package gate's success text on
   stdout, breaking callers that consume only the generated IPK path; the gate
   output is now suppressed at that compatibility boundary.
+- The CI runner exposed that the resource fixture could exit before procfs
+  sampling, producing the intentional unmeasured-RSS failure; the fixture now
+  has a one-second deterministic observation window.
 - The local commit hook reports `lefthook` unavailable in PATH; repository
   verification itself passed.
 
