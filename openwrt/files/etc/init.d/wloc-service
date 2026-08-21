@@ -24,7 +24,9 @@ start_service() {
 		"WLOC_PROXY_PORT=8443" \
 		"WLOC_DUMP_DIR=/tmp/wloc-dump" \
 		"WLOC_SUPERVISED=${WLOC_SUPERVISED:-0}"
-	procd_set_param respawn
+	if [ "${WLOC_SUPERVISED:-0}" != 1 ]; then
+		procd_set_param respawn
+	fi
 	procd_set_param stdout 1
 	procd_set_param stderr 1
 	procd_close_instance

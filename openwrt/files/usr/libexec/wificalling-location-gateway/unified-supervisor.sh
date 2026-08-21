@@ -132,7 +132,7 @@ start_supervisor() {
 	[ -x "$GATEWAY_INIT" ] && "$GATEWAY_INIT" disable >/dev/null 2>&1 || true
 	stop_child "$WLOC_INIT"
 
-	if ! "$GATEWAY_INIT" start >/dev/null 2>&1; then
+	if ! WLOC_SUPERVISED=1 "$GATEWAY_INIT" start >/dev/null 2>&1; then
 		cleanup_runtime gateway_start_failed
 		exit 1
 	fi
