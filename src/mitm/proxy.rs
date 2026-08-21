@@ -8,6 +8,7 @@
 //! unchanged; a malformed WLOC response is never replaced.
 
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
@@ -20,6 +21,19 @@ use crate::wloc::{patch_wloc_response, PatchTarget};
 
 /// The Apple WLOC endpoint path intercepted for patching.
 pub const WLOC_PATH: &str = "/clls/wloc";
+
+/// Resolves a patch target from the source address of an accepted client
+/// connection. Implementations must return `None` for unknown, disabled, or
+/// degraded profiles; the proxy then forwards the original response.
+pub trait PatchTargetResolver: Send + Sync {
+    fn resolve_patch_target(&self, source: IpAddr) -> Option<PatchTarget>;
+}
+
+impl PatchTargetResolver for crate::service::profile_dispatch::ProfilePatchRouter {
+    fn resolve_patch_target(&self, source: IpAddr) -> Option<PatchTarget> {
+        self.resolve_ip(source)
+    }
+}
 /// Upper bound for a single forwarded response body.
 const MAX_FORWARD_BODY_BYTES: usize = 512 * 1024;
 /// Concurrent upstream streams per client connection.
@@ -103,6 +117,28 @@ impl MitmProxy {
         client_tcp: TcpStream,
         patch: Option<&PatchTarget>,
     ) -> Result<(), MitmProxyError> {
+        self.handle_connection_with_target(client_tcp, patch.copied())
+            .await
+    }
+
+    /// Serve one connection and select its patch target from the original
+    /// client source address. No default profile is used when resolution
+    /// fails.
+    pub async fn handle_connection_routed(
+        &self,
+        client_tcp: TcpStream,
+        resolver: &dyn PatchTargetResolver,
+    ) -> Result<(), MitmProxyError> {
+        let source = client_tcp.peer_addr().ok().map(|address| address.ip());
+        let patch = source.and_then(|address| resolver.resolve_patch_target(address));
+        self.handle_connection_with_target(client_tcp, patch).await
+    }
+
+    async fn handle_connection_with_target(
+        &self,
+        client_tcp: TcpStream,
+        patch: Option<PatchTarget>,
+    ) -> Result<(), MitmProxyError> {
         let client_addr = client_tcp
             .peer_addr()
             .ok()
@@ -127,9 +163,12 @@ impl MitmProxy {
                 Err(_) => break,
             };
             let (request, mut respond) = request;
-            match self.forward_upstream(request, patch, &client_addr).await {
+            match self
+                .forward_upstream(request, patch.as_ref(), &client_addr)
+                .await
+            {
                 Ok((original_len, patched_body)) => {
-                    self.append_rewrite_event(patch, original_len, patched_body.len());
+                    self.append_rewrite_event(patch.as_ref(), original_len, patched_body.len());
                     let mut send = respond
                         .send_response(Response::new(()), patched_body.is_empty())
                         .map_err(|error| MitmProxyError::H2(error.to_string()))?;

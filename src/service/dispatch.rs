@@ -94,6 +94,44 @@ pub trait ServiceDispatch {
     }
 }
 
+impl ServiceDispatch for Box<dyn ServiceDispatch> {
+    fn status(&mut self) -> Result<Value, DispatchError> {
+        (**self).status()
+    }
+
+    fn enable(&mut self) -> Result<(), DispatchError> {
+        (**self).enable()
+    }
+
+    fn disable(&mut self) -> Result<(), DispatchError> {
+        (**self).disable()
+    }
+
+    fn reload(&mut self) -> Result<(), DispatchError> {
+        (**self).reload()
+    }
+
+    fn set_manual_location(&mut self, params: &RequestParams) -> Result<(), DispatchError> {
+        (**self).set_manual_location(params)
+    }
+
+    fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
+        (**self).clear_manual_location()
+    }
+
+    fn search_location(&mut self, query: &str) -> Result<Value, DispatchError> {
+        (**self).search_location(query)
+    }
+
+    fn refresh_periodic(&mut self) {
+        (**self).refresh_periodic();
+    }
+
+    fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
+        (**self).refresh_evidence()
+    }
+}
+
 /// Route a decoded request to its handler and return an encoded response frame.
 ///
 /// Success wraps the handler result (an empty object for control methods);
