@@ -19,6 +19,10 @@ GATEWAY_INIT=${GATEWAY_INIT:-/etc/init.d/wificalling-gateway}
 REDIRECT_HELPER=${WLOC_REDIRECT_HELPER:-/usr/sbin/wloc-redirect-sync.sh}
 CHECK_INTERVAL=${WLOC_SUPERVISOR_HEALTH_INTERVAL:-10}
 MAX_RUNTIME_SECONDS=${WLOC_SUPERVISOR_MAX_RUNTIME:-0}
+case "$CHECK_INTERVAL" in ''|*[!0-9]*) CHECK_INTERVAL=10;; esac
+[ "$CHECK_INTERVAL" -ge 1 ] || CHECK_INTERVAL=1
+[ "$CHECK_INTERVAL" -le 60 ] || CHECK_INTERVAL=60
+case "$MAX_RUNTIME_SECONDS" in ''|*[!0-9]*) MAX_RUNTIME_SECONDS=0;; esac
 gateway_running=0
 wloc_running=0
 redirect_present=0
@@ -62,12 +66,21 @@ withdraw_redirect() {
 }
 
 cleanup_runtime() {
+	reason=$1
+	keep_gateway=${2:-0}
 	withdraw_redirect
 	stop_child "$WLOC_INIT"
-	stop_child "$GATEWAY_INIT"
-	gateway_running=0
 	wloc_running=0
-	write_state stopped "$1"
+	if [ "$keep_gateway" -eq 1 ]; then
+		# WLOC failure is fail-open for Wi-Fi Calling: leave the stable
+		# Gateway data plane alive in passthrough and report degradation.
+		gateway_running=1
+		write_state degraded_passthrough "$reason"
+	else
+		stop_child "$GATEWAY_INIT"
+		gateway_running=0
+		write_state stopped "$reason"
+	fi
 	rm -f "$PIDFILE"
 }
 
@@ -79,7 +92,7 @@ stop_supervisor() {
 		# idempotent here for direct upgrade/rollback invocations.
 	fi
 	cleanup_runtime requested_stop
-	rm -rf "$LOCKDIR"
+	rmdir "$LOCKDIR" 2>/dev/null || true
 }
 
 health_ok() {
@@ -101,11 +114,11 @@ start_supervisor() {
 	if read_pid; then
 		return 0
 	fi
-	rm -rf "$LOCKDIR"
+	rmdir "$LOCKDIR" 2>/dev/null || true
 	if ! mkdir "$LOCKDIR" 2>/dev/null; then
 		return 0
 	fi
-	trap 'cleanup_runtime signal; rm -rf "$LOCKDIR"; exit 0' TERM INT
+	trap 'cleanup_runtime signal; rmdir "$LOCKDIR" 2>/dev/null || true; exit 0' TERM INT
 	echo "$$" > "$PIDFILE"
 	chmod 0600 "$PIDFILE"
 	gateway_running=0
@@ -118,7 +131,6 @@ start_supervisor() {
 	[ -x "$WLOC_INIT" ] && "$WLOC_INIT" disable >/dev/null 2>&1 || true
 	[ -x "$GATEWAY_INIT" ] && "$GATEWAY_INIT" disable >/dev/null 2>&1 || true
 	stop_child "$WLOC_INIT"
-	stop_child "$GATEWAY_INIT"
 
 	if ! "$GATEWAY_INIT" start >/dev/null 2>&1; then
 		cleanup_runtime gateway_start_failed
@@ -127,8 +139,8 @@ start_supervisor() {
 	gateway_running=1
 	write_state starting gateway_ready
 
-	if ! "$WLOC_INIT" start >/dev/null 2>&1; then
-		cleanup_runtime wloc_start_failed
+	if ! WLOC_SUPERVISED=1 WLOC_SKIP_REDIRECT=1 "$WLOC_INIT" start >/dev/null 2>&1; then
+		cleanup_runtime wloc_start_failed keep_gateway
 		exit 1
 	fi
 	wloc_running=1
@@ -137,11 +149,11 @@ start_supervisor() {
 	# Redirect installation is the final step. It only edits the dedicated
 	# wloc_service table and policy route; it never touches Gateway tables.
 	if ! health_ok; then
-		cleanup_runtime child_health_failed
+		cleanup_runtime child_health_failed keep_gateway
 		exit 1
 	fi
 	if ! "$REDIRECT_HELPER" start >/dev/null 2>&1; then
-		cleanup_runtime redirect_install_failed
+		cleanup_runtime redirect_install_failed keep_gateway
 		exit 1
 	fi
 	redirect_present=1
@@ -150,7 +162,7 @@ start_supervisor() {
 	started=$(now)
 	while :; do
 		if ! health_ok; then
-			cleanup_runtime health_failed
+			cleanup_runtime health_failed keep_gateway
 			exit 1
 		fi
 		if [ "$MAX_RUNTIME_SECONDS" -gt 0 ] 2>/dev/null \

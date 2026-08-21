@@ -16,8 +16,11 @@ They are not independently enabled in the v2 steady state.
 
 1. Create a root-only volatile runtime directory and acquire the supervisor
    lock.
-2. Stop any legacy child instances and start the Gateway in passthrough.
-3. Start WLOC and wait for its root-only Unix socket.
+2. Stop any legacy WLOC instance and start or verify the Gateway in
+   passthrough. The stable Gateway init remains the owner of its own firewall
+   table; the supervisor does not call Gateway stop during a WLOC fault.
+3. Start WLOC without its legacy redirect side effect and wait for its
+   root-only Unix socket.
 4. Check both child processes before enabling the WLOC redirect.
 5. Install only the WLOC-owned redirect/table and publish `intercepting`.
 
@@ -26,11 +29,13 @@ intercepts UDP 500/4500.
 
 ## Failure and stop ordering
 
-Any child exit, health failure, redirect setup failure, SIGTERM, or reload
-first calls `wloc-redirect-sync.sh stop`, then stops WLOC and Gateway. The
-WLOC table, policy route, DNS marker, socket, and supervisor state are removed
-idempotently. The stable Gateway can remain available in passthrough during a
-WLOC failure.
+Any WLOC child exit, health failure, or redirect setup failure first calls
+`wloc-redirect-sync.sh stop`, then stops WLOC while leaving the stable Gateway
+available in passthrough. An explicit service stop, SIGTERM, or reload also
+stops the Gateway because that is an operator-requested product shutdown. The
+WLOC table, policy route, DNS marker, socket, and supervisor state are handled
+idempotently. A failed cleanup is reported as `cleanup_unsafe`, never as a
+clean `stopped` state.
 
 procd allows at most three supervisor restarts in one hour (`3600 5 3`). The
 Rust supervisor policy additionally limits the managed child count to two
