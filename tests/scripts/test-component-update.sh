@@ -29,6 +29,7 @@ printf '%s\n' restart >> "$WLOC_UPDATE_SUPERVISOR_LOG"
 EOF
 cat > "$tmp/bin/health" <<'EOF'
 #!/bin/sh
+[ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = fail-once ] && { printf 'ok\n' > "$WLOC_UPDATE_HEALTH_STATE"; exit 1; }
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = ok ]
 EOF
 chmod 0755 "$tmp/bin/opkg" "$tmp/bin/supervisor" "$tmp/bin/health"
@@ -37,13 +38,14 @@ make_ipk() {
     version=$1
     component=$2
     out=$3
+    architecture=${4:-all}
     package_dir="$tmp/package-$version-$component"
     rm -rf "$package_dir"
     mkdir -p "$package_dir/control" "$package_dir/data/etc/config" "$package_dir/data/usr/share/wificalling-location-gateway"
     cat > "$package_dir/control/control" <<EOF
 Package: wificalling-location-gateway
 Version: $version
-Architecture: all
+Architecture: $architecture
 X-WFC-Product: wificalling-location-gateway/v2
 X-WFC-Gateway: 1.7
 X-WFC-Wloc-Api: wloc.service/v2
@@ -57,8 +59,10 @@ EOF
 
 old_package="$tmp/old.ipk"
 new_package="$tmp/new.ipk"
+bad_arch_package="$tmp/bad-arch.ipk"
 make_ipk 1.0.0-1 old-component "$old_package"
 make_ipk 1.1.0-1 new-component "$new_package"
+make_ipk 1.1.0-1 bad-component "$bad_arch_package" mipsel
 
 export WLOC_UPDATE_TEST_TMP="$tmp"
 export WLOC_UPDATE_ROOT="$root"
@@ -83,7 +87,21 @@ grep '^new-component$' "$root/usr/share/wificalling-location-gateway/component.t
 grep '^old-config$' "$root/etc/config/wloc-service" >/dev/null
 grep '^1.1.0-1$' "$state/current.version" >/dev/null
 
-printf 'fail\n' > "$tmp/health"
+if sh "$script" apply "$bad_arch_package"; then
+    echo 'incompatible architecture was accepted' >&2
+    exit 1
+fi
+if sh "$script" apply "$old_package"; then
+    echo 'unauthorized downgrade was accepted' >&2
+    exit 1
+fi
+WLOC_UPDATE_ALLOW_DOWNGRADE=1 WLOC_UPDATE_CURRENT_PACKAGE="$new_package" \
+    sh "$script" apply "$old_package"
+grep '^old-component$' "$root/usr/share/wificalling-location-gateway/component.txt" >/dev/null
+WLOC_UPDATE_CURRENT_PACKAGE="$old_package" sh "$script" apply "$new_package"
+grep '^new-component$' "$root/usr/share/wificalling-location-gateway/component.txt" >/dev/null
+
+printf 'fail-once\n' > "$tmp/health"
 if WLOC_UPDATE_CURRENT_PACKAGE="$new_package" sh "$script" apply "$new_package"; then
     echo 'health failure was accepted' >&2
     exit 1

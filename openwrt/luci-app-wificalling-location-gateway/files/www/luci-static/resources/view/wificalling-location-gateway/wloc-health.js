@@ -30,6 +30,11 @@ var createSupportBundle = rpc.declare({
 	method: 'support_bundle'
 });
 
+var getUpdateStatus = rpc.declare({ object: 'luci.wloc', method: 'update_status' });
+var preflightUpdate = rpc.declare({ object: 'luci.wloc', method: 'update_preflight', params: { path: '' } });
+var applyUpdate = rpc.declare({ object: 'luci.wloc', method: 'update_apply', params: { path: '' } });
+var recoverUpdate = rpc.declare({ object: 'luci.wloc', method: 'update_recover' });
+
 function notify(title, message, kind) {
 	ui.addNotification(null, E('p', [ E('strong', title + ': '), message ]), kind);
 }
@@ -60,6 +65,17 @@ return view.extend({
 		var gwBody = E('div', {}, []);
 		var extraBody = E('div', {}, []);
 		var profileBody = E('tbody', {}, []);
+		var updateBody = E('div', {}, []);
+		var updatePath = E('input', { 'class': 'cbi-input-text', 'style': 'min-width:360px', 'placeholder': '/tmp/wloc-update/package.ipk' });
+
+		function renderUpdateStatus(status) {
+			updateBody.innerHTML = '';
+			status = status || {};
+			var text = (status.phase || '-') + ' / ' + (status.reason || '-');
+			if (status.current_version || status.target_version)
+				text += ' (' + (status.current_version || '-') + ' → ' + (status.target_version || '-') + ')';
+			updateBody.appendChild(statusDot(status.phase === 'applied', text));
+		}
 
 		function renderHealth(h) {
 			wlocBody.innerHTML = '';
@@ -144,12 +160,14 @@ return view.extend({
 		}
 
 		renderHealth(health);
+		getUpdateStatus().then(renderUpdateStatus).catch(function() { renderUpdateStatus({ reason: wlocI18n.t('Update status unavailable') }); });
 
 		poll.add(function() {
 			return L.resolveDefault(getHealth(), { error: wlocI18n.t('Health check unavailable') }).then(function(h) {
 				renderHealth(h);
+				return getUpdateStatus().then(renderUpdateStatus).catch(function() {});
 			});
-		}, 10);
+		}, 15);
 
 		// One-click service restarts, then refresh the report immediately.
 		function restartAction(call, okText, busyLabel) {
@@ -218,6 +236,27 @@ return view.extend({
 				wlocI18n.t('Support bundles contain bounded redacted diagnostics only; copy the generated file from /tmp before it expires.'), ' ', supportButton)
 		]);
 
+		function updateAction(call, successText) {
+			return function() {
+				if (this.disabled) return;
+				this.disabled = true;
+				call({ path: updatePath.value }).then(function(result) {
+					if (result && result.error) throw new Error(result.error);
+					notify(wlocI18n.t('Component update'), successText, 'info');
+					return getUpdateStatus().then(renderUpdateStatus);
+				}).catch(function(error) {
+					notify(wlocI18n.t('Component update failed'), String(error), 'error');
+				}).then(function() { this.disabled = false; }.bind(this));
+			};
+		}
+
+		var updateSection = E('div', { 'class': 'cbi-section', style: 'margin-top:16px' }, [
+			E('h3', { style: 'margin-top:0' }, wlocI18n.t('Component update')),
+			E('p', {}, wlocI18n.t('Stage a validated IPK under /tmp/wloc-update before checking or applying it.')),
+			E('div', {}, [updatePath, ' ', E('button', { 'class': 'cbi-button', click: updateAction(preflightUpdate, wlocI18n.t('Package preflight passed')) }, wlocI18n.t('Check package')), ' ', E('button', { 'class': 'cbi-button cbi-button-apply', click: updateAction(applyUpdate, wlocI18n.t('Update applied and health checked')) }, wlocI18n.t('Apply update')), ' ', E('button', { 'class': 'cbi-button', click: function() { recoverUpdate().then(function() { notify(wlocI18n.t('Component update'), wlocI18n.t('Interrupted transaction recovered'), 'info'); return getUpdateStatus().then(renderUpdateStatus); }).catch(function(e) { notify(wlocI18n.t('Component update failed'), String(e), 'error'); }); } }, wlocI18n.t('Recover'))]),
+			E('div', { style: 'margin-top:8px' }, updateBody)
+		]);
+
 		return E([], [
 			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Gateway')),
@@ -238,7 +277,8 @@ return view.extend({
 					profileBody
 				])
 			]),
-			restartButtons
+			restartButtons,
+			updateSection
 		]);
 	}
 });

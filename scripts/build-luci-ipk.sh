@@ -178,6 +178,7 @@ PY
 			cp "$root/openwrt/files/usr/sbin/wloc-profile-status.sh" "$stage/data/usr/sbin/wloc-profile-status.sh"
 			cp "$root/openwrt/files/usr/sbin/wloc-health.sh" "$stage/data/usr/sbin/wloc-health.sh"
 			cp "$root/openwrt/files/usr/sbin/wloc-support-bundle.sh" "$stage/data/usr/sbin/wloc-support-bundle.sh"
+			cp "$root/openwrt/files/usr/sbin/wloc-component-update.sh" "$stage/data/usr/sbin/wloc-component-update.sh"
 			mkdir -p "$stage/data/etc/init.d" "$stage/data/usr/libexec/wificalling-location-gateway"
 			cp "$root/openwrt/files/etc/init.d/wificalling-location-gateway" "$stage/data/etc/init.d/wificalling-location-gateway"
 			cp "$root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \
@@ -222,6 +223,9 @@ printf '%s\n' \
 	"Architecture: $architecture" \
 	'Maintainer: wificalling-location-gateway maintainers' \
 	"Depends: $depends" \
+	'X-WFC-Product: wificalling-location-gateway/v2' \
+	'X-WFC-Gateway: 1.7' \
+	'X-WFC-Wloc-Api: wloc.service/v2' \
 	'Section: luci' \
 	'Priority: optional' \
 	'License: MIT' \

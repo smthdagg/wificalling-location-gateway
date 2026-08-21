@@ -25,6 +25,48 @@ class V2DiagnosticsContractTests(unittest.TestCase):
         self.assertIn("wloc-support-bundle.sh", standalone)
         self.assertIn("wloc-support-bundle.sh", release)
 
+    def test_component_update_contract_is_transactional_and_compatible(self):
+        script = self.root / "openwrt/files/usr/sbin/wloc-component-update.sh"
+        source = script.read_text(encoding="utf-8")
+        self.assertIn("known-good rollback package is required", source)
+        self.assertIn("insufficient free space", source)
+        self.assertIn("WLOC_UPDATE_INTERRUPT_AFTER_INSTALL", source)
+        self.assertIn('"$OPKG" install', source)
+        self.assertNotIn("opkg remove", source)
+        self.assertNotIn("nft ", source)
+        builder = (self.root / "scripts/build-luci-ipk.sh").read_text(encoding="utf-8")
+        self.assertIn("X-WFC-Product: wificalling-location-gateway/v2", builder)
+        self.assertIn("X-WFC-Gateway: 1.7", builder)
+        self.assertIn("X-WFC-Wloc-Api: wloc.service/v2", builder)
+        for compatibility in (
+            self.root / "openwrt/files/usr/share/wificalling-location-gateway/compatibility",
+            self.root / "openwrt/luci-app-wificalling-location-gateway/files/usr/share/wificalling-location-gateway/compatibility",
+        ):
+            self.assertIn("X-WFC-Product: wificalling-location-gateway/v2", compatibility.read_text(encoding="utf-8"))
+
+    def test_component_update_is_installed_and_exposed_with_minimum_acl(self):
+        makefile = (self.root / "openwrt/Makefile").read_text(encoding="utf-8")
+        release = (self.root / "scripts/openwrt/build-release-packages.sh").read_text(encoding="utf-8")
+        self.assertIn("files/usr/sbin/wloc-component-update.sh", makefile)
+        self.assertIn("wloc-component-update.sh", release)
+        for prefix in (self.root / "openwrt/files", self.root / "openwrt/luci-app-wificalling-location-gateway/files"):
+            rpc = (prefix / "usr/libexec/rpcd/luci.wloc").read_text(encoding="utf-8")
+            self.assertIn("update_status", rpc)
+            self.assertIn("update_preflight", rpc)
+            self.assertIn("update_apply", rpc)
+            self.assertIn("update_recover", rpc)
+            acl = json.loads((prefix / "usr/share/rpcd/acl.d/luci-app-wificalling-location-gateway.json").read_text(encoding="utf-8"))["luci-app-wificalling-location-gateway"]
+            read_methods = acl["read"]["ubus"]["luci.wloc"]
+            write_methods = acl["write"]["ubus"]["luci.wloc"]
+            self.assertIn("update_status", read_methods)
+            self.assertNotIn("update_apply", read_methods)
+            self.assertIn("update_preflight", write_methods)
+            self.assertIn("update_apply", write_methods)
+            self.assertIn("update_recover", write_methods)
+            health = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js").read_text(encoding="utf-8")
+            self.assertIn("update_preflight", health)
+            self.assertIn("update_apply", health)
+
     def test_diagnostics_rpc_acl_and_ui_are_present_in_both_package_sources(self):
         for prefix in (
             self.root / "openwrt/files",
@@ -47,7 +89,7 @@ class V2DiagnosticsContractTests(unittest.TestCase):
             self.assertIn("eventFields", monitor)
 
     def test_support_bundle_shell_and_log_regression_scripts_pass(self):
-        for name in ("test-support-bundle.sh", "test-structured-logs.sh"):
+        for name in ("test-support-bundle.sh", "test-structured-logs.sh", "test-component-update.sh"):
             result = subprocess.run(
                 ["sh", str(self.root / "tests/scripts" / name)],
                 check=False,

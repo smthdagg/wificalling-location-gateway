@@ -64,14 +64,11 @@ archive_safe() {
 }
 
 version_key() {
-	printf '%s\n' "$1" | awk -F '[.-]' '{printf "%03d%03d%03d%03d", $1+0, $2+0, $3+0, $4+0}'
+	printf '%s\n' "$1" | sed 's/-r/-/' | awk -F '[.-]' '{printf "%03d%03d%03d%03d", $1+0, $2+0, $3+0, $4+0}'
 }
 
 validate_version() {
-	case "$1" in
-		[0-9]*.[0-9]*.[0-9]*-[0-9A-Za-z]*) return 0 ;;
-		*) return 1 ;;
-	esac
+	printf '%s\n' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z]+$'
 }
 
 free_kb() {
@@ -106,6 +103,14 @@ package_info() {
 	product=$(field X-WFC-Product "$control")
 	gateway=$(field X-WFC-Gateway "$control")
 	api=$(field X-WFC-Wloc-Api "$control")
+	tar -xzf "$package" -C "$work" ./data.tar.gz
+	archive_safe "$work/data.tar.gz" || die 'data archive is unsafe or corrupt'
+	if [ -z "$product" ] || [ -z "$gateway" ] || [ -z "$api" ]; then
+		compatibility=$(tar -xOf "$work/data.tar.gz" ./usr/share/wificalling-location-gateway/compatibility 2>/dev/null || true)
+		[ -n "$product" ] || product=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WFC-Product:[[:space:]]*//p')
+		[ -n "$gateway" ] || gateway=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WFC-Gateway:[[:space:]]*//p')
+		[ -n "$api" ] || api=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WFC-Wloc-Api:[[:space:]]*//p')
+	fi
 	case "$name" in
 		wificalling-location-gateway|luci-app-wificalling-location-gateway) ;;
 		*) die 'update package identity is not the unified product' ;;
@@ -121,13 +126,11 @@ package_info() {
 		fi
 		[ -n "$expected" ] && [ "$architecture" = "$expected" ] || die 'update package architecture is incompatible'
 	fi
-	tar -xzf "$package" -C "$work" ./data.tar.gz
-	archive_safe "$work/data.tar.gz" || die 'data archive is unsafe or corrupt'
 	tar -tzf "$work/data.tar.gz" | awk '
 		/^\./ { next }
 		{ bad=1 }
 		END { exit bad ? 1 : 0 }
-	' && true
+	' || die 'data archive contains an invalid path'
 	printf '%s\n' "$version"
 }
 
@@ -147,17 +150,28 @@ rollback_transaction() {
 	old_version=$(cat "$TXN/current.version" 2>/dev/null || true)
 	target_version=$(cat "$TXN/target.version" 2>/dev/null || true)
 	write_status rolling_back "$reason" "$target_version" "$old_version"
+	rollback_ok=1
 	if [ -f "$TXN/rollback.ipk" ]; then
-		"$OPKG" install "$TXN/rollback.ipk" >/dev/null 2>&1 || true
+		"$OPKG" install "$TXN/rollback.ipk" >/dev/null 2>&1 || rollback_ok=0
+	else
+		rollback_ok=0
 	fi
 	restore_configs
+	if [ "$rollback_ok" -eq 1 ]; then
+		"$SUPERVISOR" restart >/dev/null 2>&1 || rollback_ok=0
+		"$HEALTH" >/dev/null 2>&1 || rollback_ok=0
+	fi
 	if [ -n "$old_version" ]; then
 		printf '%s\n' "$old_version" > "$STATE_DIR/current.version"
 	fi
 	if [ -f "$TXN/rollback.ipk" ]; then
 		cp -p "$TXN/rollback.ipk" "$STATE_DIR/current.ipk"
 	fi
-	write_status rolled_back "$reason" "$target_version" "$old_version"
+	if [ "$rollback_ok" -eq 1 ]; then
+		write_status rolled_back "$reason" "$target_version" "$old_version"
+	else
+		write_status rollback_failed rollback_package_install_failed "$target_version" "$old_version"
+	fi
 	rm -rf "$TXN"
 }
 
