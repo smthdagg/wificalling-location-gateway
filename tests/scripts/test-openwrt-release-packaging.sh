@@ -17,6 +17,10 @@ grep -F 'X-WLOC-Product' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null
 grep -F 'X-WLOC-Target: x86/64' "$builder" >/dev/null
 grep -F 'X-WLOC-OpenWrt: 24.10+' "$builder" >/dev/null
 grep -F 'X-WLOC-Package-Format: ipk' "$builder" >/dev/null
+grep -F 'DEPENDS:=' "$builder" >/dev/null
+for dependency in '+luci-base' '+rpcd-mod-rpcsys' '+nftables' '+firewall4' '+kmod-nft-tproxy' '+kmod-nft-socket' '+ip-full'; do
+  grep -F "$dependency" "$builder" >/dev/null
+done
 grep -F "wificalling-location-gateway*.manifest" "$builder" >/dev/null
 grep -F "wificalling-location-gateway*.sig" "$builder" >/dev/null
 grep -F 'WLOC_UPDATE_SIGNING_KEY is required' "$builder" >/dev/null

@@ -20,6 +20,7 @@ done
 ./tests/scripts/test-agent-handoff-tools.sh
 ./tests/scripts/test-verify-rust-openwrt.sh
 ./tests/scripts/test-openwrt-release-packaging.sh
+python3 -m unittest tests.test_v2_security_contract
 ./tests/scripts/test-standalone-ax6s-package.sh
 ./tests/scripts/test-release-version.sh
 ./tests/scripts/test-unified-supervisor.sh

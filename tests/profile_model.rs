@@ -69,17 +69,19 @@ fn explicit_profiles_reject_duplicates_and_invalid_addresses() {
 }
 
 #[test]
-fn validation_accepts_ip_and_mac_device_addresses() {
-    let ipv6 = ProfileModel::new(vec![profile("phone", "fd00::10")]).unwrap();
+fn validation_accepts_only_private_ipv4_runtime_bindings() {
+    let ipv4 = ProfileModel::new(vec![profile("phone", "192.168.1.10")]).unwrap();
     assert_eq!(
-        ipv6.profiles()[0].assigned_device.as_deref(),
-        Some("fd00::10")
+        ipv4.profiles()[0].assigned_device.as_deref(),
+        Some("192.168.1.10")
     );
-    let mac = ProfileModel::new(vec![profile("tablet", "aa:bb:cc:dd:ee:ff")]).unwrap();
-    assert_eq!(
-        mac.profiles()[0].assigned_device.as_deref(),
-        Some("aa:bb:cc:dd:ee:ff")
-    );
+
+    for address in ["fd00::10", "aa:bb:cc:dd:ee:ff"] {
+        assert!(matches!(
+            ProfileModel::new(vec![profile("tablet", address)]),
+            Err(ProfileError::InvalidDeviceAddress(_))
+        ));
+    }
 }
 
 #[test]
@@ -193,7 +195,7 @@ config wloc-service 'main'
     option enabled '0'
 config device 'phone'
     option label 'Living room phone'
-    option assigned_device 'aa:bb:cc:dd:ee:ff'
+    option assigned_device '192.168.1.100'
     option node_ref 'node-a'
     option node_mode 'fixed'
     option geo_source 'manual'
