@@ -65,6 +65,19 @@ measurement template. Do not claim real-device measurements from the host.
 | `git diff --check` | Passed | No whitespace errors |
 | ShellCheck | Pending CI | Not installed in the local environment |
 
+## Failed attempts
+
+- The first resource regression test printed its success line twice; the
+  duplicate assertion was removed.
+- Running the resource gate against the fixture's measured CPU made the test
+  host's transient 72% CPU sample fail the product budget. The test now keeps
+  profiler format coverage and feeds a controlled compliant report to the
+  gate; product CPU acceptance remains an AX6S hardware measurement.
+- The handoff checker initially rejected the title `TDD and verification`;
+  it was renamed to the required `Verification` heading.
+- The local commit hook reports `lefthook` unavailable in PATH; repository
+  verification itself passed.
+
 ## Known limitations and acceptance gap
 
 - The host cannot provide AX6S hardware evidence. RSS, CPU, startup, flash
@@ -78,6 +91,11 @@ measurement template. Do not claim real-device measurements from the host.
   project-lead acceptance or a recorded exception if AX6S measurements show a
   different safe ceiling.
 
+## Capabilities required for the next Agent
+
+- `openwrt`, `test`, `security`, and access to an AX6S staging router for the
+  final resource and update/rollback evidence.
+
 ## Safety invariants retained
 
 - Fail-open behavior remains the release contract.
@@ -86,6 +104,15 @@ measurement template. Do not claim real-device measurements from the host.
 - UDP 500/4500 and the stable Gateway nftables table are untouched.
 - Reports and evidence must not contain credentials, CA keys, raw traffic,
   device identifiers, or precise user location.
+
+## Security and privacy notes
+
+- Resource reports are allowlisted and mode-restricted; the profiler suppresses
+  command output and rejects symlink report paths.
+- Package and runtime gates inspect regular local files only and do not fetch or
+  upload artifacts.
+- AX6S evidence must be redacted before entering Git or GitHub; no credentials,
+  CA private keys, raw traffic, or device identifiers are included.
 
 ## Next executable steps
 
