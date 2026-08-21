@@ -11,8 +11,10 @@ package=${1:-}
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-update-manifest.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
-tar -xOf "$package" ./control.tar.gz > "$tmp/control.tar.gz"
-tar -xOf "$package" ./data.tar.gz > "$tmp/data.tar.gz"
+tar -xOf "$package" control.tar.gz > "$tmp/control.tar.gz" 2>/dev/null \
+	|| tar -xOf "$package" ./control.tar.gz > "$tmp/control.tar.gz"
+tar -xOf "$package" data.tar.gz > "$tmp/data.tar.gz" 2>/dev/null \
+	|| tar -xOf "$package" ./data.tar.gz > "$tmp/data.tar.gz"
 control=$(tar -xOf "$tmp/control.tar.gz" ./control)
 name=$(printf '%s\n' "$control" | sed -n 's/^Package:[[:space:]]*//p' | head -n 1)
 version=$(printf '%s\n' "$control" | sed -n 's/^Version:[[:space:]]*//p' | head -n 1)

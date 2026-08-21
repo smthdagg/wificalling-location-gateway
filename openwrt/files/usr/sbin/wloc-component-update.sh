@@ -162,10 +162,13 @@ package_info() {
 		esac
 	fi
 	archive_safe "$package" || die 'update package archive is unsafe or corrupt'
-	tar -tzf "$package" | grep -Fx './control.tar.gz' >/dev/null || die 'update package lacks control archive'
-	tar -tzf "$package" | grep -Fx './data.tar.gz' >/dev/null || die 'update package lacks data archive'
+	tar -tzf "$package" | awk '$0 == "./control.tar.gz" || $0 == "control.tar.gz" { found=1 } END { exit found ? 0 : 1 }' \
+		|| die 'update package lacks control archive'
+	tar -tzf "$package" | awk '$0 == "./data.tar.gz" || $0 == "data.tar.gz" { found=1 } END { exit found ? 0 : 1 }' \
+		|| die 'update package lacks data archive'
 	mkdir -p "$work/control"
-	tar -xzf "$package" -C "$work" ./control.tar.gz
+	tar -xOf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
+		|| tar -xOf "$package" ./control.tar.gz > "$work/control.tar.gz"
 	archive_safe "$work/control.tar.gz" || die 'control archive is unsafe or corrupt'
 	tar -xzf "$work/control.tar.gz" -C "$work/control" ./control
 	control="$work/control/control"
@@ -175,7 +178,8 @@ package_info() {
 	product=$(field X-WFC-Product "$control")
 	gateway=$(field X-WFC-Gateway "$control")
 	api=$(field X-WFC-Wloc-Api "$control")
-	tar -xzf "$package" -C "$work" ./data.tar.gz
+	tar -xOf "$package" data.tar.gz > "$work/data.tar.gz" 2>/dev/null \
+		|| tar -xOf "$package" ./data.tar.gz > "$work/data.tar.gz"
 	archive_safe "$work/data.tar.gz" || die 'data archive is unsafe or corrupt'
 	verify_manifest "$package" "$work/control.tar.gz" "$work/data.tar.gz"
 	if [ -z "$product" ] || [ -z "$gateway" ] || [ -z "$api" ]; then
