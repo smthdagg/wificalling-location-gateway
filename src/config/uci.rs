@@ -10,6 +10,8 @@ use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
 
+use serde::Serialize;
+
 pub const DEFAULT_UCI_PATH: &str = "/etc/config/wloc-service";
 pub const DEFAULT_PROBE_PORT: u16 = 18080;
 pub const DEFAULT_PROBE_INTERVAL_SECS: u64 = 300;
@@ -17,7 +19,8 @@ const DEFAULT_NODE_REF: &str = "default";
 
 /// Where the location target comes from: follow the bound node's exit, or
 /// use the manually configured coordinates.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum LocationMode {
     Auto,
     Manual,
@@ -45,6 +48,9 @@ pub struct WlocUciConfig {
     pub geo_provider: String,
     pub probe_port: u16,
     pub presets: Vec<Preset>,
+    /// Explicit v2 device sections. An empty list means the legacy singleton
+    /// fields above are still the source and can be migrated by `profile_model`.
+    pub profiles: Vec<super::profile::DeviceProfile>,
 }
 
 impl Default for WlocUciConfig {
@@ -60,6 +66,7 @@ impl Default for WlocUciConfig {
             geo_provider: "http".to_owned(),
             probe_port: DEFAULT_PROBE_PORT,
             presets: Vec::new(),
+            profiles: Vec::new(),
         }
     }
 }
@@ -72,6 +79,10 @@ pub enum UciError {
     Syntax { line: usize, text: String },
     /// A coordinate value is not a valid f64.
     Coordinate { option: String, value: String },
+    /// A device profile section failed v2 validation.
+    Profile(String),
+    /// The complete UCI input exceeds the small-gateway parser bound.
+    ConfigTooLarge,
 }
 
 impl fmt::Display for UciError {
@@ -84,6 +95,8 @@ impl fmt::Display for UciError {
             UciError::Coordinate { option, value } => {
                 write!(f, "invalid {option} coordinate: {value}")
             }
+            UciError::Profile(message) => write!(f, "invalid device profile: {message}"),
+            UciError::ConfigTooLarge => write!(f, "UCI configuration exceeds the size limit"),
         }
     }
 }
@@ -113,17 +126,38 @@ impl PresetBuilder {
 impl WlocUciConfig {
     /// Read and parse the daemon configuration file.
     pub fn load(path: &Path) -> Result<Self, UciError> {
+        let metadata =
+            std::fs::metadata(path).map_err(|_| UciError::Io(path.display().to_string()))?;
+        if metadata.len() > super::profile::MAX_UCI_TEXT_BYTES as u64 {
+            return Err(UciError::ConfigTooLarge);
+        }
         let text =
             std::fs::read_to_string(path).map_err(|_| UciError::Io(path.display().to_string()))?;
         Self::parse(&text)
     }
 
+    /// Return the explicit v2 profiles, or a deterministic singleton model
+    /// synthesized from the v1 fields when no device sections exist.
+    pub fn profile_model(
+        &self,
+    ) -> Result<super::profile::ProfileModel, super::profile::ProfileError> {
+        if self.profiles.is_empty() {
+            super::profile::ProfileModel::from_legacy(self)
+        } else {
+            super::profile::ProfileModel::new(self.profiles.clone())
+        }
+    }
+
     /// Parse UCI text. A missing `main` section yields the defaults.
     pub fn parse(text: &str) -> Result<Self, UciError> {
+        if text.len() > super::profile::MAX_UCI_TEXT_BYTES {
+            return Err(UciError::ConfigTooLarge);
+        }
         let mut config = Self::default();
         let mut section_type: Option<String> = None;
         let mut section_name: Option<String> = None;
         let mut preset: Option<PresetBuilder> = None;
+        let mut device: Option<DeviceBuilder> = None;
 
         for (index, raw_line) in text.lines().enumerate() {
             let line = raw_line.trim();
@@ -139,14 +173,25 @@ impl WlocUciConfig {
                     if let Some(builder) = preset.take() {
                         config.presets.push(builder.finish());
                     }
+                    if let Some(builder) = device.take() {
+                        config
+                            .profiles
+                            .push(builder.finish().map_err(profile_error)?);
+                    }
                     match tokens.as_slice() {
                         [_keyword, type_name, name, ..] => {
                             section_type = Some(type_name.clone());
                             section_name = Some(name.clone());
+                            if type_name == "device" {
+                                device = Some(DeviceBuilder::new(name.clone()));
+                            }
                         }
                         [_keyword, type_name] => {
                             section_type = Some(type_name.clone());
                             section_name = None;
+                            if type_name == "device" {
+                                device = Some(DeviceBuilder::new("default".to_owned()));
+                            }
                         }
                         _ => {
                             return Err(UciError::Syntax {
@@ -169,6 +214,7 @@ impl WlocUciConfig {
                     apply_option(
                         &mut config,
                         &mut preset,
+                        &mut device,
                         section_type.as_deref(),
                         section_name.as_deref(),
                         name,
@@ -186,6 +232,14 @@ impl WlocUciConfig {
         }
         if let Some(builder) = preset.take() {
             config.presets.push(builder.finish());
+        }
+        if let Some(builder) = device.take() {
+            config
+                .profiles
+                .push(builder.finish().map_err(profile_error)?);
+        }
+        if !config.profiles.is_empty() {
+            super::profile::ProfileModel::new(config.profiles.clone()).map_err(profile_error)?;
         }
         Ok(config)
     }
@@ -224,6 +278,7 @@ fn split_uci_tokens(line: &str) -> Option<Vec<String>> {
 fn apply_option(
     config: &mut WlocUciConfig,
     preset: &mut Option<PresetBuilder>,
+    device: &mut Option<DeviceBuilder>,
     section_type: Option<&str>,
     section_name: Option<&str>,
     name: &str,
@@ -239,6 +294,35 @@ fn apply_option(
                 "label" => builder.label = value.to_owned(),
                 "latitude" => builder.latitude = parse_coord(name, value)?,
                 "longitude" => builder.longitude = parse_coord(name, value)?,
+                _ => {}
+            }
+        }
+        Some("device") => {
+            let builder = device.as_mut().ok_or_else(|| {
+                UciError::Profile("device option outside a device section".to_owned())
+            })?;
+            match name {
+                "label" | "name" => builder.label = value.to_owned(),
+                "assigned_device" => builder.assigned_device = Some(value.to_owned()),
+                "node_ref" => builder.node_ref = value.to_owned(),
+                "node_mode" => {
+                    builder.node_mode = match value {
+                        "fixed" => super::profile::NodeSelectionMode::Fixed,
+                        "gateway_default" => super::profile::NodeSelectionMode::GatewayDefault,
+                        _ => return Err(UciError::Profile("unknown node_mode".to_owned())),
+                    }
+                }
+                "geo_source" => {
+                    builder.location_mode = match value {
+                        "auto" => LocationMode::Auto,
+                        "manual" => LocationMode::Manual,
+                        _ => return Err(UciError::Profile("unknown geo_source".to_owned())),
+                    }
+                }
+                "manual_lat" => builder.manual_latitude = Some(parse_coord(name, value)?),
+                "manual_lon" => builder.manual_longitude = Some(parse_coord(name, value)?),
+                "manual_location_ref" => builder.manual_location_ref = Some(value.to_owned()),
+                "enabled" => builder.enabled = matches!(value, "1" | "true" | "on"),
                 _ => {}
             }
         }
@@ -266,6 +350,59 @@ fn apply_option(
         _ => {}
     }
     Ok(())
+}
+
+fn profile_error(error: super::profile::ProfileError) -> UciError {
+    UciError::Profile(error.to_string())
+}
+
+struct DeviceBuilder {
+    id: String,
+    label: String,
+    assigned_device: Option<String>,
+    node_ref: String,
+    node_mode: super::profile::NodeSelectionMode,
+    location_mode: LocationMode,
+    manual_latitude: Option<f64>,
+    manual_longitude: Option<f64>,
+    manual_location_ref: Option<String>,
+    enabled: bool,
+}
+
+impl DeviceBuilder {
+    fn new(id: String) -> Self {
+        Self {
+            id,
+            label: "Default device".to_owned(),
+            assigned_device: None,
+            node_ref: DEFAULT_NODE_REF.to_owned(),
+            node_mode: super::profile::NodeSelectionMode::Fixed,
+            location_mode: LocationMode::Auto,
+            manual_latitude: None,
+            manual_longitude: None,
+            manual_location_ref: None,
+            enabled: true,
+        }
+    }
+
+    fn finish(self) -> Result<super::profile::DeviceProfile, super::profile::ProfileError> {
+        if self.assigned_device.is_none() {
+            return Err(super::profile::ProfileError::MissingAssignedDevice);
+        }
+        let profile = super::profile::DeviceProfile {
+            id: self.id,
+            label: self.label,
+            assigned_device: self.assigned_device,
+            node_ref: self.node_ref,
+            node_mode: self.node_mode,
+            location_mode: self.location_mode,
+            manual_latitude: self.manual_latitude,
+            manual_longitude: self.manual_longitude,
+            manual_location_ref: self.manual_location_ref,
+            enabled: self.enabled,
+        };
+        super::profile::ProfileModel::new(vec![profile.clone()]).map(|_| profile)
+    }
 }
 
 fn parse_coord(option: &str, value: &str) -> Result<f64, UciError> {
