@@ -688,8 +688,8 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             ProfilePatchRouter::new(model)
                 .map_err(|_| "multiple profiles require IPv4 device bindings")?,
         )),
-        Some(model) => ProfilePatchRouter::new(model).ok().map(std::sync::Arc::new),
         None => None,
+        Some(_) => None,
     };
     let patch_state = profile_router
         .as_ref()
@@ -881,8 +881,15 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .is_none_or(|model| model.profiles().len() <= 1)
         && runtime_profile.enabled
     {
-        if let Err(error) = service.enable() {
-            eprintln!("wloc-service: enable failed: {error:?}");
+        match service.enable() {
+            Ok(()) => {
+                if let Some(router) = profile_router.as_ref() {
+                    if let Err(error) = router.set_enabled(&runtime_profile.id, true) {
+                        eprintln!("wloc-service: enabling profile route failed: {error:?}");
+                    }
+                }
+            }
+            Err(error) => eprintln!("wloc-service: enable failed: {error:?}"),
         }
     }
 

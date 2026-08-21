@@ -35,6 +35,8 @@ fn source_device_selects_only_its_profile_target() {
     ])
     .unwrap();
     let router = ProfilePatchRouter::new(&model).unwrap();
+    router.set_enabled("phone", true).unwrap();
+    router.set_enabled("tablet", true).unwrap();
     router.set_target("phone", Some(target(1.0, 2.0))).unwrap();
     router.set_target("tablet", Some(target(3.0, 4.0))).unwrap();
 
@@ -57,6 +59,8 @@ fn disabling_one_profile_withdraws_only_its_target() {
     ])
     .unwrap();
     let router = ProfilePatchRouter::new(&model).unwrap();
+    router.set_enabled("phone", true).unwrap();
+    router.set_enabled("tablet", true).unwrap();
     router.set_target("phone", Some(target(1.0, 2.0))).unwrap();
     router.set_target("tablet", Some(target(3.0, 4.0))).unwrap();
     router.set_enabled("phone", false).unwrap();
@@ -72,6 +76,7 @@ fn disabling_one_profile_withdraws_only_its_target() {
 fn manual_clear_withdraws_target_until_auto_refreshes() {
     let model = ProfileModel::new(vec![profile("phone", "192.168.1.10", true)]).unwrap();
     let router = ProfilePatchRouter::new(&model).unwrap();
+    router.set_enabled("phone", true).unwrap();
     router.set_target("phone", Some(target(1.0, 2.0))).unwrap();
     router.clear_target("phone").unwrap();
     assert_eq!(router.resolve_source("192.168.1.10"), None);
@@ -92,6 +97,7 @@ fn invalid_source_and_unsupported_mac_never_fall_back() {
 
     let model = ProfileModel::new(vec![profile("phone", "192.168.1.10", true)]).unwrap();
     let router = ProfilePatchRouter::new(&model).unwrap();
+    router.set_enabled("phone", true).unwrap();
     router.set_target("phone", Some(target(1.0, 2.0))).unwrap();
     assert_eq!(router.resolve_source("not-an-ip"), None);
     assert_eq!(router.resolve_source("192.168.1.11"), None);
@@ -113,6 +119,7 @@ fn device_addresses_are_canonicalized_before_lookup() {
 
     let model = ProfileModel::new(vec![profile("phone", "192.168.1.10", true)]).unwrap();
     let router = ProfilePatchRouter::new(&model).unwrap();
+    router.set_enabled("phone", true).unwrap();
     router.set_target("phone", Some(target(1.0, 2.0))).unwrap();
     let source: IpAddr = "192.168.1.10".parse().unwrap();
     assert_eq!(router.resolve_ip(source).unwrap(), target(1.0, 2.0));

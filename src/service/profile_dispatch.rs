@@ -59,7 +59,10 @@ impl ProfilePatchRouter {
                 profile.id.clone(),
                 ProfileRoute {
                     assigned_device: ip,
-                    enabled: Arc::new(Mutex::new(profile.enabled)),
+                    // UCI enablement is intent only. The route becomes live
+                    // after the runtime manager installs and verifies the
+                    // profile redirect.
+                    enabled: Arc::new(Mutex::new(false)),
                     target: Arc::new(Mutex::new(None)),
                 },
             );
