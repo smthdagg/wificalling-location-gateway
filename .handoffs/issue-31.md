@@ -5,8 +5,8 @@
 - Source agent ID: codex-v2-lead
 - Capabilities used: rust,openwrt,test
 - Branch: codex/issue-31-v2-device-profiles-codex-v2-lead-20260821044654-a86aad99
-- Checkpoint parent: 6b0a744
-- Updated at (UTC): 2026-08-21T05:50:00Z
+- Checkpoint parent: 05002bf
+- Updated at (UTC): 2026-08-21T05:58:00Z
 - Credentials included: no
 
 ## Objective
@@ -31,6 +31,8 @@ changing the current runtime interception path.
   multiple-profile runtime selection, and fail-closes invalid existing UCI.
 - Profile-bound probes require a matching Gateway UCI device policy and reject
   route-only or stale sing-box rule fallback.
+- Invalid or unsupported profile scope now blocks status/periodic/forced
+  background probes and withdraws any stale patch target.
 
 ## Verification
 
@@ -38,11 +40,11 @@ changing the current runtime interception path.
 - `cargo clippy --all-targets -- -D warnings`: passed.
 - `./scripts/ci/verify.sh`: passed.
 - Python suite: 69 passed.
-- Rust coverage: 80.96% total.
+- Rust coverage: 81.00% total.
 - Dependency advisories, secret scan, OpenWrt package, AX6S resource, and
   release gates: passed.
 - Relevant commits: `7542dd9`, `f38def9`, `a9ad40a`, `4663edb`, `05d1b42`,
-  `6b0a744`, `0061686`.
+  `6b0a744`, `0061686`, `05002bf`.
 
 ## Failed attempts
 
@@ -75,3 +77,5 @@ changing the current runtime interception path.
   operations remain out of scope for this Issue.
 - The route-only binding regression is covered by
   `required_device_binding_rejects_route_only_match`.
+- The invalid-scope background-probe regression is covered by
+  `invalid_scope_never_runs_an_unbound_probe_or_publishes_target`.
