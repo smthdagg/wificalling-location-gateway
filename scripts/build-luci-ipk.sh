@@ -159,6 +159,9 @@ PY
 			cat > "$stage/control/postinst" <<'POSTINST'
 #!/bin/sh
 [ -n "${IPKG_INSTROOT:-}" ] && exit 0
+# A direct opkg install is outside the transactional updater. Do not leave a
+# previous transaction result visible as if it described this package.
+rm -f /var/lib/wificalling-location-gateway/update/status.json
 /etc/init.d/wloc-service disable >/dev/null 2>&1 || true
 /etc/init.d/wificalling-location-gateway enable >/dev/null 2>&1 || true
 killall -q wloc-service >/dev/null 2>&1 || true

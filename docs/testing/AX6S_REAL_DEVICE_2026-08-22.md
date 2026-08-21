@@ -9,36 +9,42 @@ package, UCI file, init script, or runtime dependency was installed.
 
 - Firmware family: ImmortalWrt 24.10.6, kernel 6.6.x, MediaTek MT7622,
   AArch64/cortex-a53.
-- Old WLOC packages were stopped, disabled, and removed before each final
-  install (`2.0.0-1`, then the iterative validation packages), as required for
-  the small overlay. The modified UCI conffile was preserved by opkg and the
-  pre-install UCI/CA backups remain under the router's temporary backup
-  directory.
+- The installed `2.0.0-24` package was explicitly removed before the final
+  migration test, as required for the small overlay. The modified UCI
+  conffile and WLOC/CA state were backed up locally on the router first. The
+  provider was retained. Later `2.0.0-25` and `2.0.0-26` installs were
+  package-upgrade checks; opkg preserved the modified UCI conffile and placed
+  the package candidate beside it as `.opkg`.
 - Provider packages: system sing-box and PassWall were retained; no second
   full-size sing-box binary was installed.
 - Tested standalone package family: `wificalling-location-gateway`,
   `aarch64_cortex-a53`, firmware target `mediatek/mt7622`. Transactional update
   evidence used 2.0.0-17 -> 2.0.0-18 and an injected health-failure target
   2.0.0-19 -> automatic rollback to 2.0.0-18. The final rebuilt package
-  `2.0.0-24` was installed after removing the previous package and passed the
-  service, API, provider, health, restart, target-metadata, and
-  standalone-boundary checks.
+  `2.0.0-24` was first installed after removing the previous package and passed
+  the service, API, provider, health, restart, target-metadata, and
+  standalone-boundary checks. The final package `2.0.0-26` was installed after
+  the audit fixes; its SHA-256 was:
+
+  ```text
+  91458e4da7d9d78b24bece9afd0eb5c514a1d0bf1399c19ba9947d8c23e1e4d1
+  ```
 - The WLOC UCI profile and CA backups were taken before removal. The final
   provider path uses PassWall's persistent generated configuration under
   `/var/etc/passwall`; the provider process itself remains PassWall-owned.
 
 ## Resource observations
 
-- Persistent storage: 87,620 KiB total; 15,508 KiB free after final package
+- Persistent storage: 87,620 KiB total; 15,016 KiB free after final package
   installation and configuration backup were present.
-- Temporary storage: 121,128 KiB total; 26,976 KiB free after final
+- Temporary storage: 121,128 KiB total; 25,548 KiB free after final
   installation.
-- Memory: 242,260 KiB total; 20,044 KiB available in the final steady-state
+- Memory: 242,260 KiB total; 18,436 KiB available in the final steady-state
   snapshot; no swap configured.
-- WLOC RSS: 1,952 KiB, three threads.
-- Reused PassWall sing-box RSS: 30,176 KiB, eight threads; no duplicate WLOC
+- WLOC RSS: 1,948 KiB, three threads.
+- Reused PassWall sing-box RSS: 32,680 KiB, eight threads; no duplicate WLOC
   provider process was launched.
-- The final AX6S package itself is 1,448,513 bytes and the AArch64 WLOC service
+- The final AX6S package is approximately 1.4 MiB and the AArch64 WLOC service
   binary is 2,035,872 bytes; the OpenWrt cross-build gate also
   reported static AArch64 ELF with no dynamic dependency.
 
@@ -67,6 +73,9 @@ package, UCI file, init script, or runtime dependency was installed.
 | Rollback removes the transaction directory and restores `current.version` | pass |
 | Independent LuCI basic/devices/monitor/update assets present | pass |
 | Final release candidate remove/install/restart on AX6S | pass |
+| Final 2.0.0-26 restart settling and health recovery | pass |
+| Controlled unified-supervisor stop withdraws redirect; start restores it | pass |
+| Direct package install clears stale component-update status | pass |
 | Exact firmware target `mediatek/mt7622` matched package metadata | pass |
 | Standalone package compatibility file and package boundary check | pass |
 | V2 `Packages` and `Packages.gz` signatures verified by AX6S `usign` | pass |
@@ -104,6 +113,9 @@ package, UCI file, init script, or runtime dependency was installed.
    still reported its redirect as absent. The handler now tracks a local
    logical redirect state, and the status projection distinguishes legacy
    singleton `default` from an explicit multi-profile `default` table.
+10. Direct `opkg` installation could leave an older component-update result
+    visible in LuCI. Package post-install now clears only the stale status
+    projection; transactional update state is still written by the updater.
 
 ## Component update evidence
 
@@ -132,9 +144,12 @@ The three-package release build and Docker matrix passed on 2026-08-22. The
 matrix installed and started all four cases: AX6S/OpenWrt 24.10.5,
 OpenWrt 24.10.8 x86_64, OpenWrt 25.12.3 x86_64, and iStoreOS 24.10.5 x86_64.
 The exact host-side package hashes are recorded in the release staging
-directory's `SHA256SUMS`; the rebuilt AX6S package hash is
-`d6d583f728ff8e65083accdee4a7fa754dc30f8134c4d47cdab60bd1563d167f` and was
-verified again on the router before installation. Publication still requires
+directory's `SHA256SUMS`; the final AX6S package hash is
+`91458e4da7d9d78b24bece9afd0eb5c514a1d0bf1399c19ba9947d8c23e1e4d1` and was
+verified on the router before installation. The AArch64 binaries were the
+previously verified pinned-build outputs because the pinned cross-build image
+was not cached locally during this final shell/UI/package-only rebuild.
+Publication still requires
 the release signing key and explicit external release approval.
 
 The locally prepared V2 feed index was copied to a temporary AX6S verification

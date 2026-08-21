@@ -58,6 +58,14 @@ class V2DiagnosticsContractTests(unittest.TestCase):
             self.assertIn("X-WLOC-Product: wificalling-location-gateway/v2", compatibility.read_text(encoding="utf-8"))
             self.assertIn("X-WLOC-Target:", compatibility.read_text(encoding="utf-8"))
 
+    def test_package_install_clears_stale_transaction_status(self):
+        for relative in (
+            "scripts/build-luci-ipk.sh",
+            "scripts/openwrt/build-release-packages.sh",
+        ):
+            source = (self.root / relative).read_text(encoding="utf-8")
+            self.assertIn("rm -f /var/lib/wificalling-location-gateway/update/status.json", source)
+
     def test_component_update_is_installed_and_exposed_with_minimum_acl(self):
         makefile = (self.root / "openwrt/Makefile").read_text(encoding="utf-8")
         release = (self.root / "scripts/openwrt/build-release-packages.sh").read_text(encoding="utf-8")

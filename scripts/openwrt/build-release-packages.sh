@@ -156,6 +156,9 @@ endef
 define Package/wificalling-location-gateway/postinst
 #!/bin/sh
 [ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+# A direct package install is outside the transactional updater. Do not leave
+# an older transaction result visible as if it described this package.
+rm -f /var/lib/wificalling-location-gateway/update/status.json
 for required in /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd /usr/libexec/wificalling-location-gateway/singbox-runtime.sh; do
   [ -e "\$\$required" ] || echo "wificalling-location-gateway: prerequisite missing: \$\$required" >&2
 done
