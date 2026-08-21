@@ -14,11 +14,11 @@ printf '1.0.0-1\n' > "$state/current.version"
 cat > "$tmp/bin/opkg" <<'EOF'
 #!/bin/sh
 set -eu
-if [ "${1:-}" != install ]; then
-    exit 2
-fi
+while [ "${1:-}" != install ] && [ "$#" -gt 0 ]; do shift; done
+[ "${1:-}" = install ] || exit 2
+shift
 printf '%s\n' install >> "$WLOC_UPDATE_OPKG_LOG"
-package=$2
+package=$1
 data="$WLOC_UPDATE_TEST_TMP/data.tar.gz"
 tar -xOf "$package" ./data.tar.gz > "$data"
 tar -xzf "$data" -C "$WLOC_UPDATE_ROOT"

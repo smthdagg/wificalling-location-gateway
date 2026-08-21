@@ -152,7 +152,7 @@ rollback_transaction() {
 	write_status rolling_back "$reason" "$target_version" "$old_version"
 	rollback_ok=1
 	if [ -f "$TXN/rollback.ipk" ]; then
-		"$OPKG" install "$TXN/rollback.ipk" >/dev/null 2>&1 || rollback_ok=0
+		"$OPKG" --force-downgrade install "$TXN/rollback.ipk" >/dev/null 2>&1 || rollback_ok=0
 	else
 		rollback_ok=0
 	fi
