@@ -61,10 +61,10 @@ fn explicit_profiles_reject_duplicates_and_invalid_addresses() {
 
 #[test]
 fn validation_accepts_ip_and_mac_device_addresses() {
-    let ipv6 = ProfileModel::new(vec![profile("phone", "2001:db8::10")]).unwrap();
+    let ipv6 = ProfileModel::new(vec![profile("phone", "fd00::10")]).unwrap();
     assert_eq!(
         ipv6.profiles()[0].assigned_device.as_deref(),
-        Some("2001:db8::10")
+        Some("fd00::10")
     );
     let mac = ProfileModel::new(vec![profile("tablet", "aa:bb:cc:dd:ee:ff")]).unwrap();
     assert_eq!(
@@ -77,12 +77,15 @@ fn validation_accepts_ip_and_mac_device_addresses() {
 fn unusable_ip_and_mac_addresses_are_rejected() {
     for address in [
         "0.0.0.0",
+        "0.0.0.1",
         "127.0.0.1",
+        "192.0.2.10",
         "169.254.1.2",
         "224.0.0.1",
         "::",
         "::1",
         "ff02::1",
+        "2001:db8::10",
         "00:00:00:00:00:00",
         "01:00:00:00:00:01",
     ] {

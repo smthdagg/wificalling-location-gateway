@@ -320,6 +320,9 @@ fn is_valid_device_address(value: &str) -> bool {
                     || ip.is_multicast()
                     || ip == std::net::Ipv4Addr::BROADCAST
                     || (octets[0] == 169 && octets[1] == 254))
+                    && (octets[0] == 10
+                        || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+                        || (octets[0] == 192 && octets[1] == 168))
             }
             IpAddr::V6(ip) => {
                 let first = ip.segments()[0];
@@ -327,6 +330,7 @@ fn is_valid_device_address(value: &str) -> bool {
                     && !ip.is_loopback()
                     && !ip.is_multicast()
                     && (first & 0xffc0) != 0xfe80
+                    && (first & 0xfe00) == 0xfc00
             }
         };
     }

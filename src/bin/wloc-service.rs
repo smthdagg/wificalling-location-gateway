@@ -153,17 +153,20 @@ fn build_probe(assigned_device: &str, probe_port: u16) -> Box<dyn ExitProbeRunti
             .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
     );
     let probe_port: u16 = env_or("WLOC_PROBE_PORT", probe_port);
-    Box::new(
-        wificalling_location_gateway::exitprobe::singbox::SingBoxProbe::new(
-            std::path::PathBuf::from(
-                std::env::var("WLOC_SINGBOX_CONFIG")
-                    .unwrap_or_else(|_| "/var/run/wificalling-gateway/sing-box.json".into()),
-            ),
-            device_ip,
-            probe_port,
-            std::path::PathBuf::from("/tmp/wloc-probe"),
+    let probe = wificalling_location_gateway::exitprobe::singbox::SingBoxProbe::new(
+        std::path::PathBuf::from(
+            std::env::var("WLOC_SINGBOX_CONFIG")
+                .unwrap_or_else(|_| "/var/run/wificalling-gateway/sing-box.json".into()),
         ),
-    )
+        device_ip,
+        probe_port,
+        std::path::PathBuf::from("/tmp/wloc-probe"),
+    );
+    if assigned_device.trim().is_empty() {
+        Box::new(probe)
+    } else {
+        Box::new(probe.with_required_device_binding())
+    }
 }
 
 /// Stub Geo provider: returns a fixed, valid record for the queried exit.
@@ -246,11 +249,16 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .unwrap_or_else(|_| "/var/run/wloc-service/control.sock".into());
 
     // Persisted configuration from /etc/config/wloc-service (UCI). A missing
-    // file falls back to the defaults so the daemon still runs unconfigured.
+    // file preserves the v1 unconfigured-default behavior; an existing but
+    // invalid file is fail-closed and cannot later be enabled over the socket.
     let uci_path = std::env::var("WLOC_UCI_CONFIG")
         .unwrap_or_else(|_| wificalling_location_gateway::config::uci::DEFAULT_UCI_PATH.into());
     let (uci, config_valid) = match WlocUciConfig::load(Path::new(&uci_path)) {
         Ok(config) => (config, true),
+        Err(error) if !Path::new(&uci_path).exists() => {
+            eprintln!("wloc-service: {error}; using unconfigured defaults");
+            (WlocUciConfig::default(), true)
+        }
         Err(error) => {
             eprintln!("wloc-service: {error}; using disabled defaults");
             (
