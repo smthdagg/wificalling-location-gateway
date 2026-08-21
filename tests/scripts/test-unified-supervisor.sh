@@ -25,7 +25,7 @@ grep -F 'WLOC_SUPERVISED' "$repo_root/openwrt/files/etc/init.d/wificalling-gatew
 
 gateway_start=$(grep -n '"$GATEWAY_INIT" start' "$supervisor" | cut -d: -f1)
 wloc_start=$(grep -n '"$WLOC_INIT" start' "$supervisor" | cut -d: -f1)
-health=$(grep -n 'if ! health_ok' "$supervisor" | head -n 1 | cut -d: -f1)
+health=$(grep -n 'if ! wait_for_health' "$supervisor" | head -n 1 | cut -d: -f1)
 redirect_start=$(grep -n '"$REDIRECT_HELPER" start' "$supervisor" | cut -d: -f1)
 [ "$gateway_start" -lt "$wloc_start" ]
 [ "$wloc_start" -lt "$health" ]
