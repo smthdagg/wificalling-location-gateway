@@ -411,6 +411,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn synthesized_client_cache_has_entry_and_byte_bounds() {
+        let mut cache = HashMap::new();
+        for index in 0..(MAX_SYNTHESIZED_CLIENTS * 2) {
+            cache_synthesized_payload(
+                &mut cache,
+                &format!("192.0.2.{index}"),
+                vec![0_u8; MAX_SYNTHESIZED_PAYLOAD_BYTES / 2],
+            );
+        }
+        assert!(cache.len() <= MAX_SYNTHESIZED_CLIENTS);
+        assert!(cache.values().map(Vec::len).sum::<usize>() <= MAX_SYNTHESIZED_CACHE_BYTES);
+
+        cache_synthesized_payload(
+            &mut cache,
+            "oversized",
+            vec![0_u8; MAX_SYNTHESIZED_PAYLOAD_BYTES + 1],
+        );
+        assert!(!cache.contains_key("oversized"));
+    }
+
+    #[test]
     fn dump_wloc_samples_writes_three_files() {
         let dir = std::env::temp_dir().join(format!("wloc-dump-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
