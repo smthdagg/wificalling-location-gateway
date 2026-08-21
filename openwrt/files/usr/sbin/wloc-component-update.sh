@@ -15,6 +15,7 @@ HEALTH=${WLOC_UPDATE_HEALTH:-/usr/sbin/wloc-health.sh}
 STATUS=$STATE_DIR/status.json
 TXN=$STATE_DIR/transaction
 LOCK=$STATE_DIR/.lock
+WORK=
 
 die() {
 	printf '%s\n' "$1" >&2
@@ -36,9 +37,19 @@ write_status() {
 	mv -f "$temporary" "$STATUS"
 }
 
+cleanup_work() {
+	if [ -n "${WORK:-}" ]; then
+		rm -rf "$WORK"
+		WORK=
+	fi
+}
+
 cleanup_lock() {
+	cleanup_work
 	rmdir "$LOCK" 2>/dev/null || true
 }
+
+trap 'cleanup_work' EXIT HUP INT TERM
 
 acquire_lock() {
 	mkdir -p "$STATE_DIR"
@@ -177,8 +188,8 @@ rollback_transaction() {
 
 preflight() {
 	package=$1
-	work=$(mktemp -d "${TMPDIR:-/tmp}/wloc-update-check.XXXXXX")
-	version=$(package_info "$package" "$work")
+	WORK=$(mktemp -d "${TMPDIR:-/tmp}/wloc-update-check.XXXXXX")
+	version=$(package_info "$package" "$WORK")
 	bytes=$(wc -c < "$package" | tr -d ' ')
 	available=$(free_kb)
 	case "$available" in ''|*[!0-9]*) die 'free-space check is unavailable' ;; esac
@@ -192,15 +203,15 @@ preflight() {
 		fi
 	fi
 	printf '{"ok":true,"target_version":"%s","current_version":"%s","free_kb":%s}\n' "$version" "$current" "$available"
-	rm -rf "$work"
+	cleanup_work
 }
 
 apply_update() {
 	package=$1
 	acquire_lock
 	[ ! -e "$TXN" ] || die 'an interrupted update must be recovered before another update'
-	work=$(mktemp -d "${TMPDIR:-/tmp}/wloc-update-check.XXXXXX")
-	version=$(package_info "$package" "$work")
+	WORK=$(mktemp -d "${TMPDIR:-/tmp}/wloc-update-check.XXXXXX")
+	version=$(package_info "$package" "$WORK")
 	bytes=$(wc -c < "$package" | tr -d ' ')
 	available=$(free_kb)
 	case "$available" in ''|*[!0-9]*) die 'free-space check is unavailable' ;; esac
@@ -248,7 +259,8 @@ apply_update() {
 	chmod 0600 "$STATE_DIR/current.ipk"
 	printf '%s\n' "$version" > "$STATE_DIR/current.version"
 	write_status applied ready "$version" "$version"
-	rm -rf "$TXN" "$work"
+	rm -rf "$TXN"
+	cleanup_work
 }
 
 recover_update() {

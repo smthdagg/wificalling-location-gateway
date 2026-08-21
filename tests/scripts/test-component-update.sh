@@ -75,6 +75,7 @@ export WLOC_UPDATE_HEALTH="$tmp/bin/health"
 export WLOC_UPDATE_HEALTH_STATE="$tmp/health"
 export WLOC_UPDATE_FREE_KB=65536
 export WLOC_UPDATE_ALLOW_ANY_SOURCE=1
+export TMPDIR="$tmp"
 printf 'ok\n' > "$tmp/health"
 : > "$tmp/opkg.log"
 : > "$tmp/supervisor.log"
@@ -89,6 +90,10 @@ grep '^1.1.0-1$' "$state/current.version" >/dev/null
 
 if sh "$script" apply "$bad_arch_package"; then
     echo 'incompatible architecture was accepted' >&2
+    exit 1
+fi
+if find "$tmp" -maxdepth 1 -type d -name 'wloc-update-check.*' -print -quit | grep -q .; then
+    echo 'failed package validation leaked its temporary work directory' >&2
     exit 1
 fi
 if sh "$script" apply "$old_package"; then
@@ -123,5 +128,9 @@ if WLOC_UPDATE_FREE_KB=1 sh "$script" apply "$new_package"; then
 fi
 after=$(wc -l < "$tmp/opkg.log" | tr -d ' ')
 [ "$before" = "$after" ]
+if find "$tmp" -maxdepth 1 -type d -name 'wloc-update-check.*' -print -quit | grep -q .; then
+    echo 'low-space validation leaked its temporary work directory' >&2
+    exit 1
+fi
 
 echo 'component update tests passed'
