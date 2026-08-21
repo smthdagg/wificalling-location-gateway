@@ -6,7 +6,7 @@
 - Capabilities used: integration,security,test,openwrt,ui
 - Branch: codex/issue-41-v2-release-codex-v2-lead-20260821133002-404596fe
 - Checkpoint parent: 501dea9
-- Updated at (UTC): 2026-08-21T19:42:41Z
+- Updated at (UTC): 2026-08-21T19:58:44Z
 - Credentials included: no
 
 ## Objective
@@ -51,6 +51,11 @@ that have not been observed.
   `58cc90e5ac5e05af26760984ac3b3a82a84cb32d93f554f37c067e01fc8f05cd`; API,
   UI/PO files, mobileconfig export, service health, RSS, storage and memory
   checks passed.
+- The independent feed repository was cloned read-only for a V2 preflight:
+  all three release packages indexed correctly and `Packages`/
+  `Packages.gz` were signed and verified with the protected key. The remote
+  feed was not changed because real-client and fault-injection gates remain
+  open.
 
 ## Files changed
 
@@ -75,6 +80,7 @@ that have not been observed.
 | `tests/scripts/test-standalone-ax6s-package.sh` | Passed | architecture-specific package layout and provider warning |
 | `python3 -m unittest discover -s tests -p 'test_v2_ui_contract.py'` | Passed | 9 UI/catalogue contract tests |
 | `./scripts/openwrt/verify-docker-matrix.sh --dist-dir dist/openwrt-release` | Passed | 4 OpenWrt/iStoreOS package installs and status checks |
+| `./tests/scripts/test-structured-logs.sh` | Passed | GNU tar-compatible support-bundle member lookup |
 | `git diff --check` | Passed | no whitespace errors |
 
 ## Failed attempts
@@ -105,6 +111,10 @@ that have not been observed.
 - The device page was synchronized between canonical and package sources; all
   current UI keys were added to the formal Chinese PO catalogue, and the stale
   `restart the gateway` translation was removed from the standalone product.
+- GitHub Linux verification exposed a portability bug in the structured-log
+  test: GNU tar does not match the BSD-style `./wloc-support/...` lookup. The
+  test now uses the archive's canonical `wloc-support/events.jsonl` member and
+  the complete local gate passes again.
 
 ## Final acceptance status
 

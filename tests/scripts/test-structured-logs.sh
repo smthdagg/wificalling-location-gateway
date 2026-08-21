@@ -13,7 +13,7 @@ cat > "$events" <<'EOF'
 EOF
 WLOC_SUPPORT_WLOC_LOG="$events" WLOC_SUPPORT_OUTPUT="$output"   sh "$repo_root/openwrt/files/usr/sbin/wloc-support-bundle.sh" >/dev/null
 [ -s "$output" ]
-tar -xOzf "$output" ./wloc-support/events.jsonl > "$tmp/redacted"
+tar -xOzf "$output" wloc-support/events.jsonl > "$tmp/redacted"
 grep '"component":"wloc"' "$tmp/redacted" >/dev/null
 grep '"message":"redacted diagnostic event"' "$tmp/redacted" >/dev/null
 if grep -E '192\.168\.1\.100|Phone|1\.2|private-node' "$tmp/redacted" >/dev/null; then
