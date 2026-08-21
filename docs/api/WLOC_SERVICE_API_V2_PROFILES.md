@@ -52,7 +52,13 @@ rejected. MAC addresses are accepted in the profile schema for the future
 multi-device resolver, but the current single-runtime daemon accepts only IP
 bindings and stays disabled for a MAC-only profile. The legacy singleton
 projection may still have no address so an existing installation can continue
-its current Gateway-policy discovery path.
+its current Gateway-policy discovery path. Explicit IP bindings are limited to
+RFC1918 IPv4 or ULA IPv6 and the sing-box probe requires a matching Gateway
+device policy; it never falls back to an unrelated outbound for a profile.
+
+A missing UCI file retains the v1 unconfigured-default behavior. An existing
+but malformed or oversized UCI file is fail-closed and cannot be re-enabled by
+the v1 control socket until the file is corrected.
 
 ## v2 request envelope
 
