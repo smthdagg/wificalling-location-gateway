@@ -4,7 +4,7 @@
 
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test
-- Branch: codex/issue-40-ax6s-resource-gates-ci-fix5-codex-v2-lead-20260821125719-000d8640
+- Branch: codex/issue-40-ax6s-resource-gates-ci-fix6-codex-v2-lead-20260821130733-ff439733
 - Final local checkpoint before handoff: pending independent review, CI, and AX6S hardware evidence
 - Credentials included: no
 
@@ -120,6 +120,9 @@ measurement template. Do not claim real-device measurements from the host.
   regression was removed from the aggregate shell test. Timeout remains
   bounded in all profiler implementations and was manually verified locally;
   the aggregate gate still strictly rejects failed/ non-zero reports.
+- CI then failed during the negative size cases after the gate passed because
+  the test wrote 29 MiB byte-by-byte with `dd`; sparse `truncate` files now
+  exercise the exact size checks without wasting CI or gateway storage.
 - The local commit hook reports `lefthook` unavailable in PATH; repository
   verification itself passed.
 

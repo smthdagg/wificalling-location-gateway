@@ -64,7 +64,7 @@ WLOC_RESOURCE_ARTIFACT_DIR="$tmp/bins" \
 
 oversized="$tmp/bins/wloc-service"
 limit=$(sed -n 's/^runtime_binary_total_max_bytes=//p' "$budget")
-dd if=/dev/zero of="$oversized" bs=1 count=$((limit + 1)) >/dev/null 2>&1
+truncate -s $((limit + 1)) "$oversized"
 if WLOC_RESOURCE_ARTIFACT_DIR="$tmp/bins" "$gate" >/dev/null 2>&1; then
 	echo 'resource gate accepted oversized runtime binaries' >&2
 	exit 1
@@ -72,8 +72,7 @@ fi
 
 package_limit=$(sed -n 's/^integrated_package_max_bytes=//p' "$budget")
 oversized_package="$tmp/oversized.ipk"
-dd if=/dev/zero of="$oversized_package" bs=1m \
-	count=$((package_limit / 1048576 + 1)) >/dev/null 2>&1
+truncate -s $((package_limit + 1)) "$oversized_package"
 if WLOC_RESOURCE_ARTIFACT_DIR="$tmp/bins" WLOC_PACKAGE_ARTIFACT="$oversized_package" "$gate" >/dev/null 2>&1; then
 	echo 'resource gate accepted oversized package' >&2
 	exit 1
