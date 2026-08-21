@@ -662,10 +662,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let log = root.join("actions.log");
         let helper = root.join("redirect-helper.sh");
-        let script = format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$1\" >> '{}'\n",
-            log.display()
-        );
+        let script = format!("#!/bin/sh\nprintf '%s\\n' \"$1\" >> '{}'\n", log.display());
         std::fs::write(&helper, script).unwrap();
         std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
 
