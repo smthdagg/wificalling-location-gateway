@@ -1227,6 +1227,13 @@ fn pem_decode(pem: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    fn test_temp_root(prefix: &str) -> std::path::PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("{prefix}-{}-{sequence}", std::process::id()))
+    }
 
     #[test]
     fn parses_apple_ips_from_nft_output() {
@@ -1312,11 +1319,7 @@ mod tests {
     fn openwrt_runtime_delegates_only_component_redirect_actions() {
         use std::os::unix::fs::PermissionsExt;
 
-        let root = std::env::temp_dir().join(format!(
-            "wloc-runtime-test-{}-{}",
-            std::process::id(),
-            now_unix()
-        ));
+        let root = test_temp_root("wloc-runtime-test");
         std::fs::create_dir_all(&root).unwrap();
         let log = root.join("actions.log");
         let helper = root.join("redirect-helper.sh");
@@ -1340,11 +1343,7 @@ mod tests {
         use std::net::TcpListener;
         use std::os::unix::net::UnixListener;
 
-        let root = std::env::temp_dir().join(format!(
-            "wloc-health-runtime-test-{}-{}",
-            std::process::id(),
-            now_unix()
-        ));
+        let root = test_temp_root("wloc-health-runtime-test");
         std::fs::create_dir_all(&root).unwrap();
         let control_socket = root.join("control.sock");
         let _control_listener = UnixListener::bind(&control_socket).unwrap();
@@ -1368,11 +1367,7 @@ mod tests {
     fn openwrt_runtime_delegates_profile_scoped_redirect_actions() {
         use std::os::unix::fs::PermissionsExt;
 
-        let root = std::env::temp_dir().join(format!(
-            "wloc-profile-runtime-test-{}-{}",
-            std::process::id(),
-            now_unix()
-        ));
+        let root = test_temp_root("wloc-profile-runtime-test");
         std::fs::create_dir_all(&root).unwrap();
         let log = root.join("actions.log");
         let helper = root.join("profile-redirect-helper.sh");
@@ -1494,11 +1489,7 @@ mod tests {
             Box::new(MockProfileDispatch) as BoxedProfileService,
         );
 
-        let root = std::env::temp_dir().join(format!(
-            "wloc-profile-group-test-{}-{}",
-            std::process::id(),
-            now_unix()
-        ));
+        let root = test_temp_root("wloc-profile-group-test");
         std::fs::create_dir_all(&root).unwrap();
         let helper = root.join("profile-redirect-helper.sh");
         let script = format!(
