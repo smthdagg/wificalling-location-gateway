@@ -9,9 +9,13 @@ fail() { echo "verify-package-budget: $*" >&2; exit 1; }
 value() { sed -n "s/^$1=\([0-9][0-9]*\)$/\1/p" "$budget" | head -n 1; }
 
 [ -n "$package" ] || fail 'usage: verify-package-budget.sh PACKAGE'
-[ -f "$budget" ] && [ ! -L "$budget" ] || fail 'budget file must be a regular file'
+if [ ! -f "$budget" ] || [ -L "$budget" ]; then
+	fail 'budget file must be a regular file'
+fi
 [ "$(sed -n 's/^format=//p' "$budget")" = wfc-resource-budget/v1 ] || fail 'unsupported budget format'
-[ -f "$package" ] && [ ! -L "$package" ] || fail 'package artifact must be a regular file'
+if [ ! -f "$package" ] || [ -L "$package" ]; then
+	fail 'package artifact must be a regular file'
+fi
 
 size=$(wc -c < "$package" | tr -d ' ')
 case "$size" in ''|*[!0-9]*) fail 'package size is not numeric' ;; esac

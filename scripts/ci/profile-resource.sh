@@ -47,10 +47,10 @@ if [ -z "$time_bin" ]; then
 		exec "$python3" "$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)/profile-resource.py" \
 			--timeout-seconds "$timeout_seconds" --report "$report" -- "$@"
 	fi
-	[ -r /proc/self/status ] && [ -r /proc/self/stat ] || {
+	if [ ! -r /proc/self/status ] || [ ! -r /proc/self/stat ]; then
 		echo 'profile-resource: GNU time, Python 3, or procfs is required' >&2
 		exit 127
-	}
+	fi
 
 	proc_ticks() {
 		awk '{ print $14 + $15 }' "/proc/$1/stat" 2>/dev/null || printf '0\n'
@@ -124,7 +124,7 @@ elapsed_seconds=$(sed -n 's/^elapsed_seconds=//p' "$tmp")
 peak_rss_kib=$(sed -n 's/^peak_rss_kib=//p' "$tmp")
 cpu_percent_raw=$(sed -n 's/^cpu_percent_raw=//p' "$tmp" | tr -d '%')
 case "$elapsed_seconds:$peak_rss_kib:$cpu_percent_raw" in
-	''|*[!0-9.:%-]*) echo 'profile-resource: malformed time output' >&2; exit 1 ;;
+	*[!0-9.:%-]*) echo 'profile-resource: malformed time output' >&2; exit 1 ;;
 esac
 elapsed_ms=$(awk -v value="$elapsed_seconds" 'BEGIN { printf "%d", (value * 1000) + 0.5 }')
 cpu_percent=$(awk -v value="$cpu_percent_raw" 'BEGIN { printf "%d", value + 0.5 }')

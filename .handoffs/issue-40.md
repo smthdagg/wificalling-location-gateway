@@ -4,7 +4,7 @@
 
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test
-- Branch: codex/issue-40-ax6s-resource-gates-ci-fix6-codex-v2-lead-20260821130733-ff439733
+- Branch: codex/issue-40-ax6s-resource-gates-shellcheck-codex-v2-lead-20260821131717-e50c0a01
 - Final local checkpoint before handoff: pending independent review, CI, and AX6S hardware evidence
 - Credentials included: no
 
@@ -123,6 +123,9 @@ measurement template. Do not claim real-device measurements from the host.
 - CI then failed during the negative size cases after the gate passed because
   the test wrote 29 MiB byte-by-byte with `dd`; sparse `truncate` files now
   exercise the exact size checks without wasting CI or gateway storage.
+- CI reached the full ShellCheck pass and reported only script-style findings:
+  ambiguous `&& ||` checks, a procfs condition, and an impossible empty case
+  pattern; these are now explicit `if` statements and a valid pattern.
 - The local commit hook reports `lefthook` unavailable in PATH; repository
   verification itself passed.
 
