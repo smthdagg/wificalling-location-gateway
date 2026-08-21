@@ -794,4 +794,52 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&log).unwrap(), "stop\nstart\n");
         let _ = std::fs::remove_dir_all(root);
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn openwrt_runtime_delegates_profile_scoped_redirect_actions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "wloc-profile-runtime-test-{}-{}",
+            std::process::id(),
+            now_unix()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let log = root.join("actions.log");
+        let helper = root.join("profile-redirect-helper.sh");
+        let script = format!("#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\n", log.display());
+        std::fs::write(&helper, script).unwrap();
+        std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+        let mut runtime = OpenWrtRuntime::new(&helper, &helper);
+        let profile = wificalling_location_gateway::config::DeviceProfile {
+            id: "phone".to_owned(),
+            label: "Phone".to_owned(),
+            assigned_device: Some("192.168.1.100".to_owned()),
+            node_ref: "default".to_owned(),
+            node_mode: wificalling_location_gateway::config::NodeSelectionMode::Fixed,
+            location_mode: LocationMode::Auto,
+            manual_latitude: None,
+            manual_longitude: None,
+            manual_location_ref: None,
+            enabled: true,
+        };
+        wificalling_location_gateway::service::profile_runtime::ProfileRuntimeControl::install_profile_redirect(
+            &mut runtime,
+            &profile,
+        )
+        .unwrap();
+        wificalling_location_gateway::service::profile_runtime::ProfileRuntimeControl::remove_profile_redirect(
+            &mut runtime,
+            "phone",
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(&log).unwrap(),
+            "start phone 192.168.1.100\\nstop phone\\n"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
