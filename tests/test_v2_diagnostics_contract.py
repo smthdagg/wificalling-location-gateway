@@ -17,6 +17,15 @@ class V2DiagnosticsContractTests(unittest.TestCase):
         self.assertIn("tar -czf", source)
         self.assertIn("wloc-support-bundle.lock", source)
 
+    def test_raw_wloc_capture_is_opt_in_and_http_forwarding_has_no_dump(self):
+        init = (self.root / "openwrt/files/etc/init.d/wloc-service").read_text(encoding="utf-8")
+        proxy = (self.root / "src/mitm/proxy.rs").read_text(encoding="utf-8")
+        http1 = (self.root / "src/mitm/http1.rs").read_text(encoding="utf-8")
+        self.assertNotIn('"WLOC_DUMP_DIR=/tmp/wloc-dump"', init)
+        self.assertIn("WLOC_DEBUG_DUMP", proxy)
+        self.assertNotIn("/tmp/wloc-forward.dump", http1)
+        self.assertNotIn("wire_preview", http1)
+
     def test_support_bundle_is_installed_by_all_openwrt_package_paths(self):
         makefile = (self.root / "openwrt/Makefile").read_text(encoding="utf-8")
         standalone = (self.root / "scripts/build-luci-ipk.sh").read_text(encoding="utf-8")

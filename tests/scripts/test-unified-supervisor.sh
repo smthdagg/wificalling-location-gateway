@@ -27,6 +27,8 @@ grep -F 'multiple_profiles_configured' "$redirect" >/dev/null
 grep -F 'PROFILE_PROXY_READY_FILE' "$supervisor" >/dev/null
 grep -F 'PROFILE_ACTIVATE_FILE' "$supervisor" >/dev/null
 grep -F 'PROFILE_READY_FILE' "$supervisor" >/dev/null
+grep -F 'REFRESH_SET_HELPER' "$supervisor" >/dev/null
+grep -F 'refresh-set' "$supervisor" >/dev/null
 grep -F 'WLOC_PROFILE_ACTIVATE_FILE' "$repo_root/src/bin/wloc-service.rs" >/dev/null
 grep -F 'service.activate_profiles()' "$repo_root/src/bin/wloc-service.rs" >/dev/null
 grep -F 'WLOC_SKIP_REDIRECT' "$wloc_init" >/dev/null

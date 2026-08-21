@@ -299,8 +299,8 @@ impl MitmProxy {
         );
         // Debug aid: dump WLOC request/response samples so mismatched
         // response structures can be inspected on the device.
-        if is_wloc {
-            if let Ok(dir) = std::env::var("WLOC_DUMP_DIR") {
+        if is_wloc && std::env::var("WLOC_DEBUG_DUMP").as_deref() == Ok("1") {
+            if let Ok(dir) = std::env::var("WLOC_DEBUG_DUMP_DIR") {
                 dump_wloc_samples(&dir, &hostname, client_addr, &request_body, &body, &patched);
             }
         }
@@ -382,8 +382,11 @@ fn sanitized_forward_request(
 
 /// Patch the response body if this is a `/clls/wloc` response; otherwise, or
 /// on any patch failure, forward the original body unchanged (fail-open).
-/// Write one WLOC exchange (request / response / patched response) as raw
-/// files into `dir` for offline inspection.
+/// Write one explicitly enabled WLOC exchange for offline inspection.
+///
+/// This is never enabled by the production init script. The directory and
+/// files are private, bounded, and created without following pre-existing
+/// symlinks. Raw samples are intentionally excluded from normal diagnostics.
 pub(crate) fn dump_wloc_samples(
     dir: &str,
     hostname: &str,
@@ -396,25 +399,78 @@ pub(crate) fn dump_wloc_samples(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let _ = std::fs::create_dir_all(dir);
-    let safe = hostname.replace(['/', ':', '.'], "_");
+    let directory = std::path::Path::new(dir);
+    if !directory.is_absolute()
+        || directory
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return;
+    }
+    if let Ok(metadata) = std::fs::symlink_metadata(directory) {
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return;
+        }
+    }
+    if std::fs::create_dir_all(directory).is_err() {
+        return;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700));
+    }
+    let safe_host = safe_file_token(hostname);
+    let safe_client = safe_file_token(client_addr);
     write_bounded_sample(
-        &format!("{dir}/{stamp}_{client_addr}_{safe}_req.bin"),
+        &directory.join(format!("{stamp}_{safe_client}_{safe_host}_req.bin")),
         request,
     );
     write_bounded_sample(
-        &format!("{dir}/{stamp}_{client_addr}_{safe}_resp.bin"),
+        &directory.join(format!("{stamp}_{safe_client}_{safe_host}_resp.bin")),
         response,
     );
     write_bounded_sample(
-        &format!("{dir}/{stamp}_{client_addr}_{safe}_patched.bin"),
+        &directory.join(format!("{stamp}_{safe_client}_{safe_host}_patched.bin")),
         patched,
     );
 }
 
-fn write_bounded_sample(path: &str, bytes: &[u8]) {
+fn safe_file_token(value: &str) -> String {
+    let token: String = value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .take(64)
+        .collect();
+    if token.is_empty() {
+        "unknown".to_owned()
+    } else {
+        token
+    }
+}
+
+fn write_bounded_sample(path: &std::path::Path, bytes: &[u8]) {
     let end = bytes.len().min(MAX_DEBUG_SAMPLE_BYTES);
-    let _ = std::fs::write(path, &bytes[..end]);
+    use std::io::Write as _;
+    let Ok(mut file) = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+    else {
+        return;
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = file.set_permissions(std::fs::Permissions::from_mode(0o600));
+    }
+    let _ = file.write_all(&bytes[..end]);
 }
 
 fn maybe_patch_body(body: &[u8], is_wloc: bool, patch: Option<&PatchTarget>) -> Vec<u8> {

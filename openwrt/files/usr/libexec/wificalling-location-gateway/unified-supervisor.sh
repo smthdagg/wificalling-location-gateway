@@ -18,6 +18,7 @@ WLOC_INIT=${WLOC_INIT:-/etc/init.d/wloc-service}
 GATEWAY_INIT=${GATEWAY_INIT:-/etc/init.d/wificalling-gateway}
 REDIRECT_HELPER=${WLOC_REDIRECT_HELPER:-/usr/sbin/wloc-redirect-sync.sh}
 PROFILE_REDIRECT_HELPER=${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.sh}
+REFRESH_SET_HELPER=${WLOC_REFRESH_SET_HELPER:-/usr/sbin/wloc-refresh-set.sh}
 PROFILE_PROXY_READY_FILE=${WLOC_PROFILE_PROXY_READY_FILE:-/var/run/wloc-service/profiles/.proxy-ready}
 PROFILE_ACTIVATE_FILE=${WLOC_PROFILE_ACTIVATE_FILE:-/var/run/wloc-service/profiles/.activate}
 PROFILE_READY_FILE=${WLOC_PROFILE_READY_FILE:-/var/run/wloc-service/profiles/.ready}
@@ -100,6 +101,11 @@ install_redirect() {
 		"$REDIRECT_HELPER" legacy-stop
 		[ -x "$PROFILE_REDIRECT_HELPER" ] || return 1
 		"$PROFILE_REDIRECT_HELPER" route-start
+		# Never publish profile readiness with an empty destination set. DNS
+		# answers are refreshed before the daemon is authorized to install any
+		# profile redirect; failure keeps the system in passthrough.
+		[ -x "$REFRESH_SET_HELPER" ] || return 1
+		"$REFRESH_SET_HELPER" >/dev/null 2>&1 || return 1
 		: > "$PROFILE_ACTIVATE_FILE"
 		deadline=$(( $(now) + START_TIMEOUT ))
 		while [ ! -f "$PROFILE_READY_FILE" ]; do

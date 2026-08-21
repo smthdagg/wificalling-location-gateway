@@ -22,7 +22,6 @@ start_service() {
 		"WLOC_CA_CERT=/etc/wloc-service/ca.pem" \
 		"WLOC_CA_KEY=/etc/wloc-service/ca.key" \
 		"WLOC_PROXY_PORT=8443" \
-		"WLOC_DUMP_DIR=/tmp/wloc-dump" \
 		"WLOC_SUPERVISED=${WLOC_SUPERVISED:-0}" \
 		"WLOC_DEFER_REDIRECT=${WLOC_DEFER_REDIRECT:-0}"
 	if [ "${WLOC_SUPERVISED:-0}" != 1 ]; then
