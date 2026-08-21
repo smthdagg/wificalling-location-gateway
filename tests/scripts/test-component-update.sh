@@ -9,6 +9,11 @@ state="$tmp/state"
 mkdir -p "$root/etc/config" "$root/usr/share/wificalling-location-gateway" "$state" "$tmp/bin"
 printf 'old-config\n' > "$root/etc/config/wloc-service"
 printf 'old-component\n' > "$root/usr/share/wificalling-location-gateway/component.txt"
+cat > "$root/etc/openwrt_release" <<'EOF'
+DISTRIB_RELEASE='24.10.5'
+DISTRIB_TARGET='mediatek/mt7622'
+DISTRIB_ARCH='aarch64_cortex-a53'
+EOF
 printf '1.0.0-1\n' > "$state/current.version"
 
 cat > "$tmp/bin/opkg" <<'EOF'
@@ -57,6 +62,7 @@ make_ipk() {
     component=$2
     out=$3
     architecture=${4:-all}
+    target=${5:-mediatek/mt7622}
     package_dir="$tmp/package-$version-$component"
     rm -rf "$package_dir"
     mkdir -p "$package_dir/control" "$package_dir/data/etc/config" "$package_dir/data/usr/share/wificalling-location-gateway"
@@ -67,6 +73,7 @@ Architecture: $architecture
 X-WLOC-Product: wificalling-location-gateway/v2
 X-WLOC-Api: wloc.service/v2
 X-WLOC-OpenWrt: 24.10+
+X-WLOC-Target: $target
 X-WLOC-Package-Format: ipk
 EOF
     printf '%s\n' "$component" > "$package_dir/data/usr/share/wificalling-location-gateway/component.txt"
@@ -95,12 +102,15 @@ make_manifest() {
 old_package="$tmp/old.ipk"
 new_package="$tmp/new.ipk"
 bad_arch_package="$tmp/bad-arch.ipk"
+bad_target_package="$tmp/bad-target.ipk"
 make_ipk 1.0.0-1 old-component "$old_package"
 make_ipk 1.1.0-1 new-component "$new_package"
 make_ipk 1.1.0-1 bad-component "$bad_arch_package" mipsel
+make_ipk 1.1.0-1 bad-target "$bad_target_package" all x86/64
 make_manifest "$old_package"
 make_manifest "$new_package"
 make_manifest "$bad_arch_package"
+make_manifest "$bad_target_package"
 
 export WLOC_UPDATE_TEST_TMP="$tmp"
 export WLOC_UPDATE_ROOT="$root"
@@ -146,6 +156,10 @@ grep '^1.1.0-1$' "$state/current.version" >/dev/null
 
 if sh "$script" apply "$bad_arch_package"; then
     echo 'incompatible architecture was accepted' >&2
+    exit 1
+fi
+if sh "$script" apply "$bad_target_package"; then
+    echo 'incompatible firmware target was accepted' >&2
     exit 1
 fi
 if find "$tmp" -maxdepth 1 -type d -name 'wloc-update-check.*' -print -quit | grep -q .; then
