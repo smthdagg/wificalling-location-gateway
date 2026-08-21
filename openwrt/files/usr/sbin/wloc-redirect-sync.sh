@@ -16,6 +16,20 @@ CHAIN=prerouting
 PROXY_PORT="${WLOC_PROXY_PORT:-8443}"
 FWMARK=1
 ROUTE_TABLE=100
+action=${1:-start}
+
+if [ "$action" = stop ]; then
+	# Only remove the WLOC-owned table, policy route, and DNS marker. The
+	# stable Gateway 1.7 nftables table (and UDP 500/4500 handling) is never
+	# touched by this cleanup path.
+	nft delete table inet "$TABLE" 2>/dev/null || true
+	ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
+	ip route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+	for hosts_file in ${WLOC_HOSTS_FILES:-/etc/hosts\ /tmp/hosts/wloc-hosts}; do
+		sed -i '/# wloc-service DNS hijack (do not edit)/,/^# wloc-service end/d' "$hosts_file" 2>/dev/null || true
+	done
+	exit 0
+fi
 
 # Collect the LAN IPs of every device in the gateway device policy.
 ips=$(uci -q show wificalling-gateway \
@@ -53,7 +67,7 @@ HOSTS_MARKER='# wloc-service DNS hijack (do not edit)'
 # dnsmasq reads addn-hosts from the /tmp/hosts directory on this build;
 # /etc/hosts is kept as a fallback.
 mkdir -p /tmp/hosts
-for hosts_file in /etc/hosts /tmp/hosts/wloc-hosts; do
+for hosts_file in ${WLOC_HOSTS_FILES:-/etc/hosts\ /tmp/hosts/wloc-hosts}; do
     sed -i "/$HOSTS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
     cat >> "$hosts_file" <<EOF
 $HOSTS_MARKER

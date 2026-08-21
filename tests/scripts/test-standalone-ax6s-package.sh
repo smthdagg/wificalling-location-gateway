@@ -113,18 +113,26 @@ printf '%s\n' "$postinst" | grep -F 'mkdir -p /var/run/wificalling-gateway' >/de
 printf '%s\n' "$postinst" | grep -F 'chmod 0700 /var/run/wificalling-gateway' >/dev/null ||
 	fail 'standalone post-install must restrict the Gateway runtime directory'
 runtime_line=$(printf '%s\n' "$postinst" | grep -n -F 'mkdir -p /var/run/wificalling-gateway' | cut -d: -f1)
-restart_line=$(printf '%s\n' "$postinst" | grep -n -F '/etc/init.d/wificalling-gateway restart' | cut -d: -f1)
+restart_line=$(printf '%s\n' "$postinst" | grep -n -F '/etc/init.d/wificalling-location-gateway restart' | cut -d: -f1)
 [ "$runtime_line" -lt "$restart_line" ] ||
 	fail 'standalone post-install must create the Gateway runtime directory before restart'
+printf '%s\n' "$postinst" | grep -F '/etc/init.d/wificalling-gateway disable' >/dev/null ||
+	fail 'standalone post-install must disable the legacy Gateway owner'
+printf '%s\n' "$postinst" | grep -F '/etc/init.d/wloc-service disable' >/dev/null ||
+	fail 'standalone post-install must disable the legacy WLOC owner'
+printf '%s\n' "$postinst" | grep -F '/etc/init.d/wificalling-location-gateway enable' >/dev/null ||
+	fail 'standalone post-install must enable the unified supervisor'
 printf '%s\n' "$postinst" | grep -F 'rm -f /tmp/luci-indexcache.*' >/dev/null ||
 	fail 'standalone post-install must invalidate every LuCI menu cache variant'
 for member in \
 	'./etc/config/wificalling-gateway' \
 	'./etc/init.d/wificalling-gateway' \
+	'./etc/init.d/wificalling-location-gateway' \
 	'./etc/config/wloc-service' \
 	'./etc/init.d/wloc-service' \
 	'./usr/sbin/wloc-service' \
-	'./usr/sbin/wloc-ctl'; do
+	'./usr/sbin/wloc-ctl' \
+	'./usr/libexec/wificalling-location-gateway/unified-supervisor.sh'; do
 	printf '%s\n' "$data_members" | grep -Fx "$member" >/dev/null ||
 		fail "standalone package is missing $member"
 done

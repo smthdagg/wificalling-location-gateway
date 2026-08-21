@@ -175,6 +175,10 @@ PY
 			cp "$root/openwrt/files/usr/sbin/wloc-redirect-sync.sh" "$stage/data/usr/sbin/wloc-redirect-sync.sh"
 			cp "$root/openwrt/files/usr/sbin/wloc-refresh-set.sh" "$stage/data/usr/sbin/wloc-refresh-set.sh"
 			cp "$root/openwrt/files/usr/sbin/wloc-health.sh" "$stage/data/usr/sbin/wloc-health.sh"
+			mkdir -p "$stage/data/etc/init.d" "$stage/data/usr/libexec/wificalling-location-gateway"
+			cp "$root/openwrt/files/etc/init.d/wificalling-location-gateway" "$stage/data/etc/init.d/wificalling-location-gateway"
+			cp "$root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \
+				"$stage/data/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
 			cp "$service_bin" "$stage/data/usr/sbin/wloc-service"
 			cp "$ctl_bin" "$stage/data/usr/sbin/wloc-ctl"
 			chmod 0755 "$stage/data/etc/init.d/wloc-service" "$stage/data/usr/sbin/"*
@@ -188,14 +192,14 @@ PY
 			cat > "$stage/control/postinst" <<'POSTINST'
 #!/bin/sh
 [ -n "${IPKG_INSTROOT:-}" ] && exit 0
-/etc/init.d/wificalling-gateway enable >/dev/null 2>&1 || true
-/etc/init.d/wloc-service enable >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway disable >/dev/null 2>&1 || true
+/etc/init.d/wloc-service disable >/dev/null 2>&1 || true
+/etc/init.d/wificalling-location-gateway enable >/dev/null 2>&1 || true
 killall -q wloc-service >/dev/null 2>&1 || true
 rm -f /var/run/wloc-service/control.sock
 mkdir -p /var/run/wificalling-gateway
 chmod 0700 /var/run/wificalling-gateway
-/etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || true
-/etc/init.d/wloc-service restart >/dev/null 2>&1 || true
+/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1 || true
 rm -f /tmp/luci-indexcache.*
 /etc/init.d/rpcd reload >/dev/null 2>&1 || true
 exit 0
