@@ -921,7 +921,7 @@ config device
         let fake_bin = dir.join("wloc-fake-singbox.sh");
         std::fs::write(
             &fake_bin,
-            "#!/bin/sh\nwhile true; do echo 'lookup bad-node.invalid: empty result' >&2; sleep 1; done\n",
+            "#!/bin/sh\nprintf '%s\\n' 'lookup bad-node.invalid: empty result' >&2\nexec sleep 30\n",
         )
         .unwrap();
         let mut perms = std::fs::metadata(&fake_bin).unwrap().permissions();
