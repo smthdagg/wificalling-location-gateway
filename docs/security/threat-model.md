@@ -4,7 +4,8 @@ Status: Historical Phase 0 canonical security specification. Its threat
 invariants remain applicable, while the V2 implementation and release status
 are governed by `DEVELOPMENT_TEST_PLAN.md`, the current OpenWrt/Rust tests, and
 the redacted AX6S evidence template. This document does not itself prove live
-device acceptance.
+device acceptance. The Phase 0 approval was for offline documentation and tests only; that historical restriction must not be read as evidence that the
+current V2 implementation is absent.
 
 This model covers one explicitly authorized test device and LAN, the isolated WLOC component, its future router integration boundary, and its upstream dependencies. It intentionally does not describe Apple private protocol fields.
 
