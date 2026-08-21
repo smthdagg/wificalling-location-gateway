@@ -61,6 +61,13 @@ return view.extend({
 			}
 		}
 		function lines(value) { return value.trim() ? value.trim().split('\n').reverse() : []; }
+		function eventFields(line) {
+			try {
+				var event = JSON.parse(line), fields = event.fields || {};
+				if (event.event_code) return [event.timestamp || 0, event.profile_scope || '-', '-', event.event_code, fields.delta_sent || 0, fields.delta_reply || 0, 'call_or_sms_unknown', fields.state || '-'];
+			} catch (e) {}
+			return line.split('|');
+		}
 
 		/* ---------- 设备隧道状态 ---------- */
 		var statusBody = E('tbody', {}, []);
@@ -79,7 +86,7 @@ return view.extend({
 		var logBody = E('tbody', {}, []);
 		function logRows(value) {
 			return lines(value).map(function(line) {
-				var f = line.split('|');
+				var f = eventFields(line);
 				return E('tr', { class: 'tr' }, [when(Number(f[0])), f[1], f[2], wfcLabel(f[7]), activityLabel(f[3]), (f[4] || '0') + ' ↑ / ' + (f[5] || '0') + ' ↓', meaningLabel(f[6])].map(function(x) { return E('td', { class: 'td' }, String(x)); }));
 			});
 		}

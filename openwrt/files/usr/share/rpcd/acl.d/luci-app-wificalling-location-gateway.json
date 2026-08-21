@@ -45,6 +45,7 @@
           "regen_ca",
           "restart_service",
           "restart_unified",
+          "support_bundle",
           "verify_fingerprint",
           "node_test",
           "restart_gateway",

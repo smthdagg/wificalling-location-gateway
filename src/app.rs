@@ -312,13 +312,18 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             ),
         };
         let event = serde_json::json!({
-            "type": "target_updated",
-            "time": current_unix(),
-            "source": source,
-            "country_code": country,
-            "city": city,
-            "latitude": target.map(|t| t.latitude),
-            "longitude": target.map(|t| t.longitude),
+            "timestamp": current_unix(),
+            "component": "wloc",
+            "profile_scope": "service",
+            "severity": "info",
+            "event_code": "target_updated",
+            "message": "WLOC target state updated",
+            "fields": {
+                "source": source,
+                "country_code": country,
+                "city": city,
+                "target_present": target.is_some(),
+            },
         });
         append_line(events_file, &event);
     }

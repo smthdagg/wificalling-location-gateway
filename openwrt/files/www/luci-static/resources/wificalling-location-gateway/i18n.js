@@ -87,6 +87,11 @@ var ZH = {
 	'WLOC service': 'WLOC 服务',
 	'Wi-Fi Calling Gateway': 'Wi-Fi 通话网关',
 	'Patches and node health': '补丁与节点健康',
+	'Support bundle ready': '支持包已生成',
+	'Support bundle failed': '支持包生成失败',
+	'Generate support bundle': '生成支持包',
+	'Support bundles contain bounded redacted diagnostics only; copy the generated file from /tmp before it expires.':
+		'支持包只包含有上限且已脱敏的诊断信息；请在过期前从 /tmp 复制生成的文件。',
 
 	/* ---- wloc settings ---- */
 	'WLOC location interception: spoofs the Apple WLOC response so the test device reports the gateway-chosen location. GPS values stay on this router.':

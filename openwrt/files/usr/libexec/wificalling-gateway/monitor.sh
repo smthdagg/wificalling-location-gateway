@@ -88,19 +88,19 @@ END {
     printf "\"sent_packets\":%d,\"reply_packets\":%d,\"delta_sent\":%d,\"delta_reply\":%d,\"last_activity\":%d,\"activity_evidence\":%s}", sent[i]+0,reply[i]+0,ds,dr,last,q(activity)
     if (log_enabled) {
       if (handshake_success && now-old_event[i]>=15) {
-        print now "|" label[i] "|" ip[i] "|handshake_success|" ds "|" dr "|call_or_sms_unknown|" wfc > event_out
+        printf "{\"timestamp\":%d,\"component\":\"gateway\",\"profile_scope\":\"device-policy\",\"severity\":\"info\",\"event_code\":\"handshake_success\",\"message\":\"Wi-Fi Calling handshake succeeded\",\"fields\":{\"state\":\"%s\",\"delta_sent\":%d,\"delta_reply\":%d}}\n", now, wfc, ds, dr > event_out
         old_event[i]=now; acc_sent=0; acc_reply=0
       } else if (handshake_failed && now-old_event[i]>=15) {
         # A flapping device state (registered <-> not_detected within a
         # second) used to write a handshake event on every flip, flooding
         # the log. Debounce to at most one handshake event per 15s.
-        print now "|" label[i] "|" ip[i] "|handshake_failed|" ds "|" dr "|call_or_sms_unknown|" wfc > event_out
+        printf "{\"timestamp\":%d,\"component\":\"gateway\",\"profile_scope\":\"device-policy\",\"severity\":\"warning\",\"event_code\":\"handshake_failed\",\"message\":\"Wi-Fi Calling handshake was not detected\",\"fields\":{\"state\":\"%s\",\"delta_sent\":%d,\"delta_reply\":%d}}\n", now, wfc, ds, dr > event_out
         old_event[i]=now; acc_sent=0; acc_reply=0
       } else if (sustained) {
         # Sustained bidirectional traffic after registration is the
         # signature of a voice call (ringing or in-call RTP); the tunnel
         # content stays encrypted, so this is an inference, not a decode.
-        print now "|" label[i] "|" ip[i] "|sustained_traffic|" acc_sent "|" acc_reply "|likely_call|" wfc > event_out
+        printf "{\"timestamp\":%d,\"component\":\"gateway\",\"profile_scope\":\"device-policy\",\"severity\":\"info\",\"event_code\":\"sustained_traffic\",\"message\":\"Sustained encrypted traffic observed\",\"fields\":{\"state\":\"%s\",\"delta_sent\":%d,\"delta_reply\":%d}}\n", now, wfc, acc_sent, acc_reply > event_out
         old_event[i]=now; acc_sent=0; acc_reply=0
       }
     }
