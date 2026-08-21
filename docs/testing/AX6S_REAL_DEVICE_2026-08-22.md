@@ -9,35 +9,36 @@ package, UCI file, init script, or runtime dependency was installed.
 
 - Firmware family: ImmortalWrt 24.10.6, kernel 6.6.x, MediaTek MT7622,
   AArch64/cortex-a53.
-- Old WLOC package: the installed `2.0.0-1` release candidate was stopped,
-  disabled, and removed before the rebuilt `2.0.0-1` package was installed, as
-  required for the small overlay. The modified UCI conffile was preserved by
-  opkg and the pre-install UCI/CA backups remain under the router's temporary
-  backup directory.
+- Old WLOC packages were stopped, disabled, and removed before each final
+  install (`2.0.0-1`, then the iterative validation packages), as required for
+  the small overlay. The modified UCI conffile was preserved by opkg and the
+  pre-install UCI/CA backups remain under the router's temporary backup
+  directory.
 - Provider packages: system sing-box and PassWall were retained; no second
   full-size sing-box binary was installed.
 - Tested standalone package family: `wificalling-location-gateway`,
-  `aarch64_cortex-a53`, firmware target `mediatek/mt7622`. The real-device
-  baseline was 2.0.0-14; transactional update evidence used 2.0.0-17 -> 2.0.0-18
-  and an injected health-failure target 2.0.0-19 -> automatic rollback to
-  2.0.0-18. The rebuilt release candidate `2.0.0-1` was then installed after
-  removing the prior package and passed the service, API, provider, health,
-  restart, target-metadata, and standalone-boundary checks.
+  `aarch64_cortex-a53`, firmware target `mediatek/mt7622`. Transactional update
+  evidence used 2.0.0-17 -> 2.0.0-18 and an injected health-failure target
+  2.0.0-19 -> automatic rollback to 2.0.0-18. The final rebuilt package
+  `2.0.0-24` was installed after removing the previous package and passed the
+  service, API, provider, health, restart, target-metadata, and
+  standalone-boundary checks.
 - The WLOC UCI profile and CA backups were taken before removal. The final
   provider path uses PassWall's persistent generated configuration under
   `/var/etc/passwall`; the provider process itself remains PassWall-owned.
 
 ## Resource observations
 
-- Persistent storage: 87,620 KiB total; 13,836 KiB free after the rebuilt
-  package and configuration backup were present.
-- Temporary storage: 121,128 KiB total; 32,780 KiB free after installation.
-- Memory: 242,260 KiB total; 23,248 KiB available in the final steady-state
+- Persistent storage: 87,620 KiB total; 15,508 KiB free after final package
+  installation and configuration backup were present.
+- Temporary storage: 121,128 KiB total; 26,976 KiB free after final
+  installation.
+- Memory: 242,260 KiB total; 20,044 KiB available in the final steady-state
   snapshot; no swap configured.
 - WLOC RSS: 1,952 KiB, three threads.
 - Reused PassWall sing-box RSS: 30,176 KiB, eight threads; no duplicate WLOC
   provider process was launched.
-- The final AX6S package itself is 1,445,912 bytes and the AArch64 WLOC service
+- The final AX6S package itself is 1,448,513 bytes and the AArch64 WLOC service
   binary is 2,035,872 bytes; the OpenWrt cross-build gate also
   reported static AArch64 ELF with no dynamic dependency.
 
@@ -54,6 +55,9 @@ package, UCI file, init script, or runtime dependency was installed.
 | Profile manual/auto/manual persistence through the control API | pass |
 | Service stop withdraws the WLOC table (fail-open) | pass |
 | Service restart restores the WLOC table | pass |
+| Three-profile runtime creates isolated `default/phone/tablet` tables | pass |
+| Multi-profile handler activation keeps all enabled profiles intercepting | pass |
+| Multi-profile status maps the explicit `default` profile to its own table | pass |
 | Provider configuration check using persistent PassWall path | pass |
 | Missing provider config after reboot keeps redirect withdrawn | pass |
 | Delayed PassWall config generation auto-recovers WLOC | pass |
@@ -95,6 +99,11 @@ package, UCI file, init script, or runtime dependency was installed.
    `DISTRIB_TARGET='mediatek/mt7622'`, and the release package carries the same
    `X-WLOC-Target` value. Host regression coverage also rejects an `x86/64`
    package against the AX6S target.
+9. The first real multi-profile run exposed a handler lifecycle mismatch: the
+   shared ProfileRuntimeManager owned the nft table, while each profile handler
+   still reported its redirect as absent. The handler now tracks a local
+   logical redirect state, and the status projection distinguishes legacy
+   singleton `default` from an explicit multi-profile `default` table.
 
 ## Component update evidence
 
@@ -124,7 +133,7 @@ matrix installed and started all four cases: AX6S/OpenWrt 24.10.5,
 OpenWrt 24.10.8 x86_64, OpenWrt 25.12.3 x86_64, and iStoreOS 24.10.5 x86_64.
 The exact host-side package hashes are recorded in the release staging
 directory's `SHA256SUMS`; the rebuilt AX6S package hash is
-`90762e2453ffae11341fef6caa42bef379ba52a9599d5aeb73bcc0a2952f231f` and was
+`d6d583f728ff8e65083accdee4a7fa754dc30f8134c4d47cdab60bd1563d167f` and was
 verified again on the router before installation. Publication still requires
 the release signing key and explicit external release approval.
 

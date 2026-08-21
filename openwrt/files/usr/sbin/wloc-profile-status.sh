@@ -46,6 +46,13 @@ sections=$(uci -q show wloc-service 2>/dev/null \
 	| sed -n 's/^wloc-service\.\([a-z0-9_]*\)=device$/\1/p' \
 	| head -n "$MAX_PROFILES" || true)
 legacy_singleton=0
+profile_count=$(printf '%s\n' "$sections" | sed '/^$/d' | wc -l | tr -d ' ')
+if [ "$profile_count" -eq 1 ] && [ "$sections" = default ]; then
+	# The daemon keeps the legacy redirect table for a singleton, even when
+	# LuCI has materialized that singleton as an explicit `device default` UCI
+	# section during migration.
+	legacy_singleton=1
+fi
 if [ -z "$sections" ]; then
 	# Keep the v1 singleton visible during migration without returning its
 	# address. It is not treated as a v2 device section by the parser.
