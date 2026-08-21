@@ -149,7 +149,7 @@ return view.extend({
 			}).then(function(result) {
 				if (result && result.error) throw new Error(result.error);
 				notify(wlocI18n.t('Applied'), wlocI18n.t('Unified Gateway/WLOC supervisor restarted.'));
-				return getHealth().then(refreshHealth);
+				return L.resolveDefault(getHealth(), {}).then(refreshHealth);
 			}).catch(function(error) {
 				notify(wlocI18n.t('Apply failed'), String(error), 'error');
 				return false;
