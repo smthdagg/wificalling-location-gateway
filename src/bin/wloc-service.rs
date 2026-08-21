@@ -13,7 +13,7 @@ use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use wificalling_location_gateway::app::{WlocService, WlocServiceConfig};
-use wificalling_location_gateway::config::{LocationMode, RuntimeProfile, WlocUciConfig};
+use wificalling_location_gateway::config::{DeviceProfile, LocationMode, RuntimeProfile, WlocUciConfig};
 use wificalling_location_gateway::exitprobe::runtime::{ExitProbeRuntime, ProbeFailure};
 use wificalling_location_gateway::exitprobe::{NodeRef, ProbeLimits};
 use wificalling_location_gateway::georesolver::http::GeoHttpClient;
@@ -24,6 +24,9 @@ use wificalling_location_gateway::mitm::CaBundle;
 use wificalling_location_gateway::service::api::RequestParams;
 use wificalling_location_gateway::service::control::{RuntimeControl, RuntimeFailure};
 use wificalling_location_gateway::service::dispatch::ServiceDispatch;
+use wificalling_location_gateway::service::profile_runtime::{
+    ProfileRuntimeControl, ProfileRuntimeError,
+};
 use wificalling_location_gateway::service::server::ControlServer;
 use wificalling_location_gateway::service::GeoRecord;
 use wificalling_location_gateway::wloc::PatchTarget;
@@ -92,6 +95,7 @@ fn runtime_scope_valid(config_valid: bool, profile: &RuntimeProfile) -> bool {
 /// terminate itself.
 struct OpenWrtRuntime {
     redirect_helper: std::path::PathBuf,
+    profile_redirect_helper: std::path::PathBuf,
     nft_binary: std::path::PathBuf,
     defer_first_redirect: bool,
 }
@@ -103,6 +107,9 @@ impl OpenWrtRuntime {
                 .unwrap_or_else(|_| "/usr/sbin/wloc-redirect-sync.sh".to_owned()),
             std::env::var("WLOC_NFT_BINARY").unwrap_or_else(|_| "nft".to_owned()),
         );
+        runtime.profile_redirect_helper = std::env::var("WLOC_PROFILE_REDIRECT_HELPER")
+            .unwrap_or_else(|_| "/usr/sbin/wloc-profile-redirect.sh".to_owned())
+            .into();
         runtime.defer_first_redirect = std::env::var("WLOC_DEFER_REDIRECT").as_deref() == Ok("1");
         runtime
     }
@@ -111,8 +118,10 @@ impl OpenWrtRuntime {
         redirect_helper: impl Into<std::path::PathBuf>,
         nft_binary: impl Into<std::path::PathBuf>,
     ) -> Self {
+        let redirect_helper = redirect_helper.into();
         Self {
-            redirect_helper: redirect_helper.into(),
+            profile_redirect_helper: redirect_helper.clone(),
+            redirect_helper,
             nft_binary: nft_binary.into(),
             defer_first_redirect: false,
         }
@@ -129,6 +138,28 @@ impl OpenWrtRuntime {
             .status()
             .map_err(|_| RuntimeFailure)
             .and_then(|status| status.success().then_some(()).ok_or(RuntimeFailure))
+    }
+
+    fn run_profile_redirect(
+        &self,
+        action: &str,
+        profile_id: &str,
+        assigned_device: Option<&str>,
+    ) -> Result<(), ProfileRuntimeError> {
+        let mut command = std::process::Command::new(&self.profile_redirect_helper);
+        command.arg(action).arg(profile_id);
+        if let Some(device) = assigned_device {
+            command.arg(device);
+        }
+        command
+            .status()
+            .map_err(|_| ProfileRuntimeError::RedirectInstall)
+            .and_then(|status| {
+                status
+                    .success()
+                    .then_some(())
+                    .ok_or(ProfileRuntimeError::RedirectInstall)
+            })
     }
 }
 
@@ -167,6 +198,47 @@ impl RuntimeControl for OpenWrtRuntime {
     }
     fn stop_engine(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
+    }
+}
+
+impl ProfileRuntimeControl for OpenWrtRuntime {
+    fn ensure_shared_engine(&mut self) -> Result<(), ProfileRuntimeError> {
+        // The unified supervisor owns the single Gateway/WLOC process set.
+        Ok(())
+    }
+
+    fn shared_engine_healthy(&mut self) -> Result<bool, ProfileRuntimeError> {
+        // The supervisor has already admitted the service before profile
+        // redirects are installed. A future health adapter can tighten this
+        // gate without changing the profile state machine.
+        Ok(true)
+    }
+
+    fn install_profile_redirect(
+        &mut self,
+        profile: &DeviceProfile,
+    ) -> Result<(), ProfileRuntimeError> {
+        let address = profile
+            .assigned_device
+            .as_deref()
+            .filter(|address| address.parse::<std::net::Ipv4Addr>().is_ok())
+            .ok_or(ProfileRuntimeError::UnsupportedDevice)?;
+        self.run_profile_redirect("start", &profile.id, Some(address))
+    }
+
+    fn remove_profile_redirect(&mut self, profile_id: &str) -> Result<(), ProfileRuntimeError> {
+        self.run_profile_redirect("stop", profile_id, None)
+    }
+
+    fn profile_redirect_present(
+        &mut self,
+        profile_id: &str,
+    ) -> Result<bool, ProfileRuntimeError> {
+        let status = std::process::Command::new(&self.profile_redirect_helper)
+            .args(["status", profile_id])
+            .status()
+            .map_err(|_| ProfileRuntimeError::CleanupUnsafe)?;
+        Ok(status.success())
     }
 }
 
@@ -838,7 +910,7 @@ mod tests {
 
         assert_eq!(
             std::fs::read_to_string(&log).unwrap(),
-            "start phone 192.168.1.100\\nstop phone\\n"
+            "start phone 192.168.1.100\nstop phone\n"
         );
         let _ = std::fs::remove_dir_all(root);
     }
