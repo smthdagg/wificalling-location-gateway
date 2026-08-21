@@ -31,7 +31,6 @@ The installed contract is
 | Caches combined | 1 MiB | package contract and device checklist |
 | Profiles | 8 | existing profile model and package contract |
 | Startup | 10 s | resource report gate when supplied |
-| Idle RSS | 25 MiB | resource report gate when supplied |
 | Peak RSS | 35 MiB | resource report gate when supplied |
 | Probe CPU | 30% | resource report gate when supplied |
 
@@ -43,18 +42,24 @@ model, and bounded restart policy remain stricter component-level limits.
 | Stage | Command | Result |
 |---|---|---|
 | RED | `sh tests/scripts/test-resource-budgets.sh` before the contract/harness existed | PASSING RED condition: missing budget/harness caused exit 1 |
-| GREEN | `sh tests/scripts/test-resource-budgets.sh` | PASS; report schema and oversized-binary rejection exercised |
+| GREEN | `sh tests/scripts/test-resource-budgets.sh` | PASS; report/package schema, procfs path where available, and oversized binary/package/resource rejection exercised |
 | GREEN | `cargo build --locked --release --bins && ./scripts/ci/verify-resource-budgets.sh` | PASS; combined runtime binaries: 2,892,256 bytes |
 | Syntax | `sh -n scripts/ci/*.sh tests/scripts/test-resource-budgets.sh` | PASS |
 
 The total runtime size is a local measurement of the current release build,
-not AX6S RSS evidence. The complete repository gate runs this contract after
-building all release binaries.
+not AX6S RSS evidence. Idle RSS remains an AX6S observation recorded in the
+evidence template; the portable gate enforces peak RSS because it is the
+portable upper-bound signal available across host and target profilers. The
+complete repository gate runs this contract after building all release
+binaries. The release package builder invokes `verify-package-budget.sh` for
+each generated IPK/APK, so package size is checked against the same installed
+contract when a real package exists.
 
 ## AX6S acceptance gap
 
 Hardware acceptance is intentionally not claimed in this change until an
 actual staging AX6S is available. Fill
 `docs/testing/AX6S_RESOURCE_EVIDENCE.template.md` using the target-side
-`scripts/ci/profile-resource.sh` or an equivalent BusyBox-compatible capture,
+`scripts/ci/profile-resource.sh` (which has a `/proc` fallback and does not
+require GNU time or Python 3) or an equivalent BusyBox-compatible capture,
 then attach only redacted aggregate values to the Issue/PR.

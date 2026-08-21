@@ -38,7 +38,8 @@ the source repository remains isolated and does not vendor the Gateway source.
 
 The package installs a machine-readable V2 budget at
 `/usr/share/wificalling-location-gateway/resource-budget.conf`. CI enforces
-the combined release-binary ceiling and can enforce a supplied package or
-runtime report. AX6S RSS/CPU/startup and update/rollback measurements must be
+the combined release-binary ceiling and supplied package/runtime reports;
+release packaging invokes the package check for each output artifact. AX6S
+idle RSS, peak RSS, CPU/startup, and update/rollback measurements must be
 recorded with the redacted evidence template before persistent deployment is
 accepted.

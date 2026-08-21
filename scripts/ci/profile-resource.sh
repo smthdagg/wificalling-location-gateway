@@ -24,17 +24,72 @@ parent=${report%/*}
 tmp=$(mktemp "${TMPDIR:-/tmp}/wloc-resource-time.XXXXXX")
 trap 'rm -f "$tmp"' EXIT HUP INT TERM
 time_bin=
-for candidate in /usr/bin/time "$(command -v gtime 2>/dev/null || true)"; do
-	if [ -x "$candidate" ] && "$candidate" -f '%e' true >/dev/null 2>/dev/null; then
-		time_bin=$candidate
-		break
-	fi
-done
+if [ "${WLOC_RESOURCE_FORCE_PROCFS:-0}" != 1 ]; then
+	for candidate in /usr/bin/time "$(command -v gtime 2>/dev/null || true)"; do
+		if [ -x "$candidate" ] && "$candidate" -f '%e' true >/dev/null 2>/dev/null; then
+			time_bin=$candidate
+			break
+		fi
+	done
+fi
 if [ -z "$time_bin" ]; then
-	python3=$(command -v python3 || true)
-	[ -n "$python3" ] || { echo 'profile-resource: GNU time or Python 3 is required' >&2; exit 127; }
-	exec "$python3" "$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)/profile-resource.py" \
-		--report "$report" -- "$@"
+	python3=
+	if [ "${WLOC_RESOURCE_FORCE_PROCFS:-0}" != 1 ]; then
+		python3=$(command -v python3 || true)
+	fi
+	if [ -n "$python3" ]; then
+		exec "$python3" "$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)/profile-resource.py" \
+			--report "$report" -- "$@"
+	fi
+	[ -r /proc/self/status ] && [ -r /proc/self/stat ] || {
+		echo 'profile-resource: GNU time, Python 3, or procfs is required' >&2
+		exit 127
+	}
+
+	proc_ticks() {
+		awk '{ print $14 + $15 }' "/proc/$1/stat" 2>/dev/null || printf '0\n'
+	}
+	proc_rss_kib() {
+		awk '/^VmRSS:/ { print $2; exit }' "/proc/$1/status" 2>/dev/null || printf '0\n'
+	}
+
+	set +e
+	"$@" >/dev/null 2>&1 &
+	pid=$!
+	started=$(date +%s)
+	start_ticks=$(proc_ticks "$pid")
+	last_ticks=$start_ticks
+	peak_rss_kib=$(proc_rss_kib "$pid")
+	case "$peak_rss_kib" in ''|*[!0-9]*) peak_rss_kib=0 ;; esac
+	while kill -0 "$pid" 2>/dev/null; do
+		rss=$(proc_rss_kib "$pid")
+		case "$rss" in ''|*[!0-9]*) rss=0 ;; esac
+		[ "$rss" -gt "$peak_rss_kib" ] && peak_rss_kib=$rss
+		last_ticks=$(proc_ticks "$pid")
+		sleep 1
+	done
+	wait "$pid"
+	command_status=$?
+	ended=$(date +%s)
+	set -e
+
+	elapsed_seconds=$((ended - started))
+	[ "$elapsed_seconds" -gt 0 ] || elapsed_seconds=1
+	hz=$(getconf CLK_TCK 2>/dev/null || printf '100\n')
+	case "$hz" in ''|*[!0-9]*) hz=100 ;; esac
+	delta_ticks=$((last_ticks - start_ticks))
+	[ "$delta_ticks" -gt 0 ] || delta_ticks=0
+	cpu_percent=$((delta_ticks * 100 / (elapsed_seconds * hz)))
+	if [ "$command_status" -eq 0 ]; then status=pass; else status=fail; fi
+	umask 077
+	{
+		printf 'status=%s\n' "$status"
+		printf 'elapsed_ms=%s\n' "$((elapsed_seconds * 1000))"
+		printf 'peak_rss_kib=%s\n' "$peak_rss_kib"
+		printf 'cpu_percent=%s\n' "$cpu_percent"
+		printf 'command_status=%s\n' "$command_status"
+	} > "$report"
+	exit "$command_status"
 fi
 set +e
 "$time_bin" -f 'elapsed_seconds=%e\npeak_rss_kib=%M\ncpu_percent_raw=%P\n' \

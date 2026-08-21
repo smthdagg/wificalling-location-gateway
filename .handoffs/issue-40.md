@@ -4,7 +4,7 @@
 
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test
-- Branch: codex/issue-40-ax6s-resource-gates-codex-v2-lead-20260821112742-7cdc1a0b
+- Branch: codex/issue-40-ax6s-resource-gates-review-codex-v2-lead-20260821114718-3db18a06
 - Final local checkpoint before handoff: pending independent review, CI, and AX6S hardware evidence
 - Credentials included: no
 
@@ -19,11 +19,12 @@ measurement template. Do not claim real-device measurements from the host.
 - Added versioned resource metadata to both canonical OpenWrt package source
   trees: combined release binary, integrated package, persistent state, log,
   cache, profile count, startup, RSS, and CPU ceilings.
-- Added portable `profile-resource.sh` plus Python fallback. Reports contain
-  only bounded status, elapsed time, peak RSS, CPU, and command status fields.
+- Added portable `profile-resource.sh` plus Python and procfs fallbacks. Reports
+  contain only bounded status, elapsed time, peak RSS, CPU, and command status
+  fields.
 - Added `verify-resource-budgets.sh` to reject missing/irregular artifacts,
-  oversized runtime binaries, oversized optional package artifacts, and
-  out-of-budget resource reports.
+  oversized runtime binaries, failed commands, and out-of-budget resource
+  reports; added `verify-package-budget.sh` for each actual IPK/APK output.
 - Installed the budget metadata through the canonical OpenWrt Makefile and
   documented the contract in the OpenWrt package README and development test
   plan.
@@ -33,7 +34,8 @@ measurement template. Do not claim real-device measurements from the host.
 - Added resource checks to the normal repository verification path and changed
   release compilation to build all runtime binaries before the size gate.
 - Added package artifact and resource-report assertions to the regression test;
-  oversized runtime artifacts are rejected.
+  oversized runtime/package artifacts, failed reports, RSS, CPU, and startup
+  reports are rejected.
 
 ## Files changed
 
@@ -44,8 +46,10 @@ measurement template. Do not claim real-device measurements from the host.
 - `scripts/ci/profile-resource.py`
 - `scripts/ci/profile-resource.sh`
 - `scripts/ci/verify-resource-budgets.sh`
+- `scripts/ci/verify-package-budget.sh`
 - `scripts/ci/verify-rust.sh`
 - `scripts/ci/verify.sh`
+- `scripts/openwrt/build-release-packages.sh`
 - `tests/scripts/resource-fixture.sh`
 - `tests/scripts/test-resource-budgets.sh`
 - `DEVELOPMENT_TEST_PLAN.md`
@@ -75,6 +79,13 @@ measurement template. Do not claim real-device measurements from the host.
   gate; product CPU acceptance remains an AX6S hardware measurement.
 - The handoff checker initially rejected the title `TDD and verification`;
   it was renamed to the required `Verification` heading.
+- The first resource design declared an idle RSS hard ceiling without a
+  portable collector; the unimplemented key was removed from the machine
+  contract and idle RSS is now explicitly a redacted AX6S observation.
+- Package size was initially only optional in the generic runtime gate; a
+  dedicated package gate is now invoked for every release IPK/APK.
+- The profiler initially required GNU time or Python 3 on target; a lightweight
+  `/proc` sampler now covers small Linux/OpenWrt images.
 - The local commit hook reports `lefthook` unavailable in PATH; repository
   verification itself passed.
 
@@ -84,7 +95,8 @@ measurement template. Do not claim real-device measurements from the host.
   usage, restart/reload, update/rollback, and low-space behavior must still be
   measured on the actual staging router using the redacted template before
   claiming V2-08 complete or enabling a persistent release rollout.
-- CI enforces deterministic artifact/package/report gates. It intentionally
+- CI enforces deterministic runtime artifact and report gates, while the
+  release builder enforces each real package artifact. It intentionally
   does not pretend to run the full OpenWrt service, TProxy/nftables path, or
   real update transaction on the host.
 - The selected budgets are release defaults for a small gateway and require

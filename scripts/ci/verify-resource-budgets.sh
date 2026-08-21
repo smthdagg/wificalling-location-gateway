@@ -13,6 +13,18 @@ if [ ! -f "$budget" ] || [ -L "$budget" ]; then
 	fail 'budget file must be a regular file'
 fi
 [ "$(sed -n 's/^format=//p' "$budget")" = wfc-resource-budget/v1 ] || fail 'unsupported budget format'
+for key in \
+	runtime_binary_total_max_bytes \
+	integrated_package_max_bytes \
+	persistent_state_max_bytes \
+	log_total_max_bytes \
+	cache_total_max_bytes \
+	max_profiles \
+	startup_max_seconds \
+	rss_peak_max_bytes \
+	cpu_probe_max_percent; do
+	value "$key" | grep -Eq '^[0-9]+$' || fail "invalid or missing budget: $key"
+done
 binary_limit=$(value runtime_binary_total_max_bytes)
 package_limit=$(value integrated_package_max_bytes)
 if [ -z "$binary_limit" ] || [ -z "$package_limit" ]; then
@@ -42,6 +54,8 @@ fi
 report=${WLOC_RESOURCE_REPORT:-}
 if [ -n "$report" ]; then
 	[ -f "$report" ] || fail "resource report is missing: $report"
+	grep -Fx 'status=pass' "$report" >/dev/null || fail 'resource report records a failed command'
+	grep -Fx 'command_status=0' "$report" >/dev/null || fail 'resource command did not exit successfully'
 	peak=$(sed -n 's/^peak_rss_kib=\([0-9][0-9]*\)$/\1/p' "$report")
 	cpu=$(sed -n 's/^cpu_percent=\([0-9][0-9]*\)$/\1/p' "$report")
 	startup=$(sed -n 's/^elapsed_ms=\([0-9][0-9]*\)$/\1/p' "$report")
