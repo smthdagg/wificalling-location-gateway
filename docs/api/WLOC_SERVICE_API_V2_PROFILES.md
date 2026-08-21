@@ -86,5 +86,15 @@ Profile status is redacted: it reports whether an assigned device or manual
 location is configured, but never returns the device address, node reference,
 coordinates, credentials, or private key material.
 
-Runtime dispatch, multi-device nftables routing, the unified procd supervisor,
-LuCI pages, and component updates are subsequent v2 issues.
+The control-plane dispatcher now routes these methods through a bounded,
+in-memory profile adapter when a daemon instance supplies one to
+`ControlServer`. The adapter starts empty, validates every replacement through
+the existing `ProfileModel`, and exposes only redacted profile summaries: it
+does not persist UCI, select a default profile, install nftables rules, or
+copy node credentials. A server created through the legacy constructor returns
+an `unavailable` v2 error for profile operations until an adapter is supplied.
+
+`wloc-ctl` exposes `profile-list`, `profile-get`, `profile-create`,
+`profile-update`, and `profile-delete`; the existing v1 commands and envelope
+remain unchanged. OpenWrt UCI writes, runtime redirect lifecycle, and unified
+supervisor wiring remain outside this control-plane slice.

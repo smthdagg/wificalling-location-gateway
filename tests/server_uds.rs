@@ -320,7 +320,9 @@ async fn v2_profile_crud_round_trips_through_control_server() {
         .unwrap();
     let listed: Value = serde_json::from_slice(&read_response(&mut client).await).unwrap();
     assert_eq!(listed["result"]["profiles"][0]["profile_id"], "phone");
-    assert!(listed["result"]["profiles"][0].get("assigned_device").is_none());
+    assert!(listed["result"]["profiles"][0]
+        .get("assigned_device")
+        .is_none());
 
     client
         .write_all(&v2_request_frame(

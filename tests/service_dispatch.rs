@@ -86,7 +86,10 @@ fn parse(frame: &[u8]) -> Value {
     serde_json::from_slice(frame).unwrap()
 }
 
-fn decoded_v2(method: &str, params: Value) -> wificalling_location_gateway::service::api::ApiV2ProfileRequest {
+fn decoded_v2(
+    method: &str,
+    params: Value,
+) -> wificalling_location_gateway::service::api::ApiV2ProfileRequest {
     let frame = serde_json::to_vec(&json!({
         "api_version": SERVICE_API_V2_ID,
         "request_id": "profile-1",
@@ -335,16 +338,13 @@ fn v2_profile_dispatch_supports_bounded_create_get_update_list_delete() {
     assert_eq!(created["api_version"], SERVICE_API_V2_ID);
     assert_eq!(created["result"]["profile_id"], "phone");
 
-    let listed = parse(
-        &dispatch_v2(
-            &decoded_v2("profile.list", json!({})),
-            &mut profiles,
-        )
-        .unwrap(),
-    );
+    let listed =
+        parse(&dispatch_v2(&decoded_v2("profile.list", json!({})), &mut profiles).unwrap());
     assert_eq!(listed["result"]["profiles"].as_array().unwrap().len(), 1);
     assert_eq!(listed["result"]["profiles"][0]["profile_id"], "phone");
-    assert!(listed["result"]["profiles"][0].get("assigned_device").is_none());
+    assert!(listed["result"]["profiles"][0]
+        .get("assigned_device")
+        .is_none());
 
     let fetched = parse(
         &dispatch_v2(
@@ -374,7 +374,10 @@ fn v2_profile_dispatch_supports_bounded_create_get_update_list_delete() {
         )
         .unwrap(),
     );
-    assert_eq!(fetched_after_update["result"]["profile"]["label"], "Work phone");
+    assert_eq!(
+        fetched_after_update["result"]["profile"]["label"],
+        "Work phone"
+    );
     assert_eq!(fetched_after_update["result"]["profile"]["enabled"], false);
 
     let deleted = parse(
@@ -385,14 +388,12 @@ fn v2_profile_dispatch_supports_bounded_create_get_update_list_delete() {
         .unwrap(),
     );
     assert_eq!(deleted["result"]["profile_id"], "phone");
-    let listed_empty = parse(
-        &dispatch_v2(
-            &decoded_v2("profile.list", json!({})),
-            &mut profiles,
-        )
-        .unwrap(),
-    );
-    assert!(listed_empty["result"]["profiles"].as_array().unwrap().is_empty());
+    let listed_empty =
+        parse(&dispatch_v2(&decoded_v2("profile.list", json!({})), &mut profiles).unwrap());
+    assert!(listed_empty["result"]["profiles"]
+        .as_array()
+        .unwrap()
+        .is_empty());
 }
 
 #[test]

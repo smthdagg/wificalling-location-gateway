@@ -1,6 +1,6 @@
 use wificalling_location_gateway::service::api::{
-    decode_v2_profile_request, encode_v2_error_response, encode_v2_result_response,
-    ApiV2ErrorCode, ProfileApiMethod, MAX_CONTROL_FRAME_BYTES, SERVICE_API_V2_ID,
+    decode_v2_profile_request, encode_v2_error_response, encode_v2_result_response, ApiV2ErrorCode,
+    ProfileApiMethod, MAX_CONTROL_FRAME_BYTES, SERVICE_API_V2_ID,
 };
 
 #[test]

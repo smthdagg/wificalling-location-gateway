@@ -49,6 +49,10 @@ impl ApiV2ErrorCode {
             Self::InvalidParams => "invalid_params",
         }
     }
+
+    pub const fn retryable(self) -> bool {
+        false
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -518,6 +522,24 @@ pub fn encode_v2_result_response(
     encode_versioned_result_response(SERVICE_API_V2_ID, request_id, result)
 }
 
+/// Encode a bounded v2 decoder error response.
+pub fn encode_v2_error_response(
+    request_id: &str,
+    code: ApiV2ErrorCode,
+) -> Result<Vec<u8>, ResponseEncodeError> {
+    encode_v2_error_parts(request_id, code.wire_code(), "service", code.retryable())
+}
+
+/// Encode a bounded v2 runtime error response.
+pub fn encode_v2_error_parts(
+    request_id: &str,
+    code: &str,
+    component: &str,
+    retryable: bool,
+) -> Result<Vec<u8>, ResponseEncodeError> {
+    encode_versioned_error_response(SERVICE_API_V2_ID, request_id, code, component, retryable)
+}
+
 fn encode_versioned_result_response(
     api_version: &str,
     request_id: &str,
@@ -527,6 +549,29 @@ fn encode_versioned_result_response(
         api_version,
         request_id: request_id.to_owned(),
         result: result.clone(),
+    };
+    let bytes = serde_json::to_vec(&response).map_err(|_| ResponseEncodeError::Oversized)?;
+    if bytes.len() > MAX_CONTROL_FRAME_BYTES {
+        return Err(ResponseEncodeError::Oversized);
+    }
+    Ok(bytes)
+}
+
+fn encode_versioned_error_response(
+    api_version: &str,
+    request_id: &str,
+    code: &str,
+    component: &str,
+    retryable: bool,
+) -> Result<Vec<u8>, ResponseEncodeError> {
+    let response = ErrorResponse {
+        api_version,
+        request_id: request_id.to_owned(),
+        error: ErrorBody {
+            code,
+            component,
+            retryable,
+        },
     };
     let bytes = serde_json::to_vec(&response).map_err(|_| ResponseEncodeError::Oversized)?;
     if bytes.len() > MAX_CONTROL_FRAME_BYTES {
