@@ -29,6 +29,12 @@
         "/var/run/wloc-service/events.jsonl": [
           "read"
         ],
+        "/var/run/wloc-service/profiles/*/status.json": [
+          "read"
+        ],
+        "/var/run/wloc-service/profiles/*/events.jsonl": [
+          "read"
+        ],
         "/tmp/run/wloc-service/status.json": [
           "read"
         ],
@@ -64,6 +70,9 @@
       ],
       "file": {
         "/var/run/wloc-service/events.jsonl": [
+          "write"
+        ],
+        "/var/run/wloc-service/profiles/*/events.jsonl": [
           "write"
         ],
         "/tmp/run/wloc-service/events.jsonl": [

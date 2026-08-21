@@ -300,6 +300,10 @@ var ZH = {
 	'WireGuard private key': 'WireGuard 私钥',
 	'WireGuard reserved (comma-separated)': 'WireGuard reserved（逗号分隔）',
 	/* ---- wloc monitor ---- */
+	'Device profile': '设备档案',
+	'Default / legacy profile': '默认 / 兼容档案',
+	'Each profile has independent location state and bounded events.': '每个档案拥有独立定位状态和有上限的事件日志。',
+	'Profile state unavailable: ': '档案状态不可用：',
 	'Current location': '当前定位',
 	'Shows the effective location target: auto follows the node exit, manual uses the coordinates from the settings page. GPS values stay on this router.':
 		'显示当前生效的定位目标：自动模式跟随节点出口，手动模式使用设置页的坐标。GPS 数值只保留在本路由器上。',

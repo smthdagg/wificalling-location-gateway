@@ -65,6 +65,23 @@ class V2UiContractTests(unittest.TestCase):
             self.assertIn("device address must be a private IPv4 address or unicast MAC", source)
             self.assertEqual(source.count("uci.save('wloc-service')"), 1)
 
+    def test_monitor_reads_only_validated_profile_state_paths(self):
+        for prefix in (
+            self.root / "openwrt/files",
+            self.root / "openwrt/luci-app-wificalling-location-gateway/files",
+        ):
+            monitor = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-monitor.js").read_text(encoding="utf-8")
+            acl = json.loads(
+                (prefix / "usr/share/rpcd/acl.d/luci-app-wificalling-location-gateway.json").read_text(encoding="utf-8")
+            )["luci-app-wificalling-location-gateway"]
+            self.assertIn("selectedProfile", monitor)
+            self.assertIn("wloc-service', 'device", monitor)
+            self.assertIn("/var/run/wloc-service/profiles/", monitor)
+            self.assertIn("[a-z0-9_-]", monitor)
+            files = acl["read"]["file"]
+            self.assertIn("/var/run/wloc-service/profiles/*/status.json", files)
+            self.assertIn("/var/run/wloc-service/profiles/*/events.jsonl", files)
+
     def test_restart_rpc_is_write_only_and_acl_sources_match(self):
         acl_sources = []
         for prefix in (
