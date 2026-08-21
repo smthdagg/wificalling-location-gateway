@@ -3,12 +3,14 @@ set -eu
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 doc="$repo_root/docs/deployment/AX6S_DEPLOYMENT.md"
+readme="$repo_root/README.md"
 fail() {
 	printf 'FAIL: %s\n' "$*" >&2
 	exit 1
 }
 
 [ -s "$doc" ] || fail 'AX6S deployment contract is missing'
+[ -s "$readme" ] || fail 'README is missing'
 
 grep -F 'cp -p /etc/config/wificalling-gateway /tmp/wificalling-gateway.backup' "$doc" >/dev/null ||
 	fail 'migration must back up Gateway UCI before removal'
@@ -39,5 +41,20 @@ grep -F 'V2 reuses that executable' "$doc" >/dev/null ||
 	fail 'deployment contract must document provider reuse'
 grep -F '## 7. Rollback' "$doc" >/dev/null ||
 	fail 'deployment contract must include rollback'
+
+# The top-level installation guide is a user-facing copy of the release gate.
+# Keep it from drifting back to the old, space-unaware direct-install advice.
+if grep -F 'Do not run `opkg remove` first' "$readme" >/dev/null ||
+	grep -F '不要先执行 `opkg remove`' "$readme" >/dev/null; then
+	fail 'README must not instruct AX6S users to install over the old package'
+fi
+grep -F 'insufficient persistent storage' "$readme" >/dev/null ||
+	fail 'README must document the AX6S storage constraint'
+grep -F '空间不足以同时容纳旧应用包和集成包' "$readme" >/dev/null ||
+	fail 'Chinese README must document the AX6S storage constraint'
+grep -F 'Host/package gates passed; AX6S pending' "$readme" >/dev/null ||
+	fail 'README must not claim unrecorded AX6S evidence'
+grep -F '主机/构建门禁通过；AX6S 待测' "$readme" >/dev/null ||
+	fail 'Chinese README must not claim unrecorded AX6S evidence'
 
 printf '%s\n' 'AX6S migration contract tests passed'

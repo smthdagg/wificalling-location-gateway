@@ -113,7 +113,7 @@ More detail: [WLOC Service API](docs/api/WLOC_SERVICE_API.md), [Threat model](do
 
 | Platform | Arch | Package manager | Current evidence | Status |
 |---|---:|---|---|---|
-| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | Official AArch64 OpenWrt 24.10.5 Docker install/start matrix; plus real-device procd, LuCI, auto/manual switch, certificate, and iPhone WLOC path | **Docker + real device passed** |
+| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | Official AArch64 OpenWrt 24.10.5 Docker install/start matrix and architecture-correct cross-build; space-constrained migration, resource, restart, rollback, and iPhone WLOC evidence still pending | **Host/package gates passed; AX6S pending** |
 | OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker boot of init/ubus, integrated package install, service start, socket and v1 status checks | **Install matrix passed** |
 | iStoreOS 24.10.5 | x86_64 | opkg / IPK | Same as above | **Install matrix passed** |
 | OpenWrt 25.12.3 | x86_64 | apk / APK v3 | Same, using native APK v3, not a renamed IPK | **Install matrix passed** |
@@ -165,11 +165,33 @@ Full instructions for both methods live in the
 
 ### 2. Redmi AX6S (single integrated IPK)
 
+AX6S has insufficient persistent storage for the old application package and
+the integrated package to coexist. Back up UCI/CA data, stop and disable the
+old application services, then remove only the old Wificalling/WLOC
+application packages before installing V2. Keep the selected `sing-box-tiny`,
+`sing-box-lite`, or PassWall-provided sing-box executable installed; never
+remove it as part of this migration. The complete, ordered procedure is in
+[`docs/deployment/AX6S_DEPLOYMENT.md`](docs/deployment/AX6S_DEPLOYMENT.md).
+
 ```sh
+# Example only: inspect the exact old application package names first.
+opkg list-installed | grep -E 'wificalling|wloc|sing-box|passwall'
+cp -p /etc/config/wificalling-gateway /tmp/wificalling-gateway.backup
+cp -p /etc/config/wloc-service /tmp/wloc-service.backup
+/etc/init.d/wloc-service stop 2>/dev/null || true
+/etc/init.d/wificalling-gateway stop 2>/dev/null || true
+/etc/init.d/wloc-service disable 2>/dev/null || true
+/etc/init.d/wificalling-gateway disable 2>/dev/null || true
+opkg remove luci-app-wificalling-location-gateway wloc-service wloc-ctl
+df -k /overlay /tmp
 opkg install /tmp/wificalling-location-gateway_<version>_aarch64_cortex-a53.ipk
 ```
 
-Do not run `opkg remove` first; installing directly restores missing components and keeps the existing configuration. After installing, check both services under "Verify the services" below.
+Do not use `opkg remove --force-removal-of-dependent-packages`, and do not
+include `sing-box` or `passwall` in the removal set. After installation,
+resolve the retained provider and check both services under "Verify the
+services" below. This removal-before-install sequence is an AX6S storage
+requirement, not a general rule for larger routers.
 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
 
@@ -402,7 +424,7 @@ flowchart LR
 
 | 平台 | 架构 | 包管理器 | 当前证据 | 状态 |
 |---|---:|---|---|---|
-| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | 官方 AArch64 OpenWrt 24.10.5 Docker 安装/启动矩阵；另有实机 procd、LuCI、自动/手动切换、证书和 iPhone WLOC 链路 | **Docker + 真机通过** |
+| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | 官方 AArch64 OpenWrt 24.10.5 Docker 安装/启动矩阵和架构正确的交叉构建；空间受限迁移、资源、重启、回滚和 iPhone WLOC 证据仍待补齐 | **主机/构建门禁通过；AX6S 待测** |
 | OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker 中启动 init/ubus、安装集成包、启动服务、Socket 与 v1 状态检查 | **安装矩阵通过** |
 | iStoreOS 24.10.5 | x86_64 | opkg / IPK | 同上 | **安装矩阵通过** |
 | OpenWrt 25.12.3 | x86_64 | apk / APK v3 | 同上，使用原生 APK v3，非改名 IPK | **安装矩阵通过** |
@@ -455,11 +477,30 @@ OpenWrt 25.x 的 `.apk` 手动安装命令）。
 
 ### 2. Redmi AX6S（单一集成 IPK）
 
+AX6S 的持久化空间不足以同时容纳旧应用包和集成包。请先备份
+UCI/CA，停止并禁用旧版应用服务，再只卸载旧的 Wificalling/WLOC
+应用包，然后安装 V2。已选用的 `sing-box-tiny`、`sing-box-lite` 或
+PassWall 提供的 sing-box 必须保留，不能随迁移卸载。完整顺序见
+[`docs/deployment/AX6S_DEPLOYMENT.md`](docs/deployment/AX6S_DEPLOYMENT.md)。
+
 ```sh
+# 示例：先确认实际旧应用包名；不要把 sing-box/passwall 放入卸载集合。
+opkg list-installed | grep -E 'wificalling|wloc|sing-box|passwall'
+cp -p /etc/config/wificalling-gateway /tmp/wificalling-gateway.backup
+cp -p /etc/config/wloc-service /tmp/wloc-service.backup
+/etc/init.d/wloc-service stop 2>/dev/null || true
+/etc/init.d/wificalling-gateway stop 2>/dev/null || true
+/etc/init.d/wloc-service disable 2>/dev/null || true
+/etc/init.d/wificalling-gateway disable 2>/dev/null || true
+opkg remove luci-app-wificalling-location-gateway wloc-service wloc-ctl
+df -k /overlay /tmp
 opkg install /tmp/wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk
 ```
 
-不要先执行 `opkg remove`；直接安装即可恢复缺失组件并保留现有配置。安装后按“验证服务”一节检查两个服务。
+不要使用 `opkg remove --force-removal-of-dependent-packages`，也不要把
+`sing-box` 或 `passwall` 放入卸载集合。安装后先确认保留的 provider，再按
+“验证服务”一节检查两个服务。这是 AX6S 的存储要求，不是大容量路由器的
+通用规则。
 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
