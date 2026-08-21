@@ -55,6 +55,8 @@ list)
 	json_close_object
 	json_add_object restart_gateway
 	json_close_object
+	json_add_object restart_unified
+	json_close_object
 	json_add_object clear_log
 	json_close_object
 	json_add_object verify_fingerprint
@@ -222,6 +224,12 @@ call)
 		# Regenerate the sing-box config and restart the proxy for the
 		# Wi-Fi Calling Gateway (brief interruption of device proxy).
 		/etc/init.d/wificalling-gateway restart >/dev/null 2>&1
+		sleep 2
+		echo '{"ok":true}'
+		exit 0
+		;;
+	restart_unified)
+		/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1
 		sleep 2
 		echo '{"ok":true}'
 		exit 0

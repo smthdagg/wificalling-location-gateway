@@ -35,6 +35,14 @@
       "path": "wificalling-location-gateway/wloc"
     }
   },
+  "admin/services/wificalling-location-gateway/wloc-devices": {
+    "title": "WLOC Device Profiles",
+    "order": 35,
+    "action": {
+      "type": "view",
+      "path": "wificalling-location-gateway/wloc-devices"
+    }
+  },
   "admin/services/wificalling-location-gateway/wloc-monitor": {
     "title": "WLOC Monitor & Log",
     "order": 40,
