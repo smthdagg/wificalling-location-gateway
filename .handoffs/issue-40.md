@@ -52,7 +52,7 @@ measurement template. Do not claim real-device measurements from the host.
 - `docs/testing/V2_RESOURCE_BUDGETS.tdd.md`
 - `docs/testing/AX6S_RESOURCE_EVIDENCE.template.md`
 
-## TDD and verification
+## Verification
 
 | Command | Result | Evidence |
 |---|---|---|
