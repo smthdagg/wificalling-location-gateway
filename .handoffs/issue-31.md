@@ -5,8 +5,8 @@
 - Source agent ID: codex-v2-lead
 - Capabilities used: rust,openwrt,test
 - Branch: codex/issue-31-v2-device-profiles-codex-v2-lead-20260821044654-a86aad99
-- Checkpoint parent: 601097f
-- Updated at (UTC): 2026-08-21T05:05:00Z
+- Checkpoint parent: 6b0a744
+- Updated at (UTC): 2026-08-21T05:50:00Z
 - Credentials included: no
 
 ## Objective
@@ -27,17 +27,22 @@ changing the current runtime interception path.
   preserving the frozen v1 API.
 - Added profile tests, API tests, UCI example documentation, and the v2 profile
   contract document.
+- Runtime now consumes an explicit single profile, rejects unsupported MAC and
+  multiple-profile runtime selection, and fail-closes invalid existing UCI.
+- Profile-bound probes require a matching Gateway UCI device policy and reject
+  route-only or stale sing-box rule fallback.
 
 ## Verification
 
-- `cargo test --all-targets`: passed.
+- `cargo test --all-targets`: passed (64 unit tests plus all integration suites).
 - `cargo clippy --all-targets -- -D warnings`: passed.
 - `./scripts/ci/verify.sh`: passed.
 - Python suite: 69 passed.
-- Rust coverage: 80.54% total.
+- Rust coverage: 80.96% total.
 - Dependency advisories, secret scan, OpenWrt package, AX6S resource, and
   release gates: passed.
-- Relevant commits: `7542dd9`, `f38def9`.
+- Relevant commits: `7542dd9`, `f38def9`, `a9ad40a`, `4663edb`, `05d1b42`,
+  `6b0a744`, `0061686`.
 
 ## Failed attempts
 
@@ -47,7 +52,7 @@ changing the current runtime interception path.
 
 ## Next executable steps
 
-1. Perform an independent review of the two implementation commits.
+1. Complete independent review of the implementation and binding fallback fix.
 2. Merge the branch through the Issue #31 pull request after review.
 3. Start V2-02 for the unified procd supervisor and runtime lifecycle.
 
@@ -68,3 +73,5 @@ changing the current runtime interception path.
   it does not create a multi-device routing policy.
 - Runtime dispatch, nftables routing, procd supervision, LuCI, logs, and update
   operations remain out of scope for this Issue.
+- The route-only binding regression is covered by
+  `required_device_binding_rejects_route_only_match`.
