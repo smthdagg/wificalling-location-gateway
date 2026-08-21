@@ -5,7 +5,7 @@
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test,security,docs
 - Branch: codex/issue-39-v2-update-rollback-codex-v2-lead-20260821095228-1bc1507b
-- Final local checkpoint before handoff: 029f53b
+- Final local checkpoint before handoff: 659930a
 - Credentials included: no
 
 ## Objective
@@ -101,6 +101,9 @@ transaction.
   manifest and release signing is supplied through `WFC_UPDATE_SIGNING_KEY`.
 - `ax6s-existing` now packages the V2 helper/supervisor adapter and has an
   actual build-and-unpack regression test.
+- The update-manifest and AX6S package tests accept both canonical GNU tar
+  member names and `./`-prefixed BSD tar names; the existing-package test also
+  verifies the support-bundle helper.
 - GitHub run `32471646456` exposed a pre-existing nondeterministic sing-box
   stderr fixture; it now emits one deterministic diagnostic and `exec`s a
   long-lived process, with five repeated local runs passing.
