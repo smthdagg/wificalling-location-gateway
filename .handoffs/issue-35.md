@@ -4,9 +4,9 @@
 
 - Source agent ID: codex-v2-lead
 - Capabilities used: rust,openwrt,test
-- Branch: codex/issue-35-v2-03-rebase-codex-v2-lead-20260821072700-da8b7948
-- Checkpoint parent: f84b41b
-- Updated at (UTC): 2026-08-21T07:31:00Z
+- Branch: codex/issue-35-v2-03-final-integration-codex-v2-lead-20260821073819-0bdb5257
+- Checkpoint parent: 9672452
+- Updated at (UTC): 2026-08-21T07:43:00Z
 - Credentials included: no
 
 ## Objective
@@ -62,6 +62,8 @@ the frozen V1 facade and the OpenWrt fail-open traffic-isolation contract.
 - The first integration attempt conflicted with the merged V2-01 profile
   model; the rebase retained the profile-runtime implementation and the
   merged profile validation/tests, then passed clippy.
+- Final integration also reconciled the unified supervisor branch and kept
+  the profile helper package assertions; formatting and clippy passed.
 
 ## Unresolved decisions and blockers
 
