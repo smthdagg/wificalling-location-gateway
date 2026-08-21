@@ -22,7 +22,7 @@ usable() {
 
 configured=${WLOC_SINGBOX_BIN:-}
 if [ -z "$configured" ] && command -v uci >/dev/null 2>&1; then
-	configured=$(uci -q get wificalling-gateway.main.singbox_bin 2>/dev/null || true)
+	configured=$(uci -q get wloc-service.main.singbox_bin 2>/dev/null || true)
 fi
 
 resolve() {

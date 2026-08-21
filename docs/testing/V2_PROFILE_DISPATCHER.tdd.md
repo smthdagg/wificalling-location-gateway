@@ -3,7 +3,7 @@
 ## Scope
 
 The production data path now creates one probe/Geo handler per validated IPv4
-device profile while keeping one shared Gateway/WLOC supervisor. The MITM
+device profile while keeping one shared standalone WLOC supervisor. The MITM
 proxy resolves the source TCP address to exactly one profile target.
 
 ## Safety contract

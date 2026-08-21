@@ -2,8 +2,8 @@
 //!
 //! The daemon serves the frozen control API on a local Unix socket. Its
 //! OpenWrt runtime adapter delegates only the component-owned WLOC redirect;
-//! process ownership and the Gateway data plane remain with the unified
-//! supervisor.
+//! process ownership and the optional sing-box provider remain with the
+//! standalone supervisor.
 //!
 //! Socket path: `WLOC_SOCKET` (default `/var/run/wloc-service/control.sock`).
 
@@ -308,7 +308,7 @@ impl RuntimeControl for OpenWrtRuntime {
 
 impl ProfileRuntimeControl for OpenWrtRuntime {
     fn ensure_shared_engine(&mut self) -> Result<(), ProfileRuntimeError> {
-        // The unified supervisor owns the single Gateway/WLOC process set.
+        // The standalone supervisor owns the single WLOC/provider process set.
         Ok(())
     }
 
@@ -341,8 +341,8 @@ impl ProfileRuntimeControl for OpenWrtRuntime {
     }
 }
 
-/// Per-profile WlocService state does not own the shared Gateway process.
-/// The unified procd supervisor and `ProfileRuntimeManager` own that process
+/// Per-profile WlocService state does not own the shared provider process.
+/// The standalone procd supervisor and `ProfileRuntimeManager` own that process
 /// and each profile's redirect; this adapter keeps the profile's probe/Geo
 /// state machine independent without spawning another engine.
 #[derive(Default)]
@@ -587,7 +587,7 @@ fn build_probe(assigned_device: &str, probe_port: u16) -> Box<dyn ExitProbeRunti
     let probe = wificalling_location_gateway::exitprobe::singbox::SingBoxProbe::new(
         std::path::PathBuf::from(
             std::env::var("WLOC_SINGBOX_CONFIG")
-                .unwrap_or_else(|_| "/var/run/wificalling-gateway/sing-box.json".into()),
+                .unwrap_or_else(|_| "/var/run/wloc-service/sing-box.json".into()),
         ),
         device_ip,
         probe_port,
@@ -775,19 +775,10 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     };
     let runtime_profile = runtime_profile_from_uci(&uci);
     // The device whose node binding the location follows. It is normally
-    // chosen from LuCI; when unset, fall back to the first device policy of
-    // the Gateway config so a fresh install follows something on any subnet
-    // instead of a fixed example address.
+    // chosen from the WLOC device profile. An unset address is intentionally
+    // not guessed from another application.
     let assigned_device = if !runtime_profile.runtime_supported {
         String::new()
-    } else if runtime_profile
-        .assigned_device
-        .as_deref()
-        .unwrap_or_default()
-        .trim()
-        .is_empty()
-    {
-        gateway_first_device_ip().unwrap_or_default()
     } else {
         runtime_profile.assigned_device.clone().unwrap_or_default()
     };
@@ -1128,7 +1119,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Box::new(NoProfileDispatch)
     };
     let server = ControlServer::with_profile_dispatch(service, profile_dispatch);
-    // Housekeeping runs every 10s so a node switch in the Gateway settings
+    // Housekeeping runs every 10s so a node switch in the WLOC settings
     // is followed within seconds. The probe itself only runs when the
     // config fingerprint changed or cached evidence is stale (the check is
     // a cheap file read + hash); the observation age is still governed by
@@ -1160,21 +1151,6 @@ fn upstream_apple_ips() -> Vec<String> {
 fn lan_router_ip() -> Option<String> {
     let output = std::process::Command::new("uci")
         .args(["-q", "get", "network.lan.ipaddr"])
-        .output()
-        .ok()?;
-    let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if ip.is_empty() {
-        None
-    } else {
-        Some(ip)
-    }
-}
-
-/// The first source IP of the Gateway device policy - the natural follow
-/// target when wloc-service has no assigned device configured.
-fn gateway_first_device_ip() -> Option<String> {
-    let output = std::process::Command::new("uci")
-        .args(["-q", "get", "wificalling-gateway.@device[0].source_ip"])
         .output()
         .ok()?;
     let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();

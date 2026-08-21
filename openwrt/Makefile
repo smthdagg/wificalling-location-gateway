@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=wloc-service
-PKG_VERSION:=1.2.0
+PKG_VERSION:=2.0.0
 PKG_RELEASE:=1
 
 PKG_MAINTAINER:=wificalling-location-gateway maintainers
@@ -15,7 +15,7 @@ include $(INCLUDE_DIR)/package.mk
 define Package/wloc-service
   SECTION:=net
   CATEGORY:=Network
-  TITLE:=Wi-Fi Calling WLOC location gateway control daemon
+	TITLE:=WLOC location service control daemon
   DEPENDS:=+nftables +kmod-nft-tproxy +kmod-nft-socket +ip-full
 endef
 

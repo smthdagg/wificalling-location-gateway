@@ -5,13 +5,11 @@ OPENWRT_24_SDK='ghcr.io/openwrt/sdk:x86_64-24.10.8@sha256:b28d5e4087dbd3f815a8bf
 OPENWRT_25_SDK='ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35bebb77b3f6d9523fd68873fab78a1bd19cc123cd0f'
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
-version=1.2.0
+version=2.0.0
 release=1
 arch=x86_64
 service_bin=
 ctl_bin=
-gateway_ipk=
-gateway_sha256=
 out_dir="$repo_root/dist/openwrt-release"
 plan_only=0
 
@@ -25,13 +23,11 @@ usage() {
 Usage: build-release-packages.sh [--plan] [options]
 
 Options:
-  --version VERSION          Package version (default: 1.2.0)
+  --version VERSION          Package version (default: 2.0.0)
   --release RELEASE          Package release number (default: 1)
   --arch ARCH                OpenWrt runtime architecture (default: x86_64)
   --service-bin PATH         Static wloc-service binary (required)
   --ctl-bin PATH             Static wloc-ctl binary (required)
-  --gateway-ipk PATH         Pinned Wi-Fi Calling Gateway 1.7 IPK (required to build)
-  --gateway-sha256 SHA256    Expected Gateway IPK digest (required to build)
   --out-dir PATH             Output directory
   --plan                     Print the immutable build plan without Docker
 EOF
@@ -44,8 +40,6 @@ while [ "$#" -gt 0 ]; do
 		--arch) [ "$#" -ge 2 ] || fail 'missing --arch value'; arch=$2; shift 2 ;;
 		--service-bin) [ "$#" -ge 2 ] || fail 'missing --service-bin value'; service_bin=$2; shift 2 ;;
 		--ctl-bin) [ "$#" -ge 2 ] || fail 'missing --ctl-bin value'; ctl_bin=$2; shift 2 ;;
-		--gateway-ipk) [ "$#" -ge 2 ] || fail 'missing --gateway-ipk value'; gateway_ipk=$2; shift 2 ;;
-		--gateway-sha256) [ "$#" -ge 2 ] || fail 'missing --gateway-sha256 value'; gateway_sha256=$2; shift 2 ;;
 		--out-dir) [ "$#" -ge 2 ] || fail 'missing --out-dir value'; out_dir=$2; shift 2 ;;
 		--plan) plan_only=1; shift ;;
 		-h|--help) usage; exit 0 ;;
@@ -81,57 +75,22 @@ case "${out_dir##*/}" in
 esac
 case "$out_dir" in /|"$repo_root") fail 'unsafe --out-dir' ;; esac
 [ ! -L "$out_dir" ] || fail '--out-dir must not be a symbolic link'
-[ -f "$gateway_ipk" ] || fail '--gateway-ipk must name an existing file'
-[ -n "$gateway_sha256" ] || fail '--gateway-sha256 is required'
-case "$gateway_sha256" in *[!0-9a-fA-F]*|'') fail 'invalid Gateway SHA-256' ;; esac
-[ "${#gateway_sha256}" -eq 64 ] || fail 'invalid Gateway SHA-256'
-actual_gateway_sha=$(shasum -a 256 "$gateway_ipk" | awk '{print $1}')
-[ "$actual_gateway_sha" = "$gateway_sha256" ] || fail 'Gateway IPK SHA-256 mismatch'
 
 stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-openwrt-package.XXXXXX")
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
 package_dir="$stage/input/wificalling-location-gateway"
-mkdir -p "$package_dir/files" "$stage/gateway" "$stage/output"
+mkdir -p "$package_dir/files" "$stage/output"
 chmod 0777 "$stage/output"
 
-tar -xf "$gateway_ipk" -C "$stage/gateway"
-gateway_control=$(tar -xOf "$stage/gateway/control.tar.gz" ./control)
-printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null ||
-	fail 'Gateway IPK has an unexpected package identity'
-printf '%s\n' "$gateway_control" | grep -E '^Version: (1\.7|1\.2)\.[0-9]+-[0-9]+$' >/dev/null ||
-	fail 'Gateway IPK must be a validated 1.7.x or 1.2.x release'
-tar -tzf "$stage/gateway/data.tar.gz" | while IFS= read -r member; do
-	case "$member" in /*|../*|*/../*|*/..) fail 'Gateway IPK contains an unsafe path' ;; esac
-done
-tar -xzf "$stage/gateway/data.tar.gz" -C "$package_dir/files"
-
-# Gateway 1.2.x already includes WireGuard PSK, device-guard, node-status,
-# and health-check features; only apply compatibility patches for 1.7.x.
-gw_version=$(printf '%s\n' "$gateway_control" | sed -n 's/^Version: //p')
-case "$gw_version" in
-  1.7.*)
-    "$repo_root/scripts/openwrt/patch-wireguard-psk.sh" "$package_dir/files"
-    "$repo_root/scripts/openwrt/patch-wireguard-health.sh" "$package_dir/files"
-    "$repo_root/scripts/openwrt/patch-node-status-compact.sh" "$package_dir/files"
-    "$repo_root/scripts/openwrt/patch-gateway-device-guard.sh" "$package_dir/files"
-    ;;
-  1.2.*)
-    echo "build-release-packages: gateway $gw_version — skipping 1.7.x patches"
-    # The 1.2.x gateway IPK ships an OLDER gateway baseline (older
-    # compiler/init.d/monitor/node-health/config/LuCI). The project's
-    # openwrt/files/ carries the maintained 1.2.0 baseline (plus the
-    # memory-optimization compiler patch); overlay it wholesale so the
-    # integrated package never regresses to the older gateway files.
-    cp -R "$repo_root/openwrt/files/." "$package_dir/files/"
-    ;;
-  *)
-    fail "unexpected gateway version: $gw_version"
-    ;;
-esac
+# Assemble only from this repository. No external application UCI or package
+# is accepted as a build input.
+cp -R "$repo_root/openwrt/files/." "$package_dir/files/"
 
 # Overlay the integrated UI, then the architecture-specific WLOC runtime.
 cp -R "$repo_root/openwrt/luci-app-wificalling-location-gateway/files/." "$package_dir/files/"
-rm -f "$package_dir/files/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"
+rm -rf "$package_dir/files/usr/libexec/wificalling-gateway" \
+	"$package_dir/files/www/luci-static/resources/view/wificalling-gateway" \
+	"$package_dir/files/www/luci-static/resources/wificalling-gateway"
 mkdir -p "$package_dir/files/usr/sbin" "$package_dir/files/etc/init.d" "$package_dir/files/etc/config"
 cp "$service_bin" "$package_dir/files/usr/sbin/wloc-service"
 cp "$ctl_bin" "$package_dir/files/usr/sbin/wloc-ctl"
@@ -160,16 +119,15 @@ include \$(INCLUDE_DIR)/package.mk
 define Package/wificalling-location-gateway
   SECTION:=net
   CATEGORY:=Network
-  TITLE:=Integrated Wi-Fi Calling and WLOC Location Gateway
-  PROVIDES:=wloc-service luci-app-wificalling-location-gateway luci-app-wificalling-gateway
+  TITLE:=Standalone WLOC Location Gateway
+  PROVIDES:=wloc-service luci-app-wificalling-location-gateway
 endef
 define Package/wificalling-location-gateway/description
-  Complete Wi-Fi Calling Gateway, WLOC service, control client, and unified LuCI UI.
+  Standalone WLOC service, control client, provider adapter, and LuCI UI.
 endef
 define Build/Compile
 endef
 define Package/wificalling-location-gateway/conffiles
-/etc/config/wificalling-gateway
 /etc/config/wloc-service
 endef
 define Package/wificalling-location-gateway/install
@@ -184,10 +142,7 @@ done
 if [ -x /usr/libexec/wificalling-location-gateway/singbox-runtime.sh ]; then
   /usr/libexec/wificalling-location-gateway/singbox-runtime.sh path >/dev/null 2>&1 || echo "wificalling-location-gateway: install sing-box tiny/lite or a PassWall sing-box provider" >&2
 fi
-/etc/init.d/wificalling-gateway disable >/dev/null 2>&1 || true
 /etc/init.d/wloc-service disable >/dev/null 2>&1 || true
-mkdir -p /var/run/wificalling-gateway
-chmod 0700 /var/run/wificalling-gateway
 /etc/init.d/wificalling-location-gateway enable >/dev/null 2>&1 || true
 /etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1 || true
 rm -f /tmp/luci-indexcache.*

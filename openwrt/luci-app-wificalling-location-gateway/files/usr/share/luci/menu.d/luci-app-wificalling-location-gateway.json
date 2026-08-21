@@ -1,70 +1,44 @@
 {
   "admin/services/wificalling-location-gateway": {
-    "title": "WifiCalling&Wloc Gateway",
+    "title": "WLOC Location Service",
     "order": 71,
-    "action": {
-      "type": "firstchild"
-    },
-    "depends": {
-      "acl": [
-        "luci-app-wificalling-location-gateway"
-      ]
-    }
+    "action": { "type": "firstchild" },
+    "depends": { "acl": ["luci-app-wificalling-location-gateway"] }
   },
-  "admin/services/wificalling-location-gateway/wfc": {
-    "title": "Wi-Fi Calling Settings",
+  "admin/services/wificalling-location-gateway/overview": {
+    "title": "Overview",
     "order": 10,
-    "action": {
-      "type": "view",
-      "path": "wificalling-gateway/overview"
-    }
+    "action": { "type": "view", "path": "wificalling-location-gateway/wloc-overview" }
   },
-  "admin/services/wificalling-location-gateway/wfc-monitor": {
-    "title": "Wi-Fi Calling Monitor & Log",
+  "admin/services/wificalling-location-gateway/basic": {
+    "title": "Basic Settings",
     "order": 20,
-    "action": {
-      "type": "view",
-      "path": "wificalling-location-gateway/wfc-monitor"
-    }
+    "action": { "type": "view", "path": "wificalling-location-gateway/wloc-basic" }
   },
-  "admin/services/wificalling-location-gateway/wloc": {
-    "title": "WLOC Settings",
+  "admin/services/wificalling-location-gateway/devices": {
+    "title": "Devices",
     "order": 30,
-    "action": {
-      "type": "view",
-      "path": "wificalling-location-gateway/wloc"
-    }
+    "action": { "type": "view", "path": "wificalling-location-gateway/wloc-devices" }
   },
-  "admin/services/wificalling-location-gateway/wloc-devices": {
-    "title": "WLOC Device Profiles",
-    "order": 35,
-    "action": {
-      "type": "view",
-      "path": "wificalling-location-gateway/wloc-devices"
-    }
-  },
-  "admin/services/wificalling-location-gateway/wloc-monitor": {
-    "title": "WLOC Monitor & Log",
+  "admin/services/wificalling-location-gateway/monitor": {
+    "title": "Logs & Monitoring",
     "order": 40,
-    "action": {
-      "type": "view",
-      "path": "wificalling-location-gateway/wloc-monitor"
-    }
-  },
-  "admin/services/wificalling-location-gateway/faq": {
-    "title": "Help (FAQ)",
-    "order": 50,
-    "action": {
-      "type": "view",
-      "path": "wificalling-location-gateway/faq"
-    }
+    "action": { "type": "view", "path": "wificalling-location-gateway/wloc-monitor" }
   },
   "admin/services/wificalling-location-gateway/health": {
     "title": "Service Status",
     "order": 45,
-    "action": {
-      "type": "view",
-      "path": "wificalling-location-gateway/wloc-health"
-    }
+    "action": { "type": "view", "path": "wificalling-location-gateway/wloc-health" }
+  },
+  "admin/services/wificalling-location-gateway/update": {
+    "title": "Component Update",
+    "order": 50,
+    "action": { "type": "view", "path": "wificalling-location-gateway/wloc-update" }
+  },
+  "admin/services/wificalling-location-gateway/faq": {
+    "title": "Help (FAQ)",
+    "order": 60,
+    "action": { "type": "view", "path": "wificalling-location-gateway/faq" }
   }
 }
+

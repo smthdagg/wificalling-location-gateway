@@ -12,7 +12,7 @@ value() { sed -n "s/^$1=\([0-9][0-9]*\)$/\1/p" "$budget" | head -n 1; }
 if [ ! -f "$budget" ] || [ -L "$budget" ]; then
 	fail 'budget file must be a regular file'
 fi
-[ "$(sed -n 's/^format=//p' "$budget")" = wfc-resource-budget/v1 ] || fail 'unsupported budget format'
+[ "$(sed -n 's/^format=//p' "$budget")" = wloc-resource-budget/v1 ] || fail 'unsupported budget format'
 if [ ! -f "$package" ] || [ -L "$package" ]; then
 	fail 'package artifact must be a regular file'
 fi

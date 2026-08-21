@@ -54,8 +54,6 @@ list)
 	json_close_object
 	json_add_object restart_service
 	json_close_object
-	json_add_object restart_gateway
-	json_close_object
 	json_add_object restart_unified
 	json_close_object
 	json_add_object clear_log
@@ -74,7 +72,7 @@ list)
 	json_close_object
 	json_add_object update_recover
 	json_close_object
-	json_add_object node_test
+	json_add_object provider_test
 	json_close_object
 	json_dump
 	json_cleanup
@@ -134,7 +132,7 @@ call)
 			if [ -n "$query" ] && [ "$query" != "null" ]; then
 				out="$("$CTL" geo-search --query "$query" 2>&1)"
 			else
-				echo '{"error":"geo-search 需要 --query 地名"}'
+				echo '{"error":"geo-search requires --query"}'
 				exit 1
 			fi
 			;;
@@ -216,23 +214,14 @@ call)
 		gw="$(jsonfilter -i /etc/wloc-service/ca.info.json -e '@.fingerprint')"
 		norm() { echo "$1" | tr -d ':' | tr '[:lower:]' '[:upper:]' | tr -d ' '; }
 		if [ "$(norm "$fingerprint")" = "$(norm "$gw")" ]; then
-			echo "{\"match\":true,\"gateway_fingerprint\":\"$gw\"}"
+			echo "{\"match\":true,\"ca_fingerprint\":\"$gw\"}"
 		else
-			echo "{\"match\":false,\"gateway_fingerprint\":\"$gw\"}"
+			echo "{\"match\":false,\"ca_fingerprint\":\"$gw\"}"
 		fi
 		exit 0
 		;;
 	restart_service)
-		# V2 has one lifecycle owner. Keep this legacy method as a
-		# compatibility alias so old LuCI pages cannot bypass the supervisor.
-		/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1
-		sleep 2
-		echo '{"ok":true}'
-		exit 0
-		;;
-	restart_gateway)
-		# V2 has one lifecycle owner; the supervisor coordinates the
-		# Gateway child and WLOC redirect ordering.
+		# One lifecycle owner: the standalone WLOC supervisor.
 		/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1
 		sleep 2
 		echo '{"ok":true}'
@@ -263,38 +252,24 @@ call)
 		exit $?
 		;;
 	clear_log)
-		# Truncate a usage log immediately with a shell redirect (O_TRUNC).
-		# The old path went through LuCI's fs.write ubus call, which could
-		# stall while a monitor process holds the file open, leaving the
-		# confirm modal open until the write returned.
+		# Truncate only the standalone WLOC usage log.
 		read -r input
 		json_load "$input"
 		json_get_var log log
 		case "$log" in
-			wfc) : > /var/run/wificalling-gateway/events.log ;;
 			wloc) : > /var/run/wloc-service/events.jsonl ;;
 			*) echo '{"error":"unknown log target"}'; exit 1 ;;
 		esac
 		echo '{"ok":true}'
 		exit 0
 		;;
-	node_test)
-		# Manual connection test for a single node. WireGuard nodes get a
-		# fresh handshake (bypassing the monitor's result cache); other
-		# protocols get a TCP reachability probe. The helper reuses the
-		# monitor's handshake function where applicable.
-		read -r input
-		json_load "$input"
-		json_get_var id id
-		if [ -z "$id" ] || [ "$id" = "null" ]; then
-			echo '{"state":"failed","reason":"no_node_id"}'
-			exit 0
+	provider_test)
+		# Read-only provider capability check.
+		if /usr/libexec/wificalling-location-gateway/singbox-runtime.sh check >/dev/null 2>&1; then
+			echo '{"state":"ok","reason":"provider_available"}'
+		else
+			echo '{"state":"failed","reason":"provider_unavailable"}'
 		fi
-		if [ ! -x /usr/libexec/wificalling-gateway/node-test.sh ]; then
-			echo '{"state":"failed","reason":"no_test_helper"}'
-			exit 0
-		fi
-		/usr/libexec/wificalling-gateway/node-test.sh "$id"
 		exit 0
 		;;
 	update_status)

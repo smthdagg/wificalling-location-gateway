@@ -47,15 +47,15 @@ class V2DiagnosticsContractTests(unittest.TestCase):
         self.assertNotIn("opkg remove", source)
         self.assertNotIn("nft ", source)
         builder = (self.root / "scripts/build-luci-ipk.sh").read_text(encoding="utf-8")
-        self.assertIn("X-WFC-Product: wificalling-location-gateway/v2", builder)
-        self.assertIn("X-WFC-Gateway: 1.7", builder)
-        self.assertIn("X-WFC-Wloc-Api: wloc.service/v2", builder)
+        self.assertIn("X-WLOC-Product: wificalling-location-gateway/v2", builder)
+        self.assertIn("X-WLOC-Api: wloc.service/v2", builder)
+        self.assertIn("X-WLOC-OpenWrt: 24.10+", builder)
         self.assertIn("create-update-manifest.sh", builder)
         for compatibility in (
             self.root / "openwrt/files/usr/share/wificalling-location-gateway/compatibility",
             self.root / "openwrt/luci-app-wificalling-location-gateway/files/usr/share/wificalling-location-gateway/compatibility",
         ):
-            self.assertIn("X-WFC-Product: wificalling-location-gateway/v2", compatibility.read_text(encoding="utf-8"))
+            self.assertIn("X-WLOC-Product: wificalling-location-gateway/v2", compatibility.read_text(encoding="utf-8"))
 
     def test_component_update_is_installed_and_exposed_with_minimum_acl(self):
         makefile = (self.root / "openwrt/Makefile").read_text(encoding="utf-8")
@@ -76,11 +76,13 @@ class V2DiagnosticsContractTests(unittest.TestCase):
             self.assertIn("update_preflight", write_methods)
             self.assertIn("update_apply", write_methods)
             self.assertIn("update_recover", write_methods)
+            update = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-update.js").read_text(encoding="utf-8")
+            self.assertIn("update_preflight", update)
+            self.assertIn("update_apply", update)
+            self.assertIn("params: ['path']", update)
+            self.assertIn("call(path.value)", update)
             health = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js").read_text(encoding="utf-8")
-            self.assertIn("update_preflight", health)
-            self.assertIn("update_apply", health)
-            self.assertIn("params: [ 'path' ]", health)
-            self.assertIn("call(updatePath.value)", health)
+            self.assertNotIn("update_apply", health)
 
     def test_diagnostics_rpc_acl_and_ui_are_present_in_both_package_sources(self):
         for prefix in (
@@ -100,8 +102,8 @@ class V2DiagnosticsContractTests(unittest.TestCase):
             self.assertIn("support_bundle", write_methods)
             health = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js").read_text(encoding="utf-8")
             self.assertIn("Generate support bundle", health)
-            monitor = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wfc-monitor.js").read_text(encoding="utf-8")
-            self.assertIn("eventFields", monitor)
+            monitor = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-monitor.js").read_text(encoding="utf-8")
+            self.assertIn("parseEvents", monitor)
 
     def test_support_bundle_shell_and_log_regression_scripts_pass(self):
         for name in (

@@ -21,7 +21,7 @@ helpers, rpcd/LuCI UI, and package definitions.
 
 End users install one architecture-specific package named
 `wificalling-location-gateway`. AX6S uses the architecture-specific
-`wificalling-location-gateway_1.2.0-1_aarch64_cortex-a53.ipk`; x86-64 24.x
+`wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk`; x86-64 24.x
 uses the integrated IPK and 25.x uses the native APK v3. Both UCI paths are
 declared as conffiles, so direct upgrade/reinstall preserves configuration.
 

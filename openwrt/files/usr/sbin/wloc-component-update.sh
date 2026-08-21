@@ -1,5 +1,5 @@
 #!/bin/sh
-# Transactional updater for the unified Gateway/WLOC component.
+# Transactional updater for the standalone WLOC component.
 #
 # The package is validated before the first mutation. A known-good package and
 # configuration snapshot are retained until restart and health validation pass;
@@ -64,7 +64,7 @@ cleanup_lock() {
 health_check() {
 	health_report=$($HEALTH 2>/dev/null) || return 1
 	printf '%s\n' "$health_report" | grep -F '"wloc":{"running":1,"socket":1,"status_fresh":1' >/dev/null || return 1
-	printf '%s\n' "$health_report" | grep -F '"gateway":{"running":1,"monitor":1,"singbox":1,"config_present":1,"config_valid":1' >/dev/null || return 1
+	printf '%s\n' "$health_report" | grep -F '"provider":{"available":1,"valid":1,"config_present":1,"config_valid":1' >/dev/null || return 1
 }
 
 wait_for_health() {
@@ -128,7 +128,7 @@ verify_manifest() {
 	manifest_package_sha256=$(field Package-SHA256 "$manifest")
 	manifest_control_sha256=$(field Control-SHA256 "$manifest")
 	manifest_data_sha256=$(field Data-SHA256 "$manifest")
-	[ "$format" = 'wfc-update-manifest/v1' ] || die 'update manifest format is invalid'
+	[ "$format" = 'wloc-update-manifest/v1' ] || die 'update manifest format is invalid'
 	[ "$manifest_package" = "$(field Package "$work/control/control")" ] || die 'update manifest package mismatch'
 	[ "$manifest_version" = "$(field Version "$work/control/control")" ] || die 'update manifest version mismatch'
 	[ "$manifest_architecture" = "$(field Architecture "$work/control/control")" ] || die 'update manifest architecture mismatch'
@@ -199,18 +199,20 @@ tar -xOzf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
 	name=$(field Package "$control")
 	version=$(field Version "$control")
 	architecture=$(field Architecture "$control")
-	product=$(field X-WFC-Product "$control")
-	gateway=$(field X-WFC-Gateway "$control")
-	api=$(field X-WFC-Wloc-Api "$control")
+	product=$(field X-WLOC-Product "$control")
+	api=$(field X-WLOC-Api "$control")
+	openwrt=$(field X-WLOC-OpenWrt "$control")
+	package_format=$(field X-WLOC-Package-Format "$control")
 	tar -xOzf "$package" data.tar.gz > "$work/data.tar.gz" 2>/dev/null \
 		|| tar -xOzf "$package" ./data.tar.gz > "$work/data.tar.gz"
 	archive_safe "$work/data.tar.gz" || die 'data archive is unsafe or corrupt'
 	verify_manifest "$package" "$work/control.tar.gz" "$work/data.tar.gz"
-	if [ -z "$product" ] || [ -z "$gateway" ] || [ -z "$api" ]; then
+	if [ -z "$product" ] || [ -z "$api" ] || [ -z "$openwrt" ] || [ -z "$package_format" ]; then
 		compatibility=$(tar -xOf "$work/data.tar.gz" ./usr/share/wificalling-location-gateway/compatibility 2>/dev/null || true)
-		[ -n "$product" ] || product=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WFC-Product:[[:space:]]*//p')
-		[ -n "$gateway" ] || gateway=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WFC-Gateway:[[:space:]]*//p')
-		[ -n "$api" ] || api=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WFC-Wloc-Api:[[:space:]]*//p')
+		[ -n "$product" ] || product=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-Product:[[:space:]]*//p')
+		[ -n "$api" ] || api=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-Api:[[:space:]]*//p')
+		[ -n "$openwrt" ] || openwrt=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-OpenWrt:[[:space:]]*//p')
+		[ -n "$package_format" ] || package_format=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-Package-Format:[[:space:]]*//p')
 	fi
 	case "$name" in
 		wificalling-location-gateway|luci-app-wificalling-location-gateway) ;;
@@ -218,8 +220,18 @@ tar -xOzf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
 	esac
 	validate_version "$version" || die 'update package version is invalid'
 	[ "$product" = 'wificalling-location-gateway/v2' ] || die 'update package compatibility metadata is missing'
-	[ "$gateway" = '1.7' ] || die 'update package requires an incompatible Gateway major version'
 	[ "$api" = 'wloc.service/v2' ] || die 'update package requires an incompatible WLOC API'
+	[ "$openwrt" = '24.10+' ] || die 'update package requires OpenWrt 24.10 or newer'
+	[ "$package_format" = 'ipk' ] || die 'update package format is not supported by the opkg updater'
+	[ -x "$OPKG" ] || die 'opkg is required for an IPK update on this firmware'
+	if [ -f "$ROOT/etc/openwrt_release" ]; then
+		firmware_release=$(sed -n "s/^DISTRIB_RELEASE='\([^']*\)'.*/\1/p" "$ROOT/etc/openwrt_release" | head -n 1)
+		case "$firmware_release" in
+			24.*|25.*|26.*) ;;
+			'') die 'OpenWrt release could not be detected' ;;
+			*) die 'firmware release is older than the WLOC package contract' ;;
+		esac
+	fi
 	if [ "$architecture" != all ]; then
 		expected=${WLOC_UPDATE_ARCHITECTURE:-}
 		if [ -z "$expected" ] && [ -x "$OPKG" ]; then
@@ -236,7 +248,7 @@ tar -xOzf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
 }
 
 restore_configs() {
-	for config in wloc-service wificalling-gateway; do
+	for config in wloc-service; do
 		if [ -f "$TXN/config.$config" ]; then
 			mkdir -p "$ROOT/etc/config"
 			cp -p "$TXN/config.$config" "$ROOT/etc/config/$config" || return 1
@@ -332,7 +344,7 @@ apply_update() {
 	printf '%s\n' "$current" > "$TXN/current.version"
 	cp -p "$rollback_package" "$TXN/rollback.ipk"
 	chmod 0600 "$TXN/rollback.ipk"
-	for config in wloc-service wificalling-gateway; do
+	for config in wloc-service; do
 		if [ -f "$ROOT/etc/config/$config" ]; then
 			cp -p "$ROOT/etc/config/$config" "$TXN/config.$config"
 			chmod 0600 "$TXN/config.$config"

@@ -84,7 +84,6 @@ return view.extend({
 		return Promise.all([
 			L.resolveDefault(fs.read(STATUS_FILE), '{}'),
 			L.resolveDefault(fs.read(EVENTS_FILE), ''),
-			uci.load('wificalling-gateway'),
 			uci.load('wloc-service')
 		]);
 	},
@@ -150,9 +149,9 @@ return view.extend({
 				exitVal = wlocI18n.t(s.exit.last_error);
 			}
 			if (s.assigned_device) {
-				// source_ip is a DynamicList value (array) on the device policy.
-				var dev = uci.sections('wificalling-gateway', 'device').find(function(d) {
-					return (d.source_ip || []).indexOf(s.assigned_device) >= 0;
+				// assigned_device is the profile's canonical device address.
+				var dev = uci.sections('wloc-service', 'device').find(function(d) {
+					return d.assigned_device === s.assigned_device;
 				});
 				deviceLabel = (dev && dev.label ? dev.label : s.assigned_device) + ' (' + s.assigned_device + ')';
 				deviceDisabled = !!(dev && dev.enabled === '0');

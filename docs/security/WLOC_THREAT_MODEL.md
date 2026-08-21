@@ -1,4 +1,9 @@
-# WLOC PoC 威胁模型
+# WLOC PoC 威胁模型（历史基线）
+
+> 本文保留为 Phase 0 历史安全证据。当前独立 WLOC 产品以
+> `docs/adr/0003-standalone-wloc-product-boundary.md` 和
+> `DEVELOPMENT_TEST_PLAN.md` 的 V2 附录为准；下文涉及 Gateway 的内容只
+> 描述旧集成边界，不代表当前产品依赖、读取或管理该项目。
 
 - Status: Historical Phase 0 baseline; the V2 implementation is covered by
   the current Rust/OpenWrt tests and the V2 release gates. Real-device

@@ -1,4 +1,10 @@
-# Wi-Fi Calling Gateway 1.7 + 路由器侧 WLOC 开发测试计划
+# 独立 WLOC 路由器组件开发测试计划
+
+> **边界修订（2026-08-22）**：本项目是独立的 WLOC 项目，不属于 Wi-Fi
+> Calling Gateway，也不依赖、打包、读取或管理 `luci-app-wificalling-gateway`
+> / `wificalling-gateway`。本文早期出现的 Gateway 1.7 内容仅为历史背景，
+> 不再是 V2 的产品依赖或发布门禁。以
+> [ADR 0003](docs/adr/0003-standalone-wloc-product-boundary.md) 为准。
 
 ## 1. 权威依据
 
@@ -6,7 +12,9 @@
 
 会话最终形成的方案不是继续部署地图或 Cloudflare，而是：
 
-> Wi-Fi Calling Gateway 检测每个代理节点的真实出口 IP，将 IP 解析为国家、城市、经纬度和时区，再由路由器侧 WLOC 引擎只拦截目标 iPhone 的 Apple WLOC 请求，使设备网络定位自动跟随所绑定的代理出口。
+> 独立 WLOC 服务通过本项目维护的节点引用和 sing-box provider 检测真实出口
+> IP，将 IP 解析为国家、城市、经纬度和时区，再只拦截目标设备的 Apple WLOC
+> 请求，使设备网络定位自动跟随该设备档案绑定的节点出口。
 
 明确决策：
 
@@ -15,16 +23,15 @@
 - 不需要手机端 Shadowrocket WLOC 模块；
 - iPhone 只需安装并信任一次网关 CA；
 - 第一阶段建立独立实验项目 `wificalling-location-gateway`；
-- V1 PoC 的拆分设想已由 V2 产品设计取代：Gateway 与 WLOC 集成为一个
+- V1 PoC 的拆分设想已由 V2 产品设计取代：独立 WLOC 只有一个
   `wificalling-location-gateway` 产品包、一个统一 supervisor、一个管理界面和
-  一套日志/监控/更新/回滚生命周期；不再把两个服务作为最终产品并列交付；
+  一套日志/监控/更新/回滚生命周期，不再把 Wi-Fi Calling Gateway 作为产品模块；
 - `sing-box` 仍必须保留并复用，但 V2 不强制安装第二份完整二进制。优先复用
   AX6S 已实测的 `sing-box-tiny`/`sing-box-lite` 或 PassWall 提供的 sing-box，
   由运行时选择器验证路径和版本后交给统一 supervisor 管理；不接管 PassWall
   已运行的进程或配置；
-- AX6S 持久空间不足时，测试前先备份配置/CA，停止并卸载旧的 Wificalling/WLOC
-  应用包，保留被选中的 sing-box provider，再安装集成 V2 包；不得使用强制
-  依赖删除；
+- AX6S 持久空间不足时，测试前只备份并移除本项目旧 WLOC 包和本项目状态，保留
+  独立的 sing-box provider；不得为了 WLOC 强制删除其他应用；
 - 第一轮历史 PoC 使用 `/tmp` 临时运行的 ARM64 方式保留为回归参考，V2 验收以
   架构正确的集成包、迁移、重启、低空间和回滚实测为准。
 
@@ -33,23 +40,30 @@
 本文件早期章节保留了 Phase 0–2 PoC 的历史背景。以下 V2 约束覆盖其中与
 最终产品形态、运行时、打包和真机部署相冲突的旧建议：
 
-- **产品形态**：Gateway/WLOC 共用 `wificalling-location-gateway` 包和
-  `wificalling-location-gateway` procd supervisor；旧 init/配置入口只作为
-  一次迁移兼容层，不得独立拥有运行状态。
-- **设备模型**：每台设备有独立档案，包含节点绑定、WLOC 自动跟随、手动定位、
-  服务启用状态、健康状态、日志和监控；多档案共享 sing-box 进程/节点池，不
-  为每台设备复制完整代理进程。
+- **产品形态**：独立 WLOC 共用 `wificalling-location-gateway` 包名、一个
+  `wificalling-location-gateway` procd supervisor、一个管理界面和一套状态/日志/
+  更新模型；任何 Gateway init/配置入口都不是运行依赖，只能在迁移工具中短期识别。
+- **设备模型**：每台设备有独立档案，包含本项目节点绑定、WLOC 自动跟随、手动
+  定位、服务启用状态、健康状态、日志和监控；`fixed` 只表示绑定该档案明确选定
+  的 WLOC 节点，`auto` 跟随该节点出口，`manual` 写入该档案自己的坐标；多档案
+  共享 sing-box provider 进程，不为每台设备复制完整代理进程。
 - **低资源策略**：包不声明不可表达“tiny/lite/PassWall 任一 provider”的
   强制完整 sing-box 依赖；安装后检查器找不到 provider 时必须显式告警，统一
   服务保持安全失败/透传。
+- **更新页**：组件更新必须是独立 LuCI 页面，并在应用前检查设备架构、固件系列、
+  包格式、所需内核能力和剩余空间；不检查也不依赖 Gateway 版本。
+- **语言**：所有 UI/RPC 英文为源文案，中文只通过正式 LuCI 语言包提供；现有
+  自定义翻译表和硬编码中文是待清理兼容层。
 - **验收状态**：主机测试、静态包检查和交叉编译不能替代 AX6S 的 RSS、CPU、
   存储、启动、升级中断恢复和回滚证据；没有脱敏真机证据不得标记 V2 发布通过。
 
 ## 2. 当前基线
 
-### 2.1 Gateway 1.7.0
+### 2.1 历史 Gateway 参考（非本项目依赖）
 
 仓库：`/Users/henry/Documents/Codex/2026-08-05/tiao`
+
+本节只用于解释历史迁移背景；它不参与本项目构建、安装、运行、测试或发布。
 
 - 当前提交：`b7cbe60`，与 `origin/main` 一致；
 - 45 项测试通过；
@@ -255,7 +269,7 @@ CA 生命周期必须自动化验收：
 
 ## 5. 项目结构
 
-V1 的独立实验结构已演进为当前仓库中的 V2 集成结构：
+独立 WLOC 项目结构：
 
 ```text
 wificalling-location-gateway/
@@ -270,8 +284,8 @@ wificalling-location-gateway/
   README.md
 ```
 
-稳定 Gateway 1.7 源码仍不在本仓库内 vendor；集成包只在构建阶段接受经过
-版本/摘要校验的 Gateway payload，并对其执行受控补丁。
+本项目不接受 Gateway payload，也不在构建阶段读取或补丁任何外部 Gateway
+IPK。sing-box 只作为可选 provider，在设备上运行时检测。
 
 ## 6. 技术选型门禁
 
@@ -301,16 +315,16 @@ PoC：在线 provider + 本地缓存。
 
 ### 6.3 V2 包形态
 
-V2 正式交付一个架构相关的集成包：
+V2 正式交付一个架构相关的独立 WLOC 包：
 
 ```text
 wificalling-location-gateway
-  Gateway 1.7 payload、统一 supervisor、wloc-service/wloc-ctl、
-  LuCI、UCI、ACL、日志/诊断/更新/回滚脚本
+  wloc-service/wloc-ctl、独立 supervisor、LuCI、WLOC UCI、ACL、
+  日志/诊断/更新/回滚脚本
 ```
 
 包内不复制第二份 sing-box；运行时选择 AX6S 已有 tiny/lite/PassWall
-provider。旧组件包仅用于一次升级迁移和回滚兼容，不是 V2 最终管理入口。
+provider。旧 WLOC 包仅用于一次升级迁移和回滚兼容，不是 V2 最终管理入口。
 
 ## 7. 资源预算
 
@@ -576,13 +590,14 @@ V2 的代码、UI、迁移和真机验收按 GitHub Issue #41 的工作包和退
 
 ### V2 product path
 
-- 一个 `wificalling-location-gateway` 集成包和统一 supervisor；
-- feature flag 默认关闭，WLOC 失败时 Gateway 保持可用/透传；
-- AX6S 安装前先停止、禁用并卸载旧 Wificalling/WLOC 应用包，保留选定的
+- 一个 `wificalling-location-gateway` 独立 WLOC 包和统一 supervisor；
+- feature flag 默认关闭，WLOC 失败时保持安全透传；
+- AX6S 安装前先停止、禁用并卸载旧 WLOC 应用包，保留选定的
   tiny/lite/PassWall sing-box provider；
 - 卸载前先停止并清理规则；CA 私钥仅在用户明确选择时删除；
 - 更新事务必须保留配置/CA、检查空间、保留回滚包，并在中断后可恢复；
-- Gateway/WLOC 统一管理，但旧入口在一版迁移期内只提供兼容 facade。
+- WLOC 统一管理，但旧 WLOC 入口在一版迁移期内只提供兼容 facade；不得恢复
+  外部 Gateway 作为运行依赖。
 
 ## 12. 第一迭代任务清单
 

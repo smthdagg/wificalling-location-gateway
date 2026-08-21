@@ -32,7 +32,7 @@ sha256_file() {
 
 manifest="$package.manifest"
 {
-	printf '%s\n' 'Format: wfc-update-manifest/v1'
+	printf '%s\n' 'Format: wloc-update-manifest/v1'
 	printf 'Package: %s\nVersion: %s\nArchitecture: %s\n' "$name" "$version" "$architecture"
 	printf 'Package-SHA256: %s\n' "$(sha256_file "$package")"
 	printf 'Control-SHA256: %s\n' "$(sha256_file "$tmp/control.tar.gz")"
@@ -40,10 +40,10 @@ manifest="$package.manifest"
 } > "$manifest"
 chmod 0600 "$manifest"
 
-if [ -n "${WFC_UPDATE_SIGNING_KEY:-}" ]; then
-	usign=${WFC_UPDATE_USIGN:-/usr/bin/usign}
-	[ -x "$usign" ] || { echo 'configured WFC_UPDATE_SIGNING_KEY requires usign' >&2; exit 2; }
-	"$usign" -S -m "$manifest" -s "$WFC_UPDATE_SIGNING_KEY" -x "$package.sig"
+if [ -n "${WLOC_UPDATE_SIGNING_KEY:-}" ]; then
+	usign=${WLOC_UPDATE_USIGN:-/usr/bin/usign}
+	[ -x "$usign" ] || { echo 'configured WLOC_UPDATE_SIGNING_KEY requires usign' >&2; exit 2; }
+	"$usign" -S -m "$manifest" -s "$WLOC_UPDATE_SIGNING_KEY" -x "$package.sig"
 	chmod 0600 "$package.sig"
 fi
 

@@ -22,20 +22,17 @@ class WlocLuciModeSwitchTests(unittest.TestCase):
             self.assertIn("ctl_live geo-set", mode_block)
             self.assertIn("ctl_live geo-clear", mode_block)
 
-    def test_mode_switch_serializes_save_apply_and_runtime_control(self) -> None:
+    def test_device_page_owns_manual_and_auto_location_fields(self) -> None:
         root = pathlib.Path(__file__).resolve().parents[1]
-        completed = subprocess.run(
-            ["node", "tests/js/wloc_mode_switch.test.js"],
-            cwd=root,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        self.assertEqual(
-            completed.returncode,
-            0,
-            msg=f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
-        )
+        for relative in (
+            "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",
+            "openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",
+        ):
+            text = (root / relative).read_text(encoding="utf-8")
+            self.assertIn("geoMode", text)
+            self.assertIn("manual_lat", text)
+            self.assertIn("manual_lon", text)
+            self.assertIn("uci.set('wloc-service'", text)
 
 
 if __name__ == "__main__":

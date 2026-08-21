@@ -239,7 +239,7 @@ fn validate_v2_profile_params(params: &WireV2ProfileParams) -> Result<(), ApiV2E
         validate_node_ref(node_ref).map_err(|_| ApiV2ErrorCode::InvalidParams)?;
     }
     if let Some(node_mode) = params.node_mode.as_deref() {
-        if !matches!(node_mode, "fixed" | "gateway_default") {
+        if node_mode != "fixed" {
             return Err(ApiV2ErrorCode::InvalidParams);
         }
     }

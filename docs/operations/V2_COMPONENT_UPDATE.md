@@ -1,17 +1,19 @@
-# V2 component update and rollback
+# V2 standalone component update and rollback
 
 ## Update contract
 
 The root-only `/usr/sbin/wloc-component-update.sh` is the single update
-boundary for the unified Gateway/WLOC package. LuCI may only reference an IPK
+boundary for the standalone WLOC package. LuCI may only reference an IPK
 already staged under `/tmp/wloc-update/`; it cannot provide a URL or an
 arbitrary filesystem path.
 
 Before `opkg install` is called, the helper validates:
 
 - regular local IPK and safe `control.tar.gz`/`data.tar.gz` members;
-- unified package identity, version, architecture, Gateway `1.7`, and
+- standalone product identity, version, architecture, package format, and
   `wloc.service/v2` compatibility metadata;
+- current router architecture, OpenWrt release family, package manager, and
+  required kernel/module capabilities;
 - a sidecar `PACKAGE.ipk.manifest` containing package/control/data SHA-256
   values and a detached `PACKAGE.ipk.sig` verified with the router's
   `/etc/wificalling-location-gateway/update.pub` `usign` key;
@@ -20,16 +22,16 @@ Before `opkg install` is called, the helper validates:
 - a known-good rollback IPK.
 
 The install is never remove-first. The helper takes a persistent transaction
-snapshot of the two component configuration files and the previous package,
-invokes the package manager, restores configuration, restarts only the unified
+snapshot of the WLOC configuration and the previous package, invokes the
+package manager, restores configuration, restarts only the standalone
 supervisor, and runs the bounded health command. Any install, restart, or
 health failure restores the known-good package and configuration. A simulated
 power loss or process interruption leaves the transaction marker; the LuCI
 Recover action calls `recover` to complete the rollback.
 
-The update path does not call `nft`, edit nftables rules, disable UDP 500/4500,
-or stop the stable Gateway data-plane owner directly. The supervisor owns the
-existing fail-open withdrawal/restart boundary.
+The update path does not call `nft`, edit unrelated nftables rules, or disable
+UDP 500/4500. The standalone supervisor owns the fail-open withdrawal/restart
+boundary.
 
 ## State and resource policy
 
@@ -45,12 +47,12 @@ and transaction overhead. On AX6S this prevents an update from starting when
 flash or `/tmp` space is too low; no large duplicate root filesystem is
 created.
 
-Package metadata emitted by the builder includes:
+Package metadata emitted by the builder will include:
 
 ```text
-X-WFC-Product: wificalling-location-gateway/v2
-X-WFC-Gateway: 1.7
-X-WFC-Wloc-Api: wloc.service/v2
+X-WLOC-Product: wificalling-location-gateway/v2
+X-WLOC-Api: wloc.service/v2
+X-WLOC-OpenWrt: 24.10+
 ```
 
 `scripts/build-luci-ipk.sh` also writes the unsigned manifest sidecar. Release
@@ -58,7 +60,7 @@ automation must sign it before staging:
 
 ```sh
 for package in dist/wificalling-location-gateway_*.ipk; do
-  WFC_UPDATE_SIGNING_KEY=/secure/release.sec \
+  WLOC_UPDATE_SIGNING_KEY=/secure/release.sec \
     scripts/create-update-manifest.sh "$package"
 done
 ```
@@ -69,10 +71,11 @@ staging workflow.
 
 ## LuCI behavior
 
-The Health and Monitor page exposes update phase, current/target versions,
-reason code, package preflight, apply, and interrupted-transaction recovery.
-The UI does not upload or fetch packages; staging remains an explicit local
-router operation so the update source is observable and bounded.
+The independent Component Update page exposes device/firmware/package
+preflight, update phase, current/target versions, apply, and
+interrupted-transaction recovery. Health and Monitor pages do not contain
+update controls. The UI does not upload or fetch packages; staging remains an
+explicit local router operation so the update source is observable and bounded.
 
 An update status of `rollback_failed` is actionable and must not be presented
 as a successful update. The operator should keep the router in passthrough,

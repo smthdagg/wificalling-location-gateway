@@ -1,8 +1,8 @@
 //! Real sing-box exit probe.
 //!
-//! Reads the Wi-Fi Calling Gateway's running sing-box configuration
-//! (`/var/run/wificalling-gateway/sing-box.json`), finds the outbound bound to
-//! the assigned test device, builds a minimal temporary configuration that
+//! Reads the standalone WLOC provider's running sing-box configuration,
+//! finds the outbound bound to the assigned test device, builds a minimal
+//! temporary configuration that
 //! reuses that outbound behind a local HTTP proxy, starts a second sing-box
 //! instance, and asks an IP echo service through it to learn the node's real
 //! exit IP. The temporary instance is always cleaned up.
@@ -64,10 +64,10 @@ pub fn select_outbound_tag(document: &Value, device_ip: IpAddr) -> Option<String
     })
 }
 
-/// Resolve the node bound to `device_ip` in the Gateway device-policy UCI
-/// text (`/etc/config/wificalling-gateway`), returning its `node-<section>`
-/// tag. Disabled policies are included: the follow-device IP is defined by
-/// the bound node, not by whether Wi-Fi Calling interception is enabled.
+/// Resolve the node bound to `device_ip` in the standalone WLOC device-profile
+/// UCI text (`/etc/config/wloc-service`), returning the explicit `node_ref`
+/// tag. Disabled profiles are included so a profile can be probed before its
+/// WLOC redirect is enabled.
 pub fn device_bound_node_tag(uci_text: &str, device_ip: IpAddr) -> Option<String> {
     let mut in_device = false;
     let mut source_ips: Vec<String> = Vec::new();
@@ -95,9 +95,9 @@ pub fn device_bound_node_tag(uci_text: &str, device_ip: IpAddr) -> Option<String
         if !in_device {
             continue;
         }
-        if let Some(value) = option_value(line, "option node") {
+        if let Some(value) = option_value(line, "option node_ref") {
             node = Some(value);
-        } else if let Some(value) = option_value(line, "list source_ip") {
+        } else if let Some(value) = option_value(line, "option assigned_device") {
             source_ips.push(value);
         }
     }
@@ -128,7 +128,7 @@ pub fn select_node_tag(
 }
 
 /// Extract the quoted value of a UCI `option`/`list` line, e.g.
-/// `option node 'cfg1146ab'` -> `cfg1146ab`.
+/// `option node_ref 'cfg1146ab'` -> `cfg1146ab`.
 fn option_value(line: &str, keyword: &str) -> Option<String> {
     let rest = line.strip_prefix(keyword)?.trim_start();
     let value = rest.strip_prefix('\'').or_else(|| rest.strip_prefix('"'))?;
@@ -179,7 +179,7 @@ pub fn parse_singbox_config(document: &Value) -> SingBoxConfig {
 
 /// Build a minimal probe configuration: a local HTTP inbound plus the target
 /// node (a regular outbound, or a wireguard endpoint re-emitted from the
-/// Gateway config) and a direct fallback. For endpoints the sing-box 1.13
+/// provider config) and a direct fallback. For endpoints the sing-box 1.13
 /// model routes through the endpoint by naming it as `route.final` (the same
 /// shape the node-health handshake probe uses).
 pub fn build_probe_config(
@@ -277,7 +277,7 @@ pub fn parse_wan_ips(text: &str) -> Vec<IpAddr> {
     addresses
 }
 
-/// A probe backed by the Gateway's sing-box outbounds.
+/// A probe backed by the configured sing-box provider outbounds.
 pub struct SingBoxProbe {
     config_path: PathBuf,
     device_ip: IpAddr,
@@ -285,9 +285,8 @@ pub struct SingBoxProbe {
     work_dir: PathBuf,
     timeout: Duration,
     singbox_bin: String,
-    /// Gateway device-policy UCI file (test-injectable). Used to resolve
-    /// the bound node for devices that have no route rule (e.g. disabled
-    /// Wi-Fi Calling policies), so follow-device still probes their node.
+    /// Standalone WLOC device-profile UCI file (test-injectable). Used to
+    /// resolve the bound node even when the WLOC redirect is disabled.
     uci_config_path: PathBuf,
     /// When true, an explicit device binding is required. A missing binding
     /// must not silently fall back to an unrelated outbound.
@@ -308,12 +307,12 @@ impl SingBoxProbe {
             work_dir,
             timeout: Duration::from_secs(15),
             singbox_bin: "/usr/bin/sing-box".to_owned(),
-            uci_config_path: PathBuf::from("/etc/config/wificalling-gateway"),
+            uci_config_path: PathBuf::from("/etc/config/wloc-service"),
             require_device_binding: false,
         }
     }
 
-    /// Require a matching Gateway policy for this probe target. This is used
+    /// Require a matching WLOC profile for this probe target. This is used
     /// by the profile-driven daemon; legacy callers may retain the historical
     /// fallback behavior unless they opt in.
     pub fn with_required_device_binding(mut self) -> Self {
@@ -328,15 +327,16 @@ impl SingBoxProbe {
         self
     }
 
-    /// Read the Gateway config and select the outbound for the test device.
+    /// Read the standalone WLOC profile config and select the outbound for the
+    /// test device.
     fn load_outbound_tag(&self) -> Result<String, ProbeFailure> {
         let text =
             std::fs::read_to_string(&self.config_path).map_err(|_| ProbeFailure::Unreachable)?;
         let document: Value = serde_json::from_str(&text).map_err(|_| ProbeFailure::InvalidData)?;
         let config = parse_singbox_config(&document);
 
-        // 1. The node bound to the device policy in UCI - the source of
-        //    truth. The Gateway regenerates its sing-box route rules at its
+        // 1. The node bound to the device profile in UCI - the source of
+        //    truth. The provider regenerates its sing-box route rules at its
         //    own pace, so a fresh UCI binding must win over a stale rule.
         //    The node may be a regular outbound, or a wireguard endpoint
         //    which the Gateway compiler names `wg-<section>` (sing-box
@@ -344,7 +344,7 @@ impl SingBoxProbe {
         let uci_text = std::fs::read_to_string(&self.uci_config_path).ok();
         let selected_tag = if self.require_device_binding {
             // A profile-bound probe must never trust a generated route rule
-            // as a substitute for the Gateway's device policy. Route rules
+            // as a substitute for the WLOC device profile. Route rules
             // can be stale or orphaned after a node switch; accepting one
             // here would let the probe follow a different device/node than
             // the profile explicitly selected.
@@ -372,7 +372,7 @@ impl SingBoxProbe {
             return Err(ProbeFailure::Unreachable);
         }
         // 2. Fall back to the first non-direct outbound, then the first
-        //    wireguard endpoint (a gateway with only wg nodes has no usable
+        //    wireguard endpoint (a provider with only wg nodes has no usable
         //    outbound for the follow-device probe).
         config
             .outbounds
@@ -489,7 +489,7 @@ impl ExitProbeRuntime for SingBoxProbe {
         Ok(addresses)
     }
 
-    /// FNV-1a over the Gateway sing-box config AND the device-policy UCI
+    /// FNV-1a over the provider sing-box config AND the device-profile UCI
     /// text: a node switch can change either the running rule set or the
     /// UCI binding, and both must trigger an immediate re-probe even while
     /// cached evidence is still fresh.
@@ -628,7 +628,7 @@ mod tests {
         std::fs::write(&config_path, doc.to_string()).unwrap();
         std::fs::write(
             &uci_path,
-            "config device\n\toption label 'iPhone17'\n\toption node 'wgtest'\n\tlist source_ip '192.168.31.176'\n",
+            "config device\n\toption label 'iPhone17'\n\toption node_ref 'wgtest'\n\toption assigned_device '192.168.31.176'\n",
         )
         .unwrap();
         let mut probe = SingBoxProbe::new(
@@ -694,7 +694,7 @@ mod tests {
         std::fs::write(&config_path, doc.to_string()).unwrap();
         std::fs::write(
             &uci_path,
-            "config device\n\tlist source_ip '192.168.31.177'\n",
+            "config device\n\toption node_ref 'other'\n\toption assigned_device '192.168.31.177'\n",
         )
         .unwrap();
         let mut probe = SingBoxProbe::new(
@@ -714,7 +714,7 @@ mod tests {
     #[test]
     fn required_device_binding_rejects_route_only_match() {
         // A stale generated route rule can still point this device at an
-        // outbound even when Gateway UCI has no matching device policy. A
+        // outbound even when WLOC UCI has no matching device policy. A
         // profile-bound probe must reject that route-only match.
         let doc = json!({
             "outbounds": [
@@ -731,7 +731,7 @@ mod tests {
         std::fs::write(&config_path, doc.to_string()).unwrap();
         std::fs::write(
             &uci_path,
-            "config device\n\tlist source_ip '192.168.31.177'\n",
+            "config device\n\toption node_ref 'other'\n\toption assigned_device '192.168.31.177'\n",
         )
         .unwrap();
         let mut probe = SingBoxProbe::new(
@@ -772,21 +772,19 @@ mod tests {
         // rule, but its bound node must still be probeable - the follow-
         // device IP comes from that node's exit.
         let uci = r#"
-config wificalling-gateway 'main'
+config wloc-service 'main'
 	option enabled '1'
 
 config device
 	option label 'iPhone12'
-	option route_mode 'independent'
-	option node 'cfg0a46ab'
-	list source_ip '192.168.31.175'
+	option node_ref 'cfg0a46ab'
+	option assigned_device '192.168.31.175'
 
 config device
 	option label 'iPhone17'
-	option route_mode 'independent'
-	option node 'cfg1146ab'
+	option node_ref 'cfg1146ab'
+	option assigned_device '192.168.31.176'
 	option enabled '0'
-	list source_ip '192.168.31.176'
 "#;
         assert_eq!(
             device_bound_node_tag(uci, IpAddr::V4(Ipv4Addr::new(192, 168, 31, 176))),
@@ -808,9 +806,9 @@ config device
 
     #[test]
     fn select_node_tag_prefers_uci_binding_over_route_rules() {
-        // The route rule binds the device to node-a, but the UCI policy
+        // The route rule binds the device to node-a, but the WLOC policy
         // binds it to node-cfg0b. The UCI binding is the user's source of
-        // truth and must win: the Gateway regenerates its sing-box rules
+        // truth and must win: the provider regenerates its sing-box rules
         // at its own pace, so a stale rule must not override a fresh
         // binding (regression for node-switch not being followed).
         let doc = json!({
@@ -824,7 +822,7 @@ config device
             ]}
         });
         let ip = IpAddr::V4(Ipv4Addr::new(192, 168, 31, 175));
-        let uci = "config device\n\toption label 'iPhone12'\n\toption node 'cfg0b'\n\tlist source_ip '192.168.31.175'\n";
+        let uci = "config device\n\toption label 'iPhone12'\n\toption node_ref 'cfg0b'\n\toption assigned_device '192.168.31.175'\n";
         assert_eq!(
             select_node_tag(&doc, Some(uci), ip),
             Some("node-cfg0b".to_owned())
@@ -832,7 +830,7 @@ config device
         // Without a UCI binding the route rule is used.
         assert_eq!(select_node_tag(&doc, None, ip), Some("node-a".to_owned()));
         // A UCI binding for a different device does not shadow the rule.
-        let other = "config device\n\toption label 'iPhone17'\n\toption node 'cfg0c'\n\tlist source_ip '192.168.31.176'\n";
+        let other = "config device\n\toption label 'iPhone17'\n\toption node_ref 'cfg0c'\n\toption assigned_device '192.168.31.176'\n";
         assert_eq!(
             select_node_tag(&doc, Some(other), ip),
             Some("node-a".to_owned())
@@ -859,13 +857,13 @@ config device
 
         std::fs::write(
             &uci_path,
-            "config device\n\toption node 'cfg0a46ab'\n\tlist source_ip '192.168.31.175'\n",
+            "config device\n\toption node_ref 'cfg0a46ab'\n\toption assigned_device '192.168.31.175'\n",
         )
         .unwrap();
         let first = probe.config_fingerprint();
         std::fs::write(
             &uci_path,
-            "config device\n\toption node 'cfg1146ab'\n\tlist source_ip '192.168.31.175'\n",
+            "config device\n\toption node_ref 'cfg1146ab'\n\toption assigned_device '192.168.31.175'\n",
         )
         .unwrap();
         let second = probe.config_fingerprint();
@@ -898,8 +896,8 @@ config device
             &uci_path,
             "config device
 \toption label 'iPhone17'
-\toption node 'cfg1146ab'
-\tlist source_ip '192.168.31.176'
+\toption node_ref 'cfg1146ab'
+\toption assigned_device '192.168.31.176'
 ",
         )
         .unwrap();
@@ -985,7 +983,7 @@ config device
     }
 
     #[test]
-    fn load_outbound_tag_reads_the_gateway_config() {
+    fn load_outbound_tag_reads_the_wloc_provider_config() {
         let dir = std::env::temp_dir();
         let config_path = dir.join("wloc-singbox-load-test.json");
         std::fs::write(&config_path, sample_document().to_string()).unwrap();

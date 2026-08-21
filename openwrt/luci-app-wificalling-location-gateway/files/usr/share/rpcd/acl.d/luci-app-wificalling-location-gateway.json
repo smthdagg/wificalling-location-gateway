@@ -1,6 +1,6 @@
 {
   "luci-app-wificalling-location-gateway": {
-    "description": "Grant access to the Wi-Fi Calling & WLOC location gateway admin pages",
+    "description": "Grant access to the standalone WLOC location service admin pages",
     "read": {
       "ubus": {
         "luci.wloc": [
@@ -11,8 +11,7 @@
           "restart_service",
           "verify_fingerprint",
           "health",
-          "restart_gateway",
-          "node_test",
+		  "provider_test",
           "update_status"
         ],
         "file": [
@@ -54,8 +53,7 @@
           "restart_unified",
           "support_bundle",
           "verify_fingerprint",
-          "node_test",
-          "restart_gateway",
+		  "provider_test",
           "clear_log",
           "update_preflight",
           "update_apply",

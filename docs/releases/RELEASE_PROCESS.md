@@ -54,16 +54,9 @@ This is also implemented as `scripts/openwrt/sign-feed.sh`.
      regression tests, packaging tests)
    - `cargo clippy --all-targets` and `cargo fmt --check`
    - privacy sweep: no real device IPs, credentials, or keys in the repo
-2. **Keep the integration baseline identifiable**: the current V2 staging
-   branch uses `1.2.0` so AX6S migration and rollback can be rehearsed against
-   the installed 1.2.x line. After all hardware gates are green, perform the
-   final major-version bump to `2.0.0` across `VERSION`, `Cargo.toml` (and
-   `Cargo.lock` via `cargo update -p wificalling-location-gateway --offline`),
-   `scripts/openwrt/build-release-packages.sh`,
-   `scripts/build-luci-ipk.sh`, both `openwrt/*/Makefile` files, the
-   version tests in `tests/scripts/` (mind the escaped regex line in
-   `test-release-version.sh`), README install examples, and a new
-   `CHANGELOG.md` entry.
+2. **Use the V2 major version consistently**: the release branch uses
+   `2.0.0` across `VERSION`, `Cargo.toml`/`Cargo.lock`, both OpenWrt Makefiles,
+   package builders, tests, README install examples, and the V2 changelog.
 3. **Build runtimes** only if `src/` changed (aarch64 via
    `verify-rust-openwrt.sh` with `OPENWRT_BIN_NAME`, x86_64 via
    `build-x86_64-runtime.sh`); otherwise reuse the existing

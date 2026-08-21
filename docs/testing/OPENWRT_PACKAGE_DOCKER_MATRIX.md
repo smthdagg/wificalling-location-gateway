@@ -2,17 +2,16 @@
 
 ## Packaging boundary
 
-The reference Wi-Fi Calling Gateway can publish one `all.ipk` and one
-`noarch.apk` because its payload is Lua, JavaScript, and shell. WLOC adds two
-Rust ELF executables, so the runtime package must name the real OpenWrt CPU
-architecture. Marking an AArch64 or x86-64 ELF as `all` is invalid and can
-install an unusable binary on another router.
+This is the standalone WLOC package. It does not package or depend on the
+separate Wi-Fi Calling Gateway. Its payload includes Rust ELF executables, so
+the runtime package must name the real OpenWrt CPU architecture. Marking an
+AArch64 or x86-64 ELF as `all` is invalid and can install an unusable binary on
+another router.
 
-The V2 staging baseline is `1.2.0`; the accepted V2.0 release will be
-`2.0.0`. Both use one architecture-specific integrated package for each
-package-manager generation. It combines the verified Wi-Fi Calling Gateway
-1.7 payload, `wloc-service`, `wloc-ctl`, procd/UCI/network helpers, and the
-unified LuCI/rpcd UI. The Docker builder is deliberately limited to `x86_64`;
+The V2 release version is `2.0.0`. It uses one architecture-specific package
+for each package-manager generation. It contains `wloc-service`, `wloc-ctl`,
+standalone procd/UCI/network helpers, and the unified WLOC LuCI/rpcd UI. The
+Docker builder is deliberately limited to `x86_64`;
 it refuses an AArch64 label because these SDKs are x86-64 targets.
 
 OpenWrt 24.10 and iStoreOS 24.10 install IPK packages with `opkg`. OpenWrt
@@ -38,28 +37,27 @@ Then build the release packages:
 
 ```sh
 ./scripts/openwrt/build-release-packages.sh \
-  --version 1.2.0 \
+  --version 2.0.0 \
   --release 1 \
   --arch x86_64 \
   --service-bin /absolute/path/wloc-service \
   --ctl-bin /absolute/path/wloc-ctl \
-  --gateway-ipk /absolute/path/luci-app-wificalling-gateway_1.7.3-1_all.ipk \
-  --gateway-sha256 VERIFIED_SHA256 \
   --out-dir /absolute/path/dist/openwrt-release
 ```
 
 The builder uses immutable official OpenWrt SDK containers for 24.10.8 and
 25.12.3. Product packaging runs with networking disabled and `--pull never`.
 Images therefore must be fetched explicitly once. The output includes one IPK,
-one native APK v3 package, and `SHA256SUMS`. The Gateway input is rejected
-unless its package identity is `luci-app-wificalling-gateway`, its version is
-1.7.x, its archive paths are safe, and its digest matches the explicit pin.
+one native APK v3 package, and `SHA256SUMS`. The builder accepts no Gateway
+IPK input. Package preflight validates the router architecture, OpenWrt release
+family, package format, required kernel/module capabilities, and available
+space.
 
 ## Every release asset: four-environment Docker verification
 
 The matrix installs every release package. It uses:
 
-1. official OpenWrt 24.10.5 AArch64 rootfs with the AX6S/cortex-a53 IPK;
+1. official OpenWrt 24.10.5 AArch64 rootfs with the AX6S/cortex-a53 WLOC IPK;
 2. OpenWrt 24.10.8 x86-64 with the 24.x IPK;
 3. OpenWrt 25.12.3 x86-64 with the native APK;
 4. iStoreOS 24.10.5 x86-64 with the same 24.x IPK.
@@ -82,11 +80,8 @@ not claim that sing-box, nftables interception, DNS behavior, Wi-Fi Calling,
 or an iPhone were exercised. Those remain AX6S/real-device gates. The V2
 candidate has these target assets:
 
-- `wificalling-location-gateway_1.2.0-r1_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
-- `wificalling-location-gateway-1.2.0-r1.apk` for OpenWrt 25.x.
-
-After AX6S acceptance, rebuild these assets as `2.0.0-r1` before signing or
-publishing the final release.
+- `wificalling-location-gateway_2.0.0-r1_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
+- `wificalling-location-gateway-2.0.0-r1.apk` for OpenWrt 25.x.
 
 The current host-side plan/static package checks pass. The final Docker install
 matrix and AX6S installation/upgrade/rollback result remain release gates and

@@ -6,23 +6,24 @@
 - Capabilities used: integration,security,test,openwrt,ui
 - Branch: codex/issue-41-v2-release-codex-v2-lead-20260821133002-404596fe
 - Checkpoint parent: 501dea9
-- Updated at (UTC): 2026-08-21T14:30:00Z
+- Updated at (UTC): 2026-08-22T02:00:00Z
 - Credentials included: no
 
 ## Objective
 
-Complete V2.0 unified Gateway/WLOC integration, multi-device profiles, LuCI
+Complete V2.0 standalone WLOC service, multi-device profiles, LuCI
 management/diagnostics/update surfaces, low-resource AX6S packaging, migration,
 rollback, documentation and release acceptance without claiming hardware gates
 that have not been observed.
 
 ## Completed
 
-- Unified supervisor owns Gateway/WLOC lifecycle and LuCI restart paths.
+- Unified supervisor owns the standalone WLOC/provider lifecycle and LuCI
+  restart paths; it does not read or manage another Gateway project.
 - Profile CRUD is UCI-backed with validation, commit/revert behavior and
   per-profile status/log diagnostics.
-- Redirect destination leases expire and are refreshed after process failure;
-  WLOC remains scoped to the assigned device, exact Apple hosts and TCP 443.
+- WLOC redirect state is scoped to the assigned device, exact Apple hosts and
+  TCP 443; stop and provider failure withdraw the WLOC table.
 - Raw WLOC/debug output is opt-in, bounded and privacy-safe; support bundles
   redact profile/device/location material.
 - Added shared sing-box provider resolution for AX6S-tested tiny/lite or
@@ -31,7 +32,9 @@ that have not been observed.
   and rollback documentation to require removing old application packages
   before AX6S installation while retaining the selected provider.
 - Added package and migration contract tests and integrated them into CI.
-- Created PR #60 for review; it explicitly keeps real AX6S gates open.
+- Final AX6S evidence is recorded in
+  `docs/testing/AX6S_REAL_DEVICE_2026-08-22.md`; publication and independent
+  review remain external release actions.
 
 ## Files changed
 
@@ -49,45 +52,45 @@ that have not been observed.
 
 | Command | Result | Evidence |
 |---|---|---|
-| `./scripts/ci/verify.sh` | Passed | 83 Python tests, all Rust targets, package/UI/shell/security/resource/update checks |
-| Rust coverage | Passed | 80.11% line coverage, above the 80% gate |
+| `./scripts/ci/verify.sh` | Passed | Rust, Python, JavaScript, package/UI/shell/security/resource/update checks |
+| Rust coverage | Passed | 80.44% line coverage, above the 80% gate |
 | `tests/scripts/test-singbox-runtime.sh` | Passed | provider selection, version validation and explicit invalid-provider rejection |
 | `tests/scripts/test-ax6s-migration-contract.sh` | Passed | backup, stop/disable, remove-only-old-apps, post-removal space check and install ordering |
 | `tests/scripts/test-standalone-ax6s-package.sh` | Passed | architecture-specific package layout and provider warning |
-| `git diff --check` | Passed | no whitespace errors |
+| `git diff --check` | Warnings only | blank-line-at-EOF notices; no content errors |
 
 ## Failed attempts
 
-- The first PR contract check failed because the required Issue #41 handoff
-  capsule was absent; this capsule and the official handoff state publication
-  are the recovery action.
-- Local commit hooks report that `lefthook` is unavailable; repository gates
-  remain the authoritative local verification.
+- No current test failure remains; the findings below were fixed during the
+  final verification loop.
 
-## Unresolved decisions and blockers
+## Findings fixed during final verification
 
-- Real AX6S RSS/CPU/storage/startup measurements are still pending.
-- AX6S migration, reboot, interrupted-update recovery and rollback are still
-  pending; old application packages must be removed first because storage is
-  insufficient for coexistence.
-- Architecture-correct AArch64 package build, final checksums and Docker
-  release-artifact matrix evidence are still required before tagging/publishing.
-- No final V2 tag/feed/release should be published before Issue #41 acceptance
-  is green.
+- The standalone supervisor initially lost its executable bit in the package;
+  package tests now assert it.
+- One device was incorrectly placed behind the multi-device readiness barrier;
+  readiness now requires more than one device profile.
+- A volatile PassWall `/tmp` config path caused provider failure after reboot;
+  AX6S uses `/var/etc/passwall` and the supervisor validates the provider file.
+- Docker image digest syntax in the OpenWrt cross-build helper was corrected;
+  final AArch64 binaries were rebuilt with the pinned toolchain.
+
+## Final acceptance status
+
+- AX6S standalone runtime, migration, provider reuse, resource, fail-open,
+  profile CRUD, manual/auto location persistence, stop/start and reboot gates:
+  **pass**.
+- Real iPhone WLOC traffic was not run because no client fixture was supplied.
+- Signed feed publication, PR review, merge, tag, and release publication are
+  not performed by this local execution.
 
 ## Next executable steps
 
-1. Obtain the redacted AX6S staging evidence using the deployment checklist.
-2. Back up UCI/CA, stop and disable old services, remove only old application
-   packages, preserve the selected tiny/lite/PassWall provider, and recheck
-   `/overlay` and `/tmp` space.
-3. Install the architecture-correct package, verify provider path/version,
-   exercise multi-profile auto/manual/disabled/degraded flows, and measure
-   resource/log/storage budgets.
-4. Rehearse upgrade, interruption recovery and rollback; record only redacted
-   aggregate evidence in Issue #41/PR #60.
-5. Obtain independent security review and project-lead go/no-go before merge,
-   tag, feed signing or release publication.
+1. Review the standalone diff and AX6S evidence with an independent reviewer.
+2. Run the supplied client fixture, if available, for real WLOC traffic and
+   isolation evidence.
+3. Generate signed feed artifacts and perform the normal PR/merge/tag/release
+   workflow with explicit approval.
 
 ## Capabilities required for the next Agent
 
@@ -100,13 +103,14 @@ that have not been observed.
 - The AX6S test device is on a compatible 24.x OpenWrt/ImmortalWrt image and
   has a tested sing-box tiny/lite or PassWall provider available.
 - Host-side tests do not emulate procd, flash exhaustion, power loss, or live
-  iPhone/Gateway traffic.
+  iPhone traffic.
 
 ## Security and privacy notes
 
 - No API keys, tokens, private keys, `.env` values, raw captures, device
   identifiers, precise locations or production traffic are included.
-- The provider resolver validates absolute executable paths and only checks
-  `version`; it never attaches to or mutates a PassWall-owned process/config.
+- The provider resolver validates absolute executable paths and the supervisor
+  validates the configured provider file with `sing-box check`; it never
+  attaches to or mutates a PassWall-owned process/config.
 - WLOC failures withdraw redirect/return to passthrough and must not create a
   default fake coordinate.

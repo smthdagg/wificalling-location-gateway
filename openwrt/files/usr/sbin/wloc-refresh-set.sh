@@ -77,7 +77,7 @@ fi
 
 # V2 profiles each have an isolated nft table and set. Refresh the same
 # approved Apple answers into every live profile table without touching the
-# stable Gateway namespace. Table names are validated before being reused as
+# unrelated nftables namespaces. Table names are validated before being reused as
 # nft arguments even though they originate from the local kernel listing.
 profile_tables=$(
     "$NFT_BINARY" list tables inet 2>/dev/null \

@@ -1,138 +1,107 @@
 # Redmi AX6S V2 deployment, migration and rollback
 
 Target: Redmi AX6S (MediaTek MT7622, AArch64/cortex-a53) on compatible
-OpenWrt/ImmortalWrt 24.x firmware.
+OpenWrt/ImmortalWrt 24.10 firmware.
 
-## 1. Back up before replacing the old package
+## 1. Record and back up the WLOC state
 
-Create a LuCI system backup and separately preserve these conffiles:
+The current product is standalone WLOC. It does not require, read, install, or
+manage another service package or UCI state.
 
-```sh
-cp -p /etc/config/wificalling-gateway /tmp/wificalling-gateway.backup
-cp -p /etc/config/wloc-service /tmp/wloc-service.backup
-sha256sum /etc/config/wificalling-gateway /etc/config/wloc-service
+~~~sh
+opkg list-installed | grep -E 'wificalling|wloc|sing-box|passwall' > /tmp/wloc-old-packages.txt || true
+cp -p /etc/config/wloc-service /tmp/wloc-service.backup 2>/dev/null || true
 cp -p /etc/wloc-service/ca.pem /tmp/wloc-ca.pem.backup 2>/dev/null || true
 cp -p /etc/wloc-service/ca.key /tmp/wloc-ca.key.backup 2>/dev/null || true
-
-# Record the installed package set and available space before removing the
-# old build. Keep these records off the release artifact.
-opkg list-installed | grep -E 'wificalling|sing-box|passwall' > /tmp/wloc-old-packages.txt || true
+sha256sum /etc/config/wloc-service 2>/dev/null || true
 df -k /overlay /tmp
-```
+~~~
 
-Do not print or publish their contents: node links and credentials may be
-sensitive. Keep the iPhone CA profile installed while upgrading unless the CA
-is intentionally being rotated.
+Keep provider packages and binaries installed. Never publish UCI contents,
+node credentials, CA keys, device identifiers, or precise test locations.
 
-## 2. Remove the old build only after backup
+## 2. Remove the old WLOC package before installing V2
 
-The AX6S test device has insufficient persistent space for the old WLOC/Gateway
-package and the new integrated package to coexist. Stop and disable the old
-services, then remove only the old application packages. Do not remove
-`sing-box` if it is the selected shared tiny/PassWall runtime, and do not use
-`opkg remove --force-removal-of-dependent-packages`.
+AX6S overlay storage cannot safely hold the old and new WLOC packages at the
+same time. Stop and disable only the old WLOC ownership, then recheck space.
+Do not remove sing-box tiny/lite or a PassWall-provided sing-box executable.
 
-```sh
+~~~sh
 /etc/init.d/wloc-service stop 2>/dev/null || true
-/etc/init.d/wificalling-gateway stop 2>/dev/null || true
+/etc/init.d/wificalling-location-gateway stop 2>/dev/null || true
 /etc/init.d/wloc-service disable 2>/dev/null || true
-/etc/init.d/wificalling-gateway disable 2>/dev/null || true
 opkg remove luci-app-wificalling-location-gateway wloc-service wloc-ctl 2>/dev/null || true
 df -k /overlay /tmp
-```
+~~~
 
-If the old release used a different package name, remove that exact package
-from `/tmp/wloc-old-packages.txt`; keep the config backups and CA files.
+Do not use: opkg remove --force-removal-of-dependent-packages. If the old
+package has another exact name, remove only that WLOC package listed in
+/tmp/wloc-old-packages.txt; preserve the provider.
 
-## 3. Install the integrated V2 package
+## 3. Install the architecture-matched package
 
-Use the architecture-specific asset and verify it against the release
-`SHA256SUMS`:
+Verify the release checksum before installing:
 
-```sh
-opkg install /tmp/wificalling-location-gateway_1.2.0-1_aarch64_cortex-a53.ipk
-```
+~~~sh
+sha256sum -c /tmp/SHA256SUMS --ignore-missing
+opkg install /tmp/wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk
+~~~
 
-The integrated package replaces/provides both application components and
-declares both UCI files as conffiles. Because the AX6S test device is space
-constrained, the preceding removal step is intentional; restore the backups
-only if the package manager reports a conffile conflict.
+The package owns only /etc/config/wloc-service as a conffile. It declares
+the WLOC API and OpenWrt release metadata and does not carry a Gateway package
+or configuration.
 
-## 4. Verify migration and startup
+## 4. Verify the standalone lifecycle
 
-```sh
+~~~sh
 opkg status wificalling-location-gateway
-/etc/init.d/wificalling-gateway status
+/etc/init.d/wificalling-location-gateway status
 /etc/init.d/wloc-service status
 test -S /var/run/wloc-service/control.sock
 /usr/sbin/wloc-ctl status
-sha256sum /etc/config/wificalling-gateway /etc/config/wloc-service
-logread -e wloc-service
 /usr/libexec/wificalling-location-gateway/singbox-runtime.sh path
 /usr/libexec/wificalling-location-gateway/singbox-runtime.sh version
-```
+/usr/sbin/wloc-health.sh
+logread -e wloc-service
+~~~
 
-The package status must report version `1.2.0-1`, the unified supervisor init
-service must be available, the Unix socket must exist, and control output must
-identify `wloc.service/v1`. Profile CRUD uses the additive `wloc.service/v2`
-surface and persists through UCI; LuCI Apply restarts the unified supervisor.
-If a configuration hash changes, inspect only the local UCI diff and restore the
-corresponding backup before continuing.
+The provider path must resolve to the AX6S-tested sing-box tiny/lite binary or
+the retained PassWall sing-box binary. WLOC must use one provider executable
+and must not install a duplicate full-size copy.
 
-The runtime provider must resolve to the AX6S-tested sing-box tiny/lite binary
-or the existing PassWall sing-box binary. V2 reuses that executable and does
-not install a duplicate full-size copy; see
-[`V2_SINGBOX_RUNTIME.md`](../operations/V2_SINGBOX_RUNTIME.md).
+## 5. LuCI and authorized-device validation
 
-## 5. LuCI and iPhone validation
+1. Open Services → WLOC Location Service.
+2. Confirm Overview, Basic Settings, Devices, Logs & Monitoring,
+   Service Status, Component Update, and Help are present.
+3. Create one device profile with its private LAN address and explicit WLOC
+   node reference.
+4. Test Auto follow selected node, then Manual location. Manual coordinates
+   must be written to that same device profile.
+5. Confirm the status page reports WLOC, provider, redirect, and profile state.
+6. Install and trust the local WLOC CA only on the authorized test iPhone.
+7. With other VPNs disabled, trigger Maps/Weather and confirm the WLOC event
+   log and effective location. Normal HTTPS and other LAN devices must pass
+   through unchanged.
 
-1. Open **Services → WifiCalling&Wloc Gateway**.
-2. Confirm prior nodes and device policies remain present.
-3. Confirm Wi-Fi Calling monitoring still observes the assigned device without
-   any WLOC rule touching UDP 500/4500.
-4. On **WLOC Settings**, verify the selected follow device and saved locations.
-5. Switch **Auto (follow node)** to **Manual location**, apply a known saved
-   location, then switch back. No control-socket refusal or configuration loss
-   is acceptable.
-6. Confirm the iPhone profile fingerprint matches LuCI and full trust remains
-   enabled for `wloc-service root CA`.
-7. With phone VPN/WARP disabled, trigger Maps/Weather and confirm the updated
-   target in **WLOC Monitor & Log**.
-8. Place a real incoming and outgoing Wi-Fi call. `ASSURED` is network evidence,
-   not proof of carrier activation.
+## 6. Safety and resource checks
 
-## 6. Safety checks
-
-- Normal HTTPS from other LAN devices must not be signed by the WLOC CA.
-- The WLOC nftables table must be independent of the Gateway table.
-- UDP 500/4500 must never enter the WLOC redirect.
-- Invalid Geo, protocol, TLS, or service state must not create a default
-  coordinate; traffic must pass through unchanged or the redirect must be
-  withdrawn.
-- CA private keys, node credentials, device identifiers, raw WLOC payloads, and
-  precise personal locations must never be copied into logs or support bundles.
+- Only the assigned device, the two exact Apple WLOC hostnames, and TCP 443
+  are in scope.
+- UDP 500/4500 and all external nftables tables are out of scope.
+- Invalid protocol, Geo, provider, or service state withdraws the redirect and
+  never invents a coordinate.
+- Logs and support bundles stay bounded and redact credentials, device
+  identifiers, raw WLOC data, and precise locations.
+- Record free overlay space, RAM, process RSS, threads, package size, and the
+  provider binary size in the evidence template.
 
 ## 7. Rollback
 
-Install the previous architecture-matching package directly, then restore only
-the affected UCI backup if required. Do not delete `/etc/config` or regenerate
-the CA during ordinary rollback. If the service cannot be restored, disable
-WLOC interception first; Wi-Fi Calling Gateway operation must remain isolated.
+Stop WLOC interception first, then install the previous architecture-matched
+WLOC package and restore only /etc/config/wloc-service if needed. Keep the
+provider and CA unless deliberately rotating them. If rollback health fails,
+leave WLOC disabled and preserve the transaction bundle for recovery.
 
-## 8. V2 resource and release evidence
-
-Before calling the AX6S run accepted, fill in
-[`AX6S_RESOURCE_EVIDENCE.template.md`](../testing/AX6S_RESOURCE_EVIDENCE.template.md)
-with coarse values only. The run must cover disabled, one-profile,
-multi-profile, degraded, restart, low-space, successful update, interrupted
-update and rollback. Do not publish serials, addresses, node names, raw logs,
-credentials, CA material or precise locations. Host-side resource and package
-contracts do not replace real AX6S measurements.
-
-## Build evidence
-
-V2 uses the pinned OpenWrt 24.10.8 mt7622 cross toolchain and Rust
-1.90. The release binaries are static AArch64 ELF files. The integrated package
-build validates the Gateway input identity/version/digest and preserves both
-configuration paths. Construction evidence is recorded in
-[`STANDALONE_AX6S_PACKAGE.tdd.md`](../testing/STANDALONE_AX6S_PACKAGE.tdd.md).
+See docs/testing/STANDALONE_AX6S_PACKAGE.tdd.md and
+docs/testing/AX6S_RESOURCE_EVIDENCE.template.md.

@@ -22,7 +22,7 @@ class V2UiContractTests(unittest.TestCase):
             self.assertIn("profiles", health.read_text(encoding="utf-8"))
             menu_data = json.loads(menu.read_text(encoding="utf-8"))
             self.assertIn(
-                "admin/services/wificalling-location-gateway/wloc-devices",
+                "admin/services/wificalling-location-gateway/devices",
                 menu_data,
             )
 
@@ -45,11 +45,16 @@ class V2UiContractTests(unittest.TestCase):
             "openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",
         ):
             source = (self.root / relative).read_text(encoding="utf-8")
-            self.assertIn("Basic settings", source)
-            self.assertIn("probe_interval", source)
             self.assertIn("reason_code", source)
             self.assertIn("Apply & restart", source)
             self.assertIn(", 15);", source)
+        for relative in (
+            "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-basic.js",
+            "openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-basic.js",
+        ):
+            source = (self.root / relative).read_text(encoding="utf-8")
+            self.assertIn("Basic Settings", source)
+            self.assertIn("probe_interval", source)
 
     def test_profile_page_has_one_apply_boundary_and_bounded_input_guards(self):
         for relative in (
@@ -103,16 +108,15 @@ class V2UiContractTests(unittest.TestCase):
             self.root / "openwrt/luci-app-wificalling-location-gateway/files",
         ):
             rpc = (prefix / "usr/libexec/rpcd/luci.wloc").read_text(encoding="utf-8")
-            wloc = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc.js").read_text(encoding="utf-8")
+            wloc = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js").read_text(encoding="utf-8")
             health = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js").read_text(encoding="utf-8")
-            restart_block = rpc[rpc.index("\trestart_service)"):rpc.index("\n\trestart_gateway)")]
-            self.assertIn("/etc/init.d/wificalling-location-gateway restart", restart_block)
-            self.assertNotIn("/etc/init.d/wloc-service restart", restart_block)
-            self.assertNotIn("/etc/init.d/wificalling-gateway restart", restart_block)
+            self.assertIn("/etc/init.d/wificalling-location-gateway restart", rpc)
+            self.assertNotIn("/etc/init.d/wificalling-gateway restart", rpc)
             self.assertIn("method: 'restart_unified'", wloc)
-            self.assertNotIn("method: 'restart_service'", wloc)
+            self.assertIn("geoMode", wloc)
+            self.assertIn("manual_lat", wloc)
             self.assertIn("method: 'restart_unified'", health)
-            self.assertNotIn("method: 'restart_gateway'", health)
+            self.assertNotIn("restart_gateway", health)
 
 
 if __name__ == "__main__":

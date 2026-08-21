@@ -1,4 +1,11 @@
-# WLOC router PoC threat model
+# WLOC router PoC threat model (historical)
+
+> This Phase 0 document is retained as historical security evidence. It is
+> superseded for the current standalone product by
+> `docs/adr/0003-standalone-wloc-product-boundary.md` and the V2 release
+> addendum in `DEVELOPMENT_TEST_PLAN.md`. References below to a Gateway data
+> plane or Gateway configuration describe the old integration boundary only;
+> V2 does not read, install, or manage that project.
 
 Status: Historical Phase 0 canonical security specification. Its threat
 invariants remain applicable, while the V2 implementation and release status

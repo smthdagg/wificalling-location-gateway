@@ -2,7 +2,7 @@
 # Manage one device profile's WLOC TPROXY table.
 #
 # The table is intentionally profile-scoped. A profile stop deletes only its
-# own table; the shared policy route and the stable Gateway nftables namespace
+# own table; unrelated nftables namespaces
 # are owned elsewhere. The only approved destinations are the two exact Apple
 # WLOC hostnames, represented by the per-table apple_hosts set populated by
 # wloc-refresh-set.sh.
@@ -57,7 +57,7 @@ valid_private_ipv4() {
 
 stop_all_profiles() {
 	# This is the crash/upgrade cleanup boundary. Only tables with the exact
-	# component-owned prefix are eligible; the stable Gateway namespace is
+	# component-owned prefix are eligible; unrelated namespaces are
 	# never enumerated or modified here.
 	for table in $("$nft_binary" list tables inet 2>/dev/null \
 		| sed -n 's/^table inet \(wloc_profile_[a-z0-9_]*\)$/\1/p'); do

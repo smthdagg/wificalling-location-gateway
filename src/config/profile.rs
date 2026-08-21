@@ -25,7 +25,6 @@ pub const MAX_UCI_TEXT_BYTES: usize = 32 * 1024;
 #[serde(rename_all = "snake_case")]
 pub enum NodeSelectionMode {
     Fixed,
-    GatewayDefault,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

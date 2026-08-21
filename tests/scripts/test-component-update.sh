@@ -39,7 +39,7 @@ cat > "$tmp/bin/health" <<'EOF'
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = fail-always ] && exit 1
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = fail-once ] && { printf 'ok\n' > "$WLOC_UPDATE_HEALTH_STATE"; exit 1; }
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = ok ] || exit 1
-printf '%s\n' '{"services":{"wloc":{"running":1,"socket":1,"status_fresh":1},"gateway":{"running":1,"monitor":1,"singbox":1,"config_present":1,"config_valid":1}}}'
+printf '%s\n' '{"services":{"wloc":{"running":1,"socket":1,"status_fresh":1},"provider":{"available":1,"valid":1,"config_present":1,"config_valid":1}}}'
 EOF
 chmod 0755 "$tmp/bin/opkg" "$tmp/bin/supervisor" "$tmp/bin/health"
 cat > "$tmp/bin/usign" <<'EOF'
@@ -60,9 +60,10 @@ make_ipk() {
 Package: wificalling-location-gateway
 Version: $version
 Architecture: $architecture
-X-WFC-Product: wificalling-location-gateway/v2
-X-WFC-Gateway: 1.7
-X-WFC-Wloc-Api: wloc.service/v2
+X-WLOC-Product: wificalling-location-gateway/v2
+X-WLOC-Api: wloc.service/v2
+X-WLOC-OpenWrt: 24.10+
+X-WLOC-Package-Format: ipk
 EOF
     printf '%s\n' "$component" > "$package_dir/data/usr/share/wificalling-location-gateway/component.txt"
     printf 'new-config\n' > "$package_dir/data/etc/config/wloc-service"
@@ -78,7 +79,7 @@ make_manifest() {
     tar -xOf "$package" ./control.tar.gz > "$control"
     tar -xOf "$package" ./data.tar.gz > "$data"
     {
-        printf '%s\n' 'Format: wfc-update-manifest/v1'
+        printf '%s\n' 'Format: wloc-update-manifest/v1'
         tar -xOf "$control" ./control | sed -n -e '/^Package:/p' -e '/^Version:/p' -e '/^Architecture:/p'
         printf 'Package-SHA256: %s\n' "$(sha256sum "$package" | awk '{print $1}')"
         printf 'Control-SHA256: %s\n' "$(sha256sum "$control" | awk '{print $1}')"

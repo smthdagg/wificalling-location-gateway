@@ -1,4 +1,4 @@
-//! Unified Gateway/WLOC lifecycle ownership.
+//! Unified standalone WLOC lifecycle ownership.
 //!
 //! The supervisor is deliberately independent of procd and shell commands.
 //! It owns the ordering contract used by both the Rust control plane and the

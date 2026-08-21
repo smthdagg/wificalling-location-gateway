@@ -110,7 +110,7 @@ run_case happy env
 assert_contains "$tmpdir/happy.calls" "curl -fL --retry 3"
 assert_contains "$tmpdir/happy.calls" "openwrt-toolchain-24.10.8-mediatek-mt7622_gcc-13.3.0_musl.Linux-x86_64.tar.zst"
 assert_contains "$tmpdir/happy.calls" "shasum -a 256 -c -"
-assert_contains "$tmpdir/happy.calls" "docker image inspect rust:1.90.0-slim-bookworm@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9"
+assert_contains "$tmpdir/happy.calls" "docker image inspect rust@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9"
 assert_contains "$tmpdir/happy.calls" "rustup target add --toolchain 1.90.0 aarch64-unknown-linux-musl"
 assert_contains "$tmpdir/happy.calls" "cargo fetch --locked --target aarch64-unknown-linux-musl"
 assert_contains "$tmpdir/happy.calls" "--network none"
@@ -135,7 +135,7 @@ fi
 if run_case missing-image env OPENWRT_CROSS_TEST_IMAGE_STATUS=1; then
     fail "missing pinned image must stop without an implicit pull"
 fi
-assert_contains "$tmpdir/missing-image.out" "docker pull --platform linux/amd64 rust:1.90.0-slim-bookworm@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9"
+assert_contains "$tmpdir/missing-image.out" "docker pull --platform linux/amd64 rust@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9"
 if grep -F 'docker run' "$tmpdir/missing-image.calls" >/dev/null; then
     fail "Docker must not run when the pinned image is missing"
 fi

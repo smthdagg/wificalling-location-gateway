@@ -1,10 +1,8 @@
 #!/bin/sh /etc/rc.common
-# Unified v2 Gateway/WLOC lifecycle entry point.
+# Standalone v2 WLOC lifecycle entry point.
 #
-# The legacy wificalling-gateway and wloc-service init scripts remain in the
-# package as a one-release rollback facade. After migration only this script
-# is enabled; its procd instance owns ordering, health, redirect withdrawal,
-# and crash recovery for the two managed children.
+# The WLOC service remains as a short migration facade. This procd instance
+# owns provider readiness, WLOC startup, redirect withdrawal, and recovery.
 
 USE_PROCD=1
 START=95
@@ -45,6 +43,5 @@ reload_service() {
 }
 
 service_triggers() {
-	procd_add_reload_trigger wificalling-gateway
 	procd_add_reload_trigger wloc-service
 }

@@ -39,13 +39,10 @@ var ZH = {
 	'Patches and nodes': '补丁与节点',
 	'Restart services': '服务重启',
 	'Restart WLOC service': '重启 WLOC 服务',
-	'Restart Wi-Fi Calling gateway': '重启 Wi-Fi 通话网关',
 	'Restarting…': '重启中…',
 	'Restarted': '已重启',
 	'Restart failed': '重启失败',
 	'WLOC service restarted': 'WLOC 服务已重启',
-	'Gateway restarted - proxy was briefly interrupted': '网关已重启（代理短暂中断）',
-	'Restarting the gateway regenerates the proxy config and briefly interrupts device proxying.': '重启网关会重新生成代理配置，设备代理会短暂中断。',
 	'Yes': '是',
 	'No': '否',
 	'Fresh': '新鲜',
@@ -85,7 +82,6 @@ var ZH = {
 	'Recent logs': '最近日志',
 	'No log lines yet': '暂无日志',
 	'WLOC service': 'WLOC 服务',
-	'Wi-Fi Calling Gateway': 'Wi-Fi 通话网关',
 	'Patches and node health': '补丁与节点健康',
 	'Support bundle ready': '支持包已生成',
 	'Support bundle failed': '支持包生成失败',
@@ -105,8 +101,8 @@ var ZH = {
 	'Recover': '恢复',
 
 	/* ---- wloc settings ---- */
-	'WLOC location interception: spoofs the Apple WLOC response so the test device reports the gateway-chosen location. GPS values stay on this router.':
-		'WLOC 定位拦截：改写 Apple WLOC 响应，使测试设备上报网关指定的位置。GPS 数值只保留在本路由器上。',
+	'WLOC location interception: spoofs the Apple WLOC response so the test device reports the selected location. GPS values stay on this router.':
+		'WLOC 定位拦截：改写 Apple WLOC 响应，使测试设备上报选定的位置。GPS 数值只保留在本路由器上。',
 	'Module': '模块',
 	'Enable WLOC interception': '启用 WLOC 拦截',
 	'Turns the WLOC rewrite on/off. The nftables redirect stays in place; while off, Apple WLOC traffic passes through untouched.':
@@ -191,7 +187,7 @@ var ZH = {
 	'Verify': '校验',
 	'Match - the iPhone trusts this CA.': '匹配——iPhone 信任当前证书。',
 	'Mismatch - reinstall the profile on the iPhone and enable full trust.': '不匹配——请在 iPhone 上重新安装描述文件并开启完全信任。',
-	'Gateway fingerprint: ': '网关证书指纹：',
+	'CA fingerprint: ': 'CA 证书指纹：',
 	'No handshakes yet.': '暂无握手记录。',
 	'Generate a new root certificate?': '生成新的根证书？',
 	'This replaces the root CA. All devices must reinstall the profile and enable full trust again.':
@@ -231,8 +227,8 @@ var ZH = {
 	'Example: iPhone 12': '示例：iPhone 12',
 	'Excellent': '优秀',
 	'Fair': '一般',
-	'Follow gateway': '跟随网关',
-	'Following gateway': '跟随网关',
+	'Follow selected node': '跟随选定节点',
+	'Following selected node': '跟随选定节点',
 	'General': '常规',
 	'Good': '良好',
 	'Import': '导入',
@@ -291,7 +287,7 @@ var ZH = {
 	'WebSocket': 'WebSocket',
 	'WebSocket Host': 'WebSocket 主机',
 	'WebSocket path': 'WebSocket 路径',
-	'Wi-Fi Calling Gateway settings': 'Wi-Fi 通话网关设置',
+	'WLOC service settings': 'WLOC 服务设置',
 	'WireGuard MTU': 'WireGuard MTU',
 	'WireGuard preshared key': 'WireGuard 预共享密钥',
 	'WireGuard conf needs PrivateKey, Address, Peer PublicKey and Endpoint': 'WireGuard 配置需要 PrivateKey、Address、对端 PublicKey 和 Endpoint',

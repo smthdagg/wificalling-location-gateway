@@ -2,7 +2,10 @@
 
 ## Mission
 
-Build `wificalling-location-gateway` as an isolated, fail-open OpenWrt component. Do not modify or vendor the stable Wi-Fi Calling Gateway 1.7 repository from this repository.
+Build `wificalling-location-gateway` as an independent, fail-open OpenWrt WLOC
+component. This repository must not depend on, vendor, bundle, or manage the
+separate Wi-Fi Calling Gateway project. Historical Gateway adapter code is
+migration debt and is not a product dependency.
 
 ## Source of truth
 
@@ -20,7 +23,7 @@ Build `wificalling-location-gateway` as an isolated, fail-open OpenWrt component
 | `role:network` | `internal/exitprobe/`, `internal/georesolver/`, `openwrt/` | Exit probing, Geo resolution, nftables/dnsmasq/procd |
 | `role:security` | `SECURITY.md`, `docs/security/`, `.github/` | Threat model, CA lifecycle, permissions, policy checks |
 | `role:test` | `tests/`, `scripts/ci/` | Test harness, fuzzing, packaging and resource gates |
-| `role:integration` | `docs/`, packaging metadata, Gateway contract | Cross-module contracts and release integration |
+| `role:integration` | `docs/`, packaging metadata, standalone product contract | Product integration and release documentation |
 
 Issue-specific ownership overrides this table. Ownership is a time-limited lease, not permanent assignment. An Agent must not edit another active lease's paths unless it is performing a recorded takeover from an expired or released lease.
 
@@ -54,7 +57,8 @@ Use `scripts/agent-takeover.sh <issue> <agent> <slug> <capabilities> [ttl-minute
 - All parser and network inputs require size, time, concurrency, and schema limits.
 - Unknown protocol, invalid Geo data, or engine failure must not produce a default fake coordinate.
 - WLOC interception must remain limited to the assigned test device, two exact Apple hostnames, and TCP 443.
-- Never intercept UDP 500/4500 or modify the Gateway 1.7 nftables table.
+- Never intercept UDP 500/4500 or modify an external Wi-Fi Calling Gateway
+  ruleset. WLOC owns only its explicitly named nftables objects.
 - Changes under `internal/ca/`, `internal/proxy/`, `openwrt/`, or `.github/workflows/` require security review.
 
 ## Verification

@@ -363,7 +363,6 @@ fn profile_uci_options(profile: &DeviceProfile) -> Vec<(&'static str, String)> {
             "node_mode",
             match profile.node_mode {
                 NodeSelectionMode::Fixed => "fixed".to_owned(),
-                NodeSelectionMode::GatewayDefault => "gateway_default".to_owned(),
             },
         ),
         (
@@ -518,7 +517,6 @@ fn apply_profile_update(
 fn parse_node_mode(value: &str) -> Result<NodeSelectionMode, DispatchError> {
     match value {
         "fixed" => Ok(NodeSelectionMode::Fixed),
-        "gateway_default" => Ok(NodeSelectionMode::GatewayDefault),
         _ => Err(DispatchError::InvalidConfig),
     }
 }

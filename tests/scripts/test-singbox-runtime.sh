@@ -3,18 +3,13 @@ set -eu
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 helper="$repo_root/openwrt/files/usr/libexec/wificalling-location-gateway/singbox-runtime.sh"
-gateway_init="$repo_root/openwrt/files/etc/init.d/wificalling-gateway"
 wloc_init="$repo_root/openwrt/files/etc/init.d/wloc-service"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-singbox-runtime.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
-sh -n "$helper" "$gateway_init" "$wloc_init"
-grep -F 'singbox-runtime.sh' "$gateway_init" "$wloc_init" >/dev/null
+sh -n "$helper" "$wloc_init"
+grep -F 'singbox-runtime.sh' "$wloc_init" >/dev/null
 grep -F 'WLOC_SINGBOX_BIN' "$wloc_init" >/dev/null
-if grep -F '/usr/bin/sing-box check' "$gateway_init" >/dev/null; then
-	echo 'Gateway must use the resolved sing-box provider' >&2
-	exit 1
-fi
 
 cat > "$tmp/sing-box-tiny" <<'EOF'
 #!/bin/sh

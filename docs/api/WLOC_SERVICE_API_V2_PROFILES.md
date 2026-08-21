@@ -13,7 +13,7 @@ contains:
 - a display `label`;
 - an assigned IPv4/IPv6 address or six-octet MAC address for explicit v2
   device sections;
-- a node reference and `node_mode` (`fixed` or `gateway_default`);
+- a fixed node reference;
 - a WLOC source (`auto` or `manual`), optional manual coordinates, and an
   optional manual location reference;
 - an `enabled` flag.
@@ -52,9 +52,9 @@ rejected. MAC addresses are accepted in the profile schema for the future
 multi-device resolver, but the current single-runtime daemon accepts only IP
 bindings and stays disabled for a MAC-only profile. The legacy singleton
 projection may still have no address so an existing installation can continue
-its current Gateway-policy discovery path. Explicit IP bindings are limited to
-RFC1918 IPv4 or ULA IPv6 and the sing-box probe requires a matching Gateway
-device policy; it never falls back to an unrelated outbound for a profile.
+its current migration behavior. Explicit IP bindings are limited to
+RFC1918 IPv4 or ULA IPv6 and the sing-box probe requires a matching WLOC
+provider node; it never falls back to an unrelated outbound for a profile.
 
 A missing UCI file retains the v1 unconfigured-default behavior. An existing
 but malformed or oversized UCI file is fail-closed and cannot be re-enabled by

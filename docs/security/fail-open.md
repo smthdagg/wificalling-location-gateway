@@ -15,7 +15,7 @@ There is never a default or fallback coordinate. Invalid, missing, conflicting, 
 
 <!-- SECURITY_INVARIANT id="FAILOPEN-ENGINE" -->
 
-`engine_unhealthy`: remove redirect before stopping or restarting the engine. The external supervisor first blocks new installs, atomically removes the fully named `wificalling_location` redirect/table objects, verifies absence, drains or terminates the process, and cleans bounded temporary state. It never flushes the global ruleset and never changes `wificalling_gateway` or sing-box.
+`engine_unhealthy`: remove redirect before stopping or restarting the engine. The external supervisor first blocks new installs, atomically removes the fully named `wificalling_location` redirect/table objects, verifies absence, drains or terminates the process, and cleans bounded temporary state. It never flushes the global ruleset and never changes unrelated provider or firewall state.
 
 <!-- SECURITY_INVARIANT id="FAILOPEN-WATCHDOG" -->
 
@@ -52,7 +52,7 @@ conditions remains a real-device release gate.
 
 Enable order is fail-closed until the final step:
 
-1. validate exact device, exact hostname policy, TCP 443, configuration limits, and independent Gateway table name;
+1. validate exact device, exact hostname policy, TCP 443, configuration limits, and the dedicated WLOC table name;
 2. verify the chosen IPv4/IPv6 mode and current A/AAAA set ownership;
 3. verify router-local CA permissions and exact-SAN policy without exporting private keys;
 4. start the engine in pass-through mode and prove TLS/H2/upstream health;

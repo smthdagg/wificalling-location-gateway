@@ -1,188 +1,42 @@
 msgid ""
-msgstr "Content-Type: text/plain; charset=UTF-8"
+msgstr "Content-Type: text/plain; charset=UTF-8\\n"
 
-msgid "Wi-Fi Calling & WLOC Gateway"
-msgstr "Wi-Fi Calling 与 WLOC 网关"
+msgid "WLOC Location Service"
+msgstr "WLOC 定位服务"
 
-msgid "WLOC location interception: spoofs the Apple WLOC response so the test device reports the gateway-chosen location. GPS values stay on this router."
-msgstr "WLOC 定位拦截：改写 Apple WLOC 响应，使测试设备上报网关指定的位置。GPS 数值只保留在本路由器上。"
+msgid "Overview"
+msgstr "概览"
 
-msgid "Module"
-msgstr "模块"
+msgid "Basic Settings"
+msgstr "基本设置"
 
-msgid "Enable WLOC interception"
-msgstr "启用 WLOC 拦截"
+msgid "Devices"
+msgstr "设备"
 
-msgid "Turns the WLOC rewrite on/off. The nftables redirect stays in place; while off, Apple WLOC traffic passes through untouched."
-msgstr "打开/关闭 WLOC 改写。nftables 重定向规则保留；关闭时 Apple WLOC 流量原样透传。"
+msgid "Logs & Monitoring"
+msgstr "日志与监控"
 
-msgid "Service phase"
-msgstr "服务阶段"
+msgid "Service Status"
+msgstr "服务状态"
 
-msgid "Location mode"
-msgstr "定位模式"
+msgid "Component Update"
+msgstr "组件更新"
 
-msgid "Auto follows the sing-box node bound to the test device. Manual uses the search result or coordinates below."
-msgstr "自动模式跟随测试设备绑定的 sing-box 节点出口；手动模式使用下方搜索或输入的坐标。"
+msgid "Help (FAQ)"
+msgstr "帮助（FAQ）"
 
-msgid "Auto (follow node)"
-msgstr "自动（跟随节点）"
+msgid "WLOC Devices"
+msgstr "WLOC 设备"
+
+msgid "Auto follow selected node"
+msgstr "自动跟随选定节点"
 
 msgid "Manual location"
-msgstr "手动位置"
+msgstr "手动定位"
 
-msgid "Manual latitude"
-msgstr "手动纬度"
+msgid "Provider"
+msgstr "服务提供程序"
 
-msgid "Manual longitude"
-msgstr "手动经度"
+msgid "Standalone WLOC service with unified LuCI."
+msgstr "带统一 LuCI 管理界面的独立 WLOC 服务。"
 
-msgid "Current location"
-msgstr "当前定位"
-
-msgid "Country"
-msgstr "国家/地区"
-
-msgid "City"
-msgstr "城市"
-
-msgid "Timezone"
-msgstr "时区"
-
-msgid "GPS (lat / lon)"
-msgstr "GPS 坐标（纬度 / 经度）"
-
-msgid "Geo state"
-msgstr "定位状态"
-
-msgid "Observed at"
-msgstr "观测时间"
-
-msgid "Exit IP"
-msgstr "出口 IP"
-
-msgid "Manual search"
-msgstr "手动搜索"
-
-msgid "Place name"
-msgstr "地名"
-
-msgid "(online search)"
-msgstr "（在线搜索）"
-
-msgid "Or enter coordinates"
-msgstr "或直接输入坐标"
-
-msgid "Search and apply"
-msgstr "搜索并应用"
-
-msgid "Apply coordinates"
-msgstr "应用坐标"
-
-msgid "Saved locations"
-msgstr "已保存的位置"
-
-msgid "Label"
-msgstr "名称"
-
-msgid "Latitude"
-msgstr "纬度"
-
-msgid "Longitude"
-msgstr "经度"
-
-msgid "Apply"
-msgstr "应用"
-
-msgid "Certificate (Safari install)"
-msgstr "证书（Safari 安装）"
-
-msgid "Profile link"
-msgstr "描述文件链接"
-
-msgid "Install steps"
-msgstr "安装步骤"
-
-msgid "1. Open the profile link in Safari on the test iPhone. "
-msgstr "1. 在测试 iPhone 的 Safari 中打开描述文件链接。 "
-
-msgid "2. Install the configuration profile. "
-msgstr "2. 安装配置描述文件。 "
-
-msgid "3. Enable full trust in Settings > General > About > Certificate Trust Settings."
-msgstr "3. 在 设置 > 通用 > 关于本机 > 证书信任设置 中开启完全信任。"
-
-msgid "Regenerate profile"
-msgstr "重新生成描述文件"
-
-msgid "WLOC usage log"
-msgstr "WLOC 使用日志"
-
-msgid "Time"
-msgstr "时间"
-
-msgid "Event"
-msgstr "事件"
-
-msgid "Location"
-msgstr "位置"
-
-msgid "Source"
-msgstr "来源"
-
-msgid "No events yet."
-msgstr "暂无事件。"
-
-msgid "Switch failed"
-msgstr "切换失败"
-
-msgid "Mode switch failed"
-msgstr "模式切换失败"
-
-msgid "Enter and apply manual coordinates first."
-msgstr "请先输入并应用手动坐标。"
-
-msgid "Search failed"
-msgstr "搜索失败"
-
-msgid "Apply failed"
-msgstr "应用失败"
-
-msgid "Regenerate failed"
-msgstr "重新生成失败"
-
-msgid "Applied"
-msgstr "已应用"
-
-msgid "Search result is now the active location. Verify on the iPhone."
-msgstr "搜索结果已成为当前生效位置。请在 iPhone 上验证。"
-
-msgid "Coordinates are now the active location."
-msgstr "坐标已成为当前生效位置。"
-
-msgid "Preset has no coordinates."
-msgstr "预设没有坐标。"
-
-msgid "Preset is now the active location."
-msgstr "预设已成为当前生效位置。"
-
-msgid "Profile ready"
-msgstr "描述文件已就绪"
-
-msgid "On the iPhone open Safari and visit %s, then enable full trust in Settings > General > About > Certificate Trust Settings."
-msgstr "在 iPhone 上用 Safari 打开 %s，然后在 设置 > 通用 > 关于本机 > 证书信任设置 中开启完全信任。"
-
-msgid "e.g. London, UK"
-msgstr "例如：伦敦"
-
-msgid "Add saved location"
-msgstr "添加已保存位置"
-
-msgid "Delete"
-msgstr "删除"
-
-msgid "No saved locations yet."
-msgstr "暂无已保存的位置。"
-
-msgid "Preset saved."
-msgstr "预设已保存。"

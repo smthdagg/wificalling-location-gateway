@@ -44,7 +44,7 @@ function profileFromFields(section, fields) {
 		label: fields.label.value.trim(),
 		assigned_device: fields.address.value.trim(),
 		node_ref: fields.node.value.trim(),
-		node_mode: fields.nodeMode.value,
+		node_mode: 'fixed',
 		geo_source: fields.geoMode.value,
 		manual_lat: fields.latitude.value.trim(),
 		manual_lon: fields.longitude.value.trim(),
@@ -60,7 +60,7 @@ function validateProfile(profile) {
 		!normalizeDeviceAddress(profile.assigned_device))
 		return 'device address must be a private IPv4 address or unicast MAC';
 	if (!profile.node_ref || profile.node_ref.length > 96) return 'node reference is required and bounded';
-	if (['fixed', 'gateway_default'].indexOf(profile.node_mode || 'fixed') < 0) return 'invalid node mode';
+	if ((profile.node_mode || 'fixed') !== 'fixed') return 'only explicit WLOC node bindings are supported';
 	if (['auto', 'manual'].indexOf(profile.geo_source || 'auto') < 0) return 'invalid location mode';
 	if (profile.geo_source === 'manual') {
 		var lat = Number(profile.manual_lat), lon = Number(profile.manual_lon);
@@ -110,8 +110,8 @@ return view.extend({
 		function refreshHealth(current) {
 			current = current || {};
 			var services = (current || {}).services || {};
-			var wloc = services.wloc || {}, gateway = services.gateway || {};
-			healthSummary.textContent = 'Gateway: ' + (gateway.running ? 'running' : 'stopped') +
+			var wloc = services.wloc || {}, provider = services.provider || {};
+			healthSummary.textContent = 'Provider: ' + (provider.available ? 'available' : 'unavailable') +
 				' | WLOC: ' + (wloc.running ? 'running' : 'stopped') +
 				' | ' + (wloc.phase || 'unknown');
 			(current.profiles || []).forEach(function(profile) {
@@ -167,7 +167,7 @@ return view.extend({
 				return restartUnified();
 			}).then(function(result) {
 				if (result && result.error) throw new Error(result.error);
-				notify(wlocI18n.t('Applied'), wlocI18n.t('Unified Gateway/WLOC supervisor restarted.'));
+				notify(wlocI18n.t('Applied'), wlocI18n.t('Standalone WLOC supervisor restarted.'));
 				return L.resolveDefault(getHealth(), {}).then(refreshHealth);
 			}).catch(function(error) {
 				notify(wlocI18n.t('Apply failed'), String(error), 'error');
@@ -191,17 +191,16 @@ return view.extend({
 					latitude: textInput(section.manual_lat, 'lat'),
 					longitude: textInput(section.manual_lon, 'lon'),
 					enabled: E('input', { type: 'checkbox', checked: section.enabled === '1' }),
-					nodeMode: E('select', {}), geoMode: E('select', {})
+					geoMode: E('select', {})
 				};
-				setOption(fields.nodeMode, [['fixed', 'Fixed'], ['gateway_default', 'Gateway default']], section.node_mode || 'fixed');
-				setOption(fields.geoMode, [['auto', 'Auto follow'], ['manual', 'Manual']], section.geo_source || 'auto');
+				setOption(fields.geoMode, [['auto', 'Auto follow selected node'], ['manual', 'Manual location']], section.geo_source || 'auto');
 				var state = E('span', {});
 				stateCells[section['.name']] = state;
 				state.textContent = profileStatus((health.profiles || []).filter(function(p) { return p.id === section['.name']; })[0]);
 				body.appendChild(E('tr', { class: 'tr' }, [
 					E('td', { class: 'td' }, section['.name']), E('td', { class: 'td' }, fields.label),
 					E('td', { class: 'td' }, fields.address), E('td', { class: 'td' }, fields.node),
-					E('td', { class: 'td' }, [fields.nodeMode, ' / ', fields.geoMode]),
+					E('td', { class: 'td' }, fields.geoMode),
 					E('td', { class: 'td' }, [fields.latitude, ' ', fields.longitude]),
 					E('td', { class: 'td' }, [fields.enabled, ' ', state]),
 					E('td', { class: 'td' }, [
@@ -244,7 +243,7 @@ return view.extend({
 		poll.add(function() { return L.resolveDefault(getHealth(), {}).then(refreshHealth); }, 15);
 
 		return E([], [
-			E('h2', {}, wlocI18n.t('Unified Gateway / WLOC')),
+			E('h2', {}, wlocI18n.t('WLOC Devices')),
 			E('p', {}, wlocI18n.t('Basic settings, device profiles, node selection, WLOC location mode, and service state share one apply boundary.')),
 			E('div', { class: 'cbi-section' }, [
 				E('h3', {}, wlocI18n.t('Basic settings')), E('p', {}, healthSummary),

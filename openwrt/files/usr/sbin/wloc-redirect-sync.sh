@@ -1,7 +1,7 @@
 #!/bin/sh
-# Sync the WLOC TPROXY rules with the Wi-Fi Calling device policies.
+# Sync the WLOC TPROXY rules with the standalone WLOC device profiles.
 #
-# Every device listed in the gateway device policy (source_ip) gets its
+# Every device listed in the WLOC device profile gets its
 # TCP 443 traffic to the approved Apple WLOC hosts passed to the local
 # wloc-service MITM proxy via TPROXY: the original destination address is
 # preserved, so iOS sees a normal connection to the Apple server (REDIRECT
@@ -31,8 +31,8 @@ multiple_profiles_configured() {
 
 withdraw_legacy_redirect() {
 	# Only remove the WLOC-owned table, policy route, and DNS marker. The
-	# stable Gateway 1.7 nftables table (and UDP 500/4500 handling) is never
-	# touched by this cleanup path.
+	# Tables outside the WLOC namespace are never touched by this cleanup.
+	# path.
 	"$NFT_BINARY" delete table inet "$TABLE" 2>/dev/null || true
 	"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
 	"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
@@ -67,13 +67,13 @@ if [ "$action" = start ] && multiple_profiles_configured; then
 	exit 0
 fi
 
-# Collect the LAN IPs of every device in the gateway device policy.
-ips=$(uci -q show wificalling-gateway \
-    | sed -n "s/.*\.source_ip=['\"]*\([0-9][0-9.]*\)['\"]*/\1/p" \
+# Collect the LAN IPs of every standalone WLOC device profile.
+ips=$(uci -q show wloc-service \
+    | sed -n "s/^wloc-service\.[a-z0-9_]*\.assigned_device=['\"]*\([0-9][0-9.]*\)['\"]*/\1/p" \
     | sort -u)
 
 [ -n "$ips" ] || {
-    echo "wloc-redirect-sync: no devices in the gateway device policy" >&2
+    echo "wloc-redirect-sync: no devices in the WLOC device profiles" >&2
     exit 1
 }
 

@@ -7,7 +7,6 @@ set -eu
 OUTPUT=${WLOC_SUPPORT_OUTPUT:-/tmp/wloc-support-bundle.tar.gz}
 HEALTH=${WLOC_SUPPORT_HEALTH:-/var/run/wloc-service/health.json}
 WLOC_LOG=${WLOC_SUPPORT_WLOC_LOG:-/var/run/wloc-service/events.jsonl}
-GATEWAY_LOG=${WLOC_SUPPORT_GATEWAY_LOG:-/var/run/wificalling-gateway/events.log}
 PROFILE_LOG_ROOT=${WLOC_SUPPORT_PROFILE_LOG_ROOT:-/var/run/wloc-service/profiles}
 MAX_BYTES=${WLOC_SUPPORT_MAX_BYTES:-65536}
 LOCK=/tmp/wloc-support-bundle.lock
@@ -65,14 +64,11 @@ elif [ -x /usr/sbin/wloc-health.sh ]; then
 		health_available=true
 	fi
 fi
-gateway_available=false
-[ -r "$GATEWAY_LOG" ] && gateway_available=true
 wloc_available=false
 [ -r "$WLOC_LOG" ] && wloc_available=true
 profile_logs_available=false
 
 write_events "$WLOC_LOG" "$work/wloc-support/events.jsonl"
-write_events "$GATEWAY_LOG" "$work/wloc-support/gateway-events.jsonl"
 
 # Profile event files are intentionally merged into the same redacted stream.
 # The profile directory name is never copied to the archive; only bounded,
@@ -104,7 +100,6 @@ cat > "$work/wloc-support/manifest.txt" <<EOF
 schema=wificalling-location-gateway.support.v1
 privacy=redacted-no-credentials-no-device-identifiers-no-precise-location
 health_available=$health_available
-gateway_log_available=$gateway_available
 wloc_log_available=$wloc_available
 profile_logs_available=$profile_logs_available
 EOF
@@ -112,8 +107,8 @@ EOF
 # The raw health document is intentionally not copied: it can contain profile
 # labels, IDs, addresses, and effective coordinates. These booleans are enough
 # to tell whether collection reached the local service.
-printf '{"schema":"wificalling-location-gateway.support.v1","health_available":%s,"gateway_log_available":%s,"wloc_log_available":%s,"profile_logs_available":%s}\n' \
-	"$health_available" "$gateway_available" "$wloc_available" "$profile_logs_available" > "$work/wloc-support/health.json"
+printf '{"schema":"wificalling-location-gateway.support.v1","health_available":%s,"wloc_log_available":%s,"profile_logs_available":%s}\n' \
+	"$health_available" "$wloc_available" "$profile_logs_available" > "$work/wloc-support/health.json"
 
 output_dir=${OUTPUT%/*}
 [ "$output_dir" = "$OUTPUT" ] && output_dir=.
@@ -129,7 +124,7 @@ size=$(wc -c < "$archive" | tr -d ' ')
 if [ "$size" -gt "$MAX_BYTES" ]; then
 	# Preserve the manifest and health summary under pressure; never emit an
 	# over-cap bundle or silently truncate a tar stream.
-	rm -f "$work/wloc-support/events.jsonl" "$work/wloc-support/gateway-events.jsonl"
+	rm -f "$work/wloc-support/events.jsonl"
 	rm -f "$archive"
 	if ! tar -czf "$archive" -C "$work" wloc-support; then
 		rm -f "$archive"

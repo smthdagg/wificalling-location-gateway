@@ -2,7 +2,7 @@
 
 ## Scope
 
-This evidence started with Issue #33's unified Gateway/WLOC lifecycle slice.
+This evidence started with Issue #33's unified WLOC lifecycle slice.
 The current V2 integration branch extends it with UCI-backed device profiles,
 LuCI management/monitoring, bounded diagnostics, component update/rollback
 contracts, and shared sing-box provider resolution. Live AX6S RSS and
