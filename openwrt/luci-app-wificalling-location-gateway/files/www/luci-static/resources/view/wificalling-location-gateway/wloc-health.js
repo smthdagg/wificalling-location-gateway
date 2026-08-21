@@ -31,8 +31,8 @@ var createSupportBundle = rpc.declare({
 });
 
 var getUpdateStatus = rpc.declare({ object: 'luci.wloc', method: 'update_status' });
-var preflightUpdate = rpc.declare({ object: 'luci.wloc', method: 'update_preflight', params: { path: '' } });
-var applyUpdate = rpc.declare({ object: 'luci.wloc', method: 'update_apply', params: { path: '' } });
+var preflightUpdate = rpc.declare({ object: 'luci.wloc', method: 'update_preflight', params: [ 'path' ] });
+var applyUpdate = rpc.declare({ object: 'luci.wloc', method: 'update_apply', params: [ 'path' ] });
 var recoverUpdate = rpc.declare({ object: 'luci.wloc', method: 'update_recover' });
 
 function notify(title, message, kind) {
@@ -240,7 +240,7 @@ return view.extend({
 			return function() {
 				if (this.disabled) return;
 				this.disabled = true;
-				call({ path: updatePath.value }).then(function(result) {
+				call(updatePath.value).then(function(result) {
 					if (result && result.error) throw new Error(result.error);
 					notify(wlocI18n.t('Component update'), successText, 'info');
 					return getUpdateStatus().then(renderUpdateStatus);

@@ -7,7 +7,7 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-standalone-package-test.XXXXXX")
 built_output=
 cleanup() {
 	rm -rf "$tmp"
-	[ -z "$built_output" ] || rm -f "$built_output"
+	[ -z "$built_output" ] || rm -f "$built_output" "$built_output.manifest" "$built_output.sig"
 }
 trap cleanup EXIT HUP INT TERM
 

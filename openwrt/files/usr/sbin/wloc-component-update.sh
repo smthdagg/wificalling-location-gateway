@@ -30,6 +30,7 @@ write_status() {
 	target=${3:-}
 	current=${4:-}
 	mkdir -p "$STATE_DIR"
+	chmod 0700 "$STATE_DIR"
 	temporary="$STATE_DIR/status.tmp.$$"
 	printf '{"version":1,"phase":"%s","reason":"%s","target_version":"%s","current_version":"%s","updated_at":%s}\n' \
 		"$phase" "$reason" "$target" "$current" "$(now)" > "$temporary"
@@ -46,6 +47,7 @@ cleanup_work() {
 
 cleanup_lock() {
 	cleanup_work
+	rm -f "$LOCK/pid"
 	rmdir "$LOCK" 2>/dev/null || true
 }
 
@@ -53,9 +55,21 @@ trap 'cleanup_work' EXIT HUP INT TERM
 
 acquire_lock() {
 	mkdir -p "$STATE_DIR"
+	chmod 0700 "$STATE_DIR"
 	if ! mkdir "$LOCK" 2>/dev/null; then
-		die 'component update is already in progress'
+		owner=$(cat "$LOCK/pid" 2>/dev/null || true)
+		case "$owner" in
+			''|*[!0-9]*) die 'component update lock is stale or unreadable; inspect before recovery' ;;
+			esac
+		if kill -0 "$owner" 2>/dev/null; then
+			die 'component update is already in progress'
+		fi
+		rm -f "$LOCK/pid"
+		rmdir "$LOCK" 2>/dev/null || die 'component update lock could not be reclaimed safely'
+		mkdir "$LOCK" 2>/dev/null || die 'component update is already in progress'
 	fi
+	printf '%s\n' "$$" > "$LOCK/pid"
+	chmod 0600 "$LOCK/pid"
 	trap 'cleanup_lock' EXIT HUP INT TERM
 }
 
@@ -63,6 +77,45 @@ field() {
 	key=$1
 	file=$2
 	sed -n "s/^${key}:[[:space:]]*//p" "$file" | head -n 1
+}
+
+sha256_file() {
+	command -v sha256sum >/dev/null 2>&1 || die 'sha256sum is required for update verification'
+	sha256sum "$1" | awk '{print $1}'
+}
+
+verify_manifest() {
+	package=$1
+	control_archive=$2
+	data_archive=$3
+	manifest=${WLOC_UPDATE_MANIFEST:-$package.manifest}
+	signature=${WLOC_UPDATE_SIGNATURE:-$package.sig}
+	public_key=${WLOC_UPDATE_PUBLIC_KEY:-/etc/wificalling-location-gateway/update.pub}
+	usign=${WLOC_UPDATE_USIGN:-/usr/bin/usign}
+	[ -f "$manifest" ] && [ ! -L "$manifest" ] || die 'update manifest is required'
+	[ -f "$signature" ] && [ ! -L "$signature" ] || die 'update manifest signature is required'
+	[ -f "$public_key" ] && [ ! -L "$public_key" ] || die 'update verification key is required'
+	[ -x "$usign" ] || die 'usign is required for update verification'
+	[ "$(wc -c < "$manifest" | tr -d ' ')" -le 4096 ] || die 'update manifest is too large'
+	format=$(field Format "$manifest")
+	manifest_package=$(field Package "$manifest")
+	manifest_version=$(field Version "$manifest")
+	manifest_architecture=$(field Architecture "$manifest")
+	manifest_package_sha256=$(field Package-SHA256 "$manifest")
+	manifest_control_sha256=$(field Control-SHA256 "$manifest")
+	manifest_data_sha256=$(field Data-SHA256 "$manifest")
+	[ "$format" = 'wfc-update-manifest/v1' ] || die 'update manifest format is invalid'
+	[ "$manifest_package" = "$(field Package "$work/control/control")" ] || die 'update manifest package mismatch'
+	[ "$manifest_version" = "$(field Version "$work/control/control")" ] || die 'update manifest version mismatch'
+	[ "$manifest_architecture" = "$(field Architecture "$work/control/control")" ] || die 'update manifest architecture mismatch'
+	printf '%s\n' "$manifest_package_sha256" | grep -Eq '^[0-9a-fA-F]{64}$' || die 'update manifest package hash is invalid'
+	printf '%s\n' "$manifest_control_sha256" | grep -Eq '^[0-9a-fA-F]{64}$' || die 'update manifest control hash is invalid'
+	printf '%s\n' "$manifest_data_sha256" | grep -Eq '^[0-9a-fA-F]{64}$' || die 'update manifest data hash is invalid'
+	[ "$manifest_package_sha256" = "$(sha256_file "$package")" ] || die 'update package hash mismatch'
+	[ "$manifest_control_sha256" = "$(sha256_file "$control_archive")" ] || die 'update control archive hash mismatch'
+	[ "$manifest_data_sha256" = "$(sha256_file "$data_archive")" ] || die 'update data archive hash mismatch'
+	"$usign" -V -p "$public_key" -m "$manifest" -x "$signature" >/dev/null 2>&1 \
+		|| die 'update manifest signature is invalid'
 }
 
 archive_safe() {
@@ -87,7 +140,12 @@ free_kb() {
 		printf '%s\n' "$WLOC_UPDATE_FREE_KB"
 		return
 	fi
-	df -Pk "$STATE_DIR" | awk 'NR == 2 { print $4; exit }'
+	state_free=$(df -Pk "$STATE_DIR" | awk 'NR == 2 { print $4; exit }')
+	tmp_free=$(df -Pk "${TMPDIR:-/tmp}" | awk 'NR == 2 { print $4; exit }')
+	case "$state_free:$tmp_free" in
+		*[!0-9:]*|:*) return 1 ;;
+	esac
+	[ "$state_free" -le "$tmp_free" ] && printf '%s\n' "$state_free" || printf '%s\n' "$tmp_free"
 }
 
 package_info() {
@@ -95,8 +153,11 @@ package_info() {
 	work=$2
 	[ -f "$package" ] && [ ! -L "$package" ] || die 'update package must be a regular local file'
 	if [ "${WLOC_UPDATE_ALLOW_ANY_SOURCE:-0}" != 1 ]; then
-		case "$package" in
-			/tmp/wloc-update/*|$STATE_DIR/incoming/*) ;;
+		stage_root=$(readlink -f /tmp/wloc-update 2>/dev/null || true)
+		incoming_root=$(readlink -f "$STATE_DIR/incoming" 2>/dev/null || true)
+		package_real=$(readlink -f "$package" 2>/dev/null || true)
+		case "$package_real" in
+			"$stage_root"/*|"$incoming_root"/*) ;;
 			*) die 'update source must be under the local update staging directory' ;;
 		esac
 	fi
@@ -116,6 +177,7 @@ package_info() {
 	api=$(field X-WFC-Wloc-Api "$control")
 	tar -xzf "$package" -C "$work" ./data.tar.gz
 	archive_safe "$work/data.tar.gz" || die 'data archive is unsafe or corrupt'
+	verify_manifest "$package" "$work/control.tar.gz" "$work/data.tar.gz"
 	if [ -z "$product" ] || [ -z "$gateway" ] || [ -z "$api" ]; then
 		compatibility=$(tar -xOf "$work/data.tar.gz" ./usr/share/wificalling-location-gateway/compatibility 2>/dev/null || true)
 		[ -n "$product" ] || product=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WFC-Product:[[:space:]]*//p')
@@ -149,9 +211,9 @@ restore_configs() {
 	for config in wloc-service wificalling-gateway; do
 		if [ -f "$TXN/config.$config" ]; then
 			mkdir -p "$ROOT/etc/config"
-			cp -p "$TXN/config.$config" "$ROOT/etc/config/$config"
+			cp -p "$TXN/config.$config" "$ROOT/etc/config/$config" || return 1
 		elif [ -f "$TXN/config.$config.absent" ]; then
-			rm -f "$ROOT/etc/config/$config"
+			rm -f "$ROOT/etc/config/$config" || return 1
 		fi
 	done
 }
@@ -167,27 +229,37 @@ rollback_transaction() {
 	else
 		rollback_ok=0
 	fi
-	restore_configs
+	restore_configs || rollback_ok=0
 	if [ "$rollback_ok" -eq 1 ]; then
 		"$SUPERVISOR" restart >/dev/null 2>&1 || rollback_ok=0
 		"$HEALTH" >/dev/null 2>&1 || rollback_ok=0
 	fi
-	if [ -n "$old_version" ]; then
-		printf '%s\n' "$old_version" > "$STATE_DIR/current.version"
-	fi
-	if [ -f "$TXN/rollback.ipk" ]; then
-		cp -p "$TXN/rollback.ipk" "$STATE_DIR/current.ipk"
+	if [ "$rollback_ok" -eq 1 ]; then
+		if [ -f "$TXN/rollback.ipk" ]; then
+			cp -p "$TXN/rollback.ipk" "$STATE_DIR/current.ipk" || rollback_ok=0
+		fi
+		if [ "$rollback_ok" -eq 1 ] && [ -n "$old_version" ]; then
+			printf '%s\n' "$old_version" > "$STATE_DIR/current.version" || rollback_ok=0
+		fi
 	fi
 	if [ "$rollback_ok" -eq 1 ]; then
 		write_status rolled_back "$reason" "$target_version" "$old_version"
+		rm -rf "$TXN"
+		return 0
 	else
 		write_status rollback_failed rollback_package_install_failed "$target_version" "$old_version"
+		# Keep the transaction and rollback package so an operator can repair
+		# storage/opkg/service state and retry `recover` without losing the only
+		# known-good restoration point.
+		return 1
 	fi
-	rm -rf "$TXN"
 }
 
 preflight() {
 	package=$1
+	mkdir -p "$STATE_DIR"
+	chmod 0700 "$STATE_DIR"
+	mkdir -m 0700 -p "$STATE_DIR/incoming"
 	WORK=$(mktemp -d "${TMPDIR:-/tmp}/wloc-update-check.XXXXXX")
 	version=$(package_info "$package" "$WORK")
 	bytes=$(wc -c < "$package" | tr -d ' ')
@@ -210,6 +282,7 @@ apply_update() {
 	package=$1
 	acquire_lock
 	[ ! -e "$TXN" ] || die 'an interrupted update must be recovered before another update'
+	mkdir -m 0700 -p "$STATE_DIR/incoming"
 	WORK=$(mktemp -d "${TMPDIR:-/tmp}/wloc-update-check.XXXXXX")
 	version=$(package_info "$package" "$WORK")
 	bytes=$(wc -c < "$package" | tr -d ' ')
@@ -225,13 +298,16 @@ apply_update() {
 	fi
 	rollback_package=${WLOC_UPDATE_CURRENT_PACKAGE:-$STATE_DIR/current.ipk}
 	[ -f "$rollback_package" ] && [ ! -L "$rollback_package" ] || die 'known-good rollback package is required'
-	mkdir -p "$TXN"
+	mkdir -m 0700 -p "$TXN"
+	chmod 0700 "$TXN"
 	printf '%s\n' "$version" > "$TXN/target.version"
 	printf '%s\n' "$current" > "$TXN/current.version"
 	cp -p "$rollback_package" "$TXN/rollback.ipk"
+	chmod 0600 "$TXN/rollback.ipk"
 	for config in wloc-service wificalling-gateway; do
 		if [ -f "$ROOT/etc/config/$config" ]; then
 			cp -p "$ROOT/etc/config/$config" "$TXN/config.$config"
+			chmod 0600 "$TXN/config.$config"
 		else
 			: > "$TXN/config.$config.absent"
 		fi
@@ -241,7 +317,10 @@ apply_update() {
 		rollback_transaction package_install_failed
 		exit 1
 	}
-	restore_configs
+	if ! restore_configs; then
+		rollback_transaction config_restore_failed
+		exit 1
+	fi
 	write_status installed awaiting_health "$version" "$current"
 	if [ "${WLOC_UPDATE_INTERRUPT_AFTER_INSTALL:-0}" = 1 ]; then
 		write_status interrupted power_loss_simulation "$version" "$current"
@@ -255,9 +334,12 @@ apply_update() {
 		rollback_transaction health_check_failed
 		exit 1
 	fi
-	cp -p "$package" "$STATE_DIR/current.ipk"
-	chmod 0600 "$STATE_DIR/current.ipk"
-	printf '%s\n' "$version" > "$STATE_DIR/current.version"
+	if ! cp -p "$package" "$STATE_DIR/current.ipk" \
+		|| ! chmod 0600 "$STATE_DIR/current.ipk" \
+		|| ! printf '%s\n' "$version" > "$STATE_DIR/current.version"; then
+		rollback_transaction state_commit_failed
+		exit 1
+	fi
 	write_status applied ready "$version" "$version"
 	rm -rf "$TXN"
 	cleanup_work

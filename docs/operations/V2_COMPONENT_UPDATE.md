@@ -12,6 +12,9 @@ Before `opkg install` is called, the helper validates:
 - regular local IPK and safe `control.tar.gz`/`data.tar.gz` members;
 - unified package identity, version, architecture, Gateway `1.7`, and
   `wloc.service/v2` compatibility metadata;
+- a sidecar `PACKAGE.ipk.manifest` containing package/control/data SHA-256
+  values and a detached `PACKAGE.ipk.sig` verified with the router's
+  `/etc/wificalling-location-gateway/update.pub` `usign` key;
 - free space for the package plus a bounded transaction reserve;
 - current-version ordering, including explicit authorization for downgrade;
 - a known-good rollback IPK.
@@ -31,11 +34,16 @@ existing fail-open withdrawal/restart boundary.
 ## State and resource policy
 
 Persistent state is stored under
-`/var/lib/wificalling-location-gateway/update` with mode `0600` files and a
-directory lock. `current.ipk`, `current.version`, and `status.json` retain the
-last known-good update record. A second update is rejected while a transaction
-or lock exists. On AX6S the preflight reserve prevents an update from starting
-when flash space is too low; no large duplicate root filesystem is created.
+`/var/lib/wificalling-location-gateway/update` with a `0700` directory, `0600`
+files, and a PID-bearing directory lock. A dead lock from a hard power cut is
+reclaimed safely; a live or unreadable lock is not removed automatically.
+`current.ipk`, `current.version`, and `status.json` retain the last known-good
+update record. A second update is rejected while a transaction or live lock
+exists. Preflight checks the smaller of the persistent-state and temporary
+filesystems and reserves space for the package, rollback copy, commit copy,
+and transaction overhead. On AX6S this prevents an update from starting when
+flash or `/tmp` space is too low; no large duplicate root filesystem is
+created.
 
 Package metadata emitted by the builder includes:
 
@@ -44,6 +52,20 @@ X-WFC-Product: wificalling-location-gateway/v2
 X-WFC-Gateway: 1.7
 X-WFC-Wloc-Api: wloc.service/v2
 ```
+
+`scripts/build-luci-ipk.sh` also writes the unsigned manifest sidecar. Release
+automation must sign it before staging:
+
+```sh
+for package in dist/wificalling-location-gateway_*.ipk; do
+  WFC_UPDATE_SIGNING_KEY=/secure/release.sec \
+    scripts/create-update-manifest.sh "$package"
+done
+```
+
+Keep the resulting `.manifest` and `.sig` beside the IPK under
+`/tmp/wloc-update/`; the update UI deliberately accepts only this local
+staging workflow.
 
 ## LuCI behavior
 

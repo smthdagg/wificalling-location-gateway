@@ -14,9 +14,16 @@ printf '1.0.0-1\n' > "$state/current.version"
 cat > "$tmp/bin/opkg" <<'EOF'
 #!/bin/sh
 set -eu
-while [ "${1:-}" != install ] && [ "$#" -gt 0 ]; do shift; done
+force=0
+while [ "${1:-}" != install ] && [ "$#" -gt 0 ]; do
+    [ "$1" = --force-downgrade ] && force=1
+    shift
+done
 [ "${1:-}" = install ] || exit 2
 shift
+if [ "${WLOC_UPDATE_FAIL_ROLLBACK:-0}" = 1 ] && [ "$force" = 1 ]; then
+    exit 1
+fi
 printf '%s\n' install >> "$WLOC_UPDATE_OPKG_LOG"
 package=$1
 data="$WLOC_UPDATE_TEST_TMP/data.tar.gz"
@@ -33,6 +40,11 @@ cat > "$tmp/bin/health" <<'EOF'
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = ok ]
 EOF
 chmod 0755 "$tmp/bin/opkg" "$tmp/bin/supervisor" "$tmp/bin/health"
+cat > "$tmp/bin/usign" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod 0755 "$tmp/bin/usign"
 
 make_ipk() {
     version=$1
@@ -57,12 +69,31 @@ EOF
     (cd "$package_dir" && tar -czf "$out" ./control.tar.gz ./data.tar.gz)
 }
 
+make_manifest() {
+    package=$1
+    control="$tmp/manifest-control.tar.gz"
+    data="$tmp/manifest-data.tar.gz"
+    tar -xOf "$package" ./control.tar.gz > "$control"
+    tar -xOf "$package" ./data.tar.gz > "$data"
+    {
+        printf '%s\n' 'Format: wfc-update-manifest/v1'
+        tar -xOf "$control" ./control | sed -n -e '/^Package:/p' -e '/^Version:/p' -e '/^Architecture:/p'
+        printf 'Package-SHA256: %s\n' "$(sha256sum "$package" | awk '{print $1}')"
+        printf 'Control-SHA256: %s\n' "$(sha256sum "$control" | awk '{print $1}')"
+        printf 'Data-SHA256: %s\n' "$(sha256sum "$data" | awk '{print $1}')"
+    } > "$package.manifest"
+    : > "$package.sig"
+}
+
 old_package="$tmp/old.ipk"
 new_package="$tmp/new.ipk"
 bad_arch_package="$tmp/bad-arch.ipk"
 make_ipk 1.0.0-1 old-component "$old_package"
 make_ipk 1.1.0-1 new-component "$new_package"
 make_ipk 1.1.0-1 bad-component "$bad_arch_package" mipsel
+make_manifest "$old_package"
+make_manifest "$new_package"
+make_manifest "$bad_arch_package"
 
 export WLOC_UPDATE_TEST_TMP="$tmp"
 export WLOC_UPDATE_ROOT="$root"
@@ -75,7 +106,10 @@ export WLOC_UPDATE_HEALTH="$tmp/bin/health"
 export WLOC_UPDATE_HEALTH_STATE="$tmp/health"
 export WLOC_UPDATE_FREE_KB=65536
 export WLOC_UPDATE_ALLOW_ANY_SOURCE=1
+export WLOC_UPDATE_USIGN="$tmp/bin/usign"
+export WLOC_UPDATE_PUBLIC_KEY="$tmp/update.pub"
 export TMPDIR="$tmp"
+printf 'test-public-key\n' > "$tmp/update.pub"
 printf 'ok\n' > "$tmp/health"
 : > "$tmp/opkg.log"
 : > "$tmp/supervisor.log"
@@ -115,11 +149,29 @@ grep '^new-component$' "$root/usr/share/wificalling-location-gateway/component.t
 grep '^old-config$' "$root/etc/config/wloc-service" >/dev/null
 grep 'rolled_back' "$state/status.json" >/dev/null
 
+printf 'fail-once\n' > "$tmp/health"
+if WLOC_UPDATE_FAIL_ROLLBACK=1 WLOC_UPDATE_CURRENT_PACKAGE="$new_package" \
+    sh "$script" apply "$new_package"; then
+    echo 'rollback failure was accepted' >&2
+    exit 1
+fi
+grep 'rollback_failed' "$state/status.json" >/dev/null
+[ -d "$state/transaction" ]
+WLOC_UPDATE_CURRENT_PACKAGE="$new_package" sh "$script" recover
+grep 'rolled_back' "$state/status.json" >/dev/null
+[ ! -e "$state/transaction" ]
+
 printf 'ok\n' > "$tmp/health"
 WLOC_UPDATE_INTERRUPT_AFTER_INSTALL=1 WLOC_UPDATE_CURRENT_PACKAGE="$new_package" \
     sh "$script" apply "$new_package" || true
+mkdir "$state/.lock"
+printf '999999\n' > "$state/.lock/pid"
 sh "$script" recover
 grep '^new-component$' "$root/usr/share/wificalling-location-gateway/component.txt" >/dev/null
+
+fresh_state="$tmp/fresh-state"
+WLOC_UPDATE_STATE_DIR="$fresh_state" sh "$script" preflight "$new_package" >/dev/null
+[ -d "$fresh_state" ]
 
 before=$(wc -l < "$tmp/opkg.log" | tr -d ' ')
 if WLOC_UPDATE_FREE_KB=1 sh "$script" apply "$new_package"; then

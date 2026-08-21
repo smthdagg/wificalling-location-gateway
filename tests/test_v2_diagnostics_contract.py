@@ -32,12 +32,16 @@ class V2DiagnosticsContractTests(unittest.TestCase):
         self.assertIn("insufficient free space", source)
         self.assertIn("WLOC_UPDATE_INTERRUPT_AFTER_INSTALL", source)
         self.assertIn('"$OPKG" install', source)
+        self.assertIn("return 1", source)
+        self.assertIn("verify_manifest", source)
+        self.assertIn("usign", source)
         self.assertNotIn("opkg remove", source)
         self.assertNotIn("nft ", source)
         builder = (self.root / "scripts/build-luci-ipk.sh").read_text(encoding="utf-8")
         self.assertIn("X-WFC-Product: wificalling-location-gateway/v2", builder)
         self.assertIn("X-WFC-Gateway: 1.7", builder)
         self.assertIn("X-WFC-Wloc-Api: wloc.service/v2", builder)
+        self.assertIn("create-update-manifest.sh", builder)
         for compatibility in (
             self.root / "openwrt/files/usr/share/wificalling-location-gateway/compatibility",
             self.root / "openwrt/luci-app-wificalling-location-gateway/files/usr/share/wificalling-location-gateway/compatibility",
@@ -66,6 +70,8 @@ class V2DiagnosticsContractTests(unittest.TestCase):
             health = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js").read_text(encoding="utf-8")
             self.assertIn("update_preflight", health)
             self.assertIn("update_apply", health)
+            self.assertIn("params: [ 'path' ]", health)
+            self.assertIn("call(updatePath.value)", health)
 
     def test_diagnostics_rpc_acl_and_ui_are_present_in_both_package_sources(self):
         for prefix in (
@@ -89,7 +95,12 @@ class V2DiagnosticsContractTests(unittest.TestCase):
             self.assertIn("eventFields", monitor)
 
     def test_support_bundle_shell_and_log_regression_scripts_pass(self):
-        for name in ("test-support-bundle.sh", "test-structured-logs.sh", "test-component-update.sh"):
+        for name in (
+            "test-support-bundle.sh",
+            "test-structured-logs.sh",
+            "test-component-update.sh",
+            "test-existing-ax6s-package.sh",
+        ):
             result = subprocess.run(
                 ["sh", str(self.root / "tests/scripts" / name)],
                 check=False,
