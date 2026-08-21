@@ -106,7 +106,7 @@ case "$dependency_mode" in
 			# Gateway views after the verified Gateway payload is merged.
 			cp -R "$source_dir/." "$stage/data/"
 			rm -f "$stage/data/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"
-			depends='luci-base, rpcd-mod-rpcsys, sing-box, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full'
+			depends='luci-base, rpcd-mod-rpcsys, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full'
 			provides='luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
 			replaces='luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
 		else
@@ -187,6 +187,8 @@ PY
 			cp "$root/openwrt/files/etc/init.d/wificalling-location-gateway" "$stage/data/etc/init.d/wificalling-location-gateway"
 			cp "$root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \
 				"$stage/data/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
+			cp "$root/openwrt/files/usr/libexec/wificalling-location-gateway/singbox-runtime.sh" \
+				"$stage/data/usr/libexec/wificalling-location-gateway/singbox-runtime.sh"
 			cp "$service_bin" "$stage/data/usr/sbin/wloc-service"
 			cp "$ctl_bin" "$stage/data/usr/sbin/wloc-ctl"
 			chmod 0755 "$stage/data/etc/init.d/wloc-service" "$stage/data/usr/sbin/"*
@@ -207,6 +209,9 @@ killall -q wloc-service >/dev/null 2>&1 || true
 rm -f /var/run/wloc-service/control.sock
 mkdir -p /var/run/wificalling-gateway
 chmod 0700 /var/run/wificalling-gateway
+if [ -x /usr/libexec/wificalling-location-gateway/singbox-runtime.sh ]; then
+  /usr/libexec/wificalling-location-gateway/singbox-runtime.sh path >/dev/null 2>&1 || echo "wificalling-location-gateway: install sing-box tiny/lite or a PassWall sing-box provider" >&2
+fi
 /etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1 || true
 rm -f /tmp/luci-indexcache.*
 /etc/init.d/rpcd reload >/dev/null 2>&1 || true
@@ -228,9 +233,11 @@ POSTINST
 				"$stage/data/etc/init.d/wificalling-location-gateway"
 			cp "$root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \
 				"$stage/data/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
+			cp "$root/openwrt/files/usr/libexec/wificalling-location-gateway/singbox-runtime.sh" \
+				"$stage/data/usr/libexec/wificalling-location-gateway/singbox-runtime.sh"
 			chmod 0755 "$stage/data/etc/init.d/wificalling-location-gateway" \
 				"$stage/data/usr/sbin/"*.sh \
-				"$stage/data/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
+				"$stage/data/usr/libexec/wificalling-location-gateway/"*.sh
 		fi
 		;;
 	*)

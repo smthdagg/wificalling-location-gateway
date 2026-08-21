@@ -5,14 +5,15 @@ STOP=10
 
 APP=wificalling-gateway
 RUNDIR=/var/run/$APP
+SINGBOX_RUNTIME_HELPER=${WIFICALLING_SINGBOX_RUNTIME:-/usr/libexec/wificalling-location-gateway/singbox-runtime.sh}
 
 # sing-box removed the wireguard OUTBOUND in 1.13.0 (deprecated in 1.11.0,
 # gated behind ENABLE_DEPRECATED_WIREGUARD_OUTBOUND on 1.11/1.12); the
 # wireguard ENDPOINT works from 1.11.0 on.  Emit the endpoint form for
 # 1.11+, and the legacy outbound only for ancient 1.10.x installs.
 wireguard_style() {
-	local ver major minor
-	ver=$(/usr/bin/sing-box version 2>/dev/null | sed -n 's/.*version[[:space:]]*\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1.\2/p' | head -n 1)
+	local binary="$1" ver major minor
+	ver=$("$binary" version 2>/dev/null | sed -n 's/.*version[[:space:]]*\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1.\2/p' | head -n 1)
 	major=${ver%%.*}; minor=${ver#*.}; minor=${minor%%.*}
 	case "$major" in ''|*[!0-9]*) printf 'endpoint'; return;; esac
 	if [ "$major" -eq 1 ] && [ "$minor" -lt 11 ]; then printf 'legacy'; else printf 'endpoint'; fi
@@ -75,13 +76,14 @@ start_service() {
 	# 18.06, whose feed has no firewall4 and usually no nftables TPROXY
 	# kmods) hit at install time.
 	command -v nft >/dev/null 2>&1 || { logger -t "$APP" "nftables not found: this plugin needs OpenWrt 22.03+ / ImmortalWrt 23.05+ with nftables TPROXY support"; return 1; }
-	[ -x /usr/bin/sing-box ] || { logger -t "$APP" "sing-box not found: install sing-box from your feed before enabling the gateway"; return 1; }
+	[ -x "$SINGBOX_RUNTIME_HELPER" ] || { logger -t "$APP" "sing-box runtime resolver is not installed"; return 1; }
+	SINGBOX_BIN=$("$SINGBOX_RUNTIME_HELPER" path) || { logger -t "$APP" "no usable sing-box tiny/lite/PassWall provider found"; return 1; }
 	# Clear display state only.  monitor.state is the monitor's per-device
 	# baseline (old_wfc/old_sent/old_reply); truncating it would fabricate
 	# handshake_success events on the first tick after every restart.
 	mkdir -p "$RUNDIR"; chmod 700 "$RUNDIR"; : > "$RUNDIR/normalized.conf"; : > "$RUNDIR/clients"; : > "$RUNDIR/nodes"; : > "$RUNDIR/status.json"
 	config_get log_level main log_level warn; printf 'global|log_level|%s\n' "$log_level" >> "$RUNDIR/normalized.conf"
-	printf 'global|wireguard_style|%s\n' "$(wireguard_style)" >> "$RUNDIR/normalized.conf"
+	printf 'global|wireguard_style|%s\n' "$(wireguard_style "$SINGBOX_BIN")" >> "$RUNDIR/normalized.conf"
 	config_get event_interval main event_interval 60
 	config_get max_events_per_device main max_events_per_device 20
 	case "$event_interval" in ''|*[!0-9]*) event_interval=60;; esac
@@ -94,10 +96,10 @@ start_service() {
 	# device policies; harmless when no clients are configured.
 	/usr/libexec/$APP/dhcp-sync.sh "$RUNDIR/clients" || logger -t "$APP" "dhcp-sync failed"
 	/usr/libexec/$APP/compiler.sh "$RUNDIR/normalized.conf" "$RUNDIR/sing-box.json" || return 1
-	/usr/bin/sing-box check -c "$RUNDIR/sing-box.json" || { logger -t "$APP" "sing-box rejected generated configuration"; return 1; }
+	"$SINGBOX_BIN" check -c "$RUNDIR/sing-box.json" || { logger -t "$APP" "sing-box provider rejected generated configuration"; return 1; }
 	/usr/libexec/$APP/firewall.sh start "$RUNDIR/clients" || { logger -t "$APP" "firewall setup failed"; /usr/libexec/$APP/firewall.sh stop "$RUNDIR/clients"; return 1; }
 	procd_open_instance sing-box
-	procd_set_param command /usr/bin/sing-box run -c "$RUNDIR/sing-box.json"
+	procd_set_param command "$SINGBOX_BIN" run -c "$RUNDIR/sing-box.json"
 	if [ "${WLOC_SUPERVISED:-0}" != 1 ]; then
 		procd_set_param respawn 3600 5 5
 	fi

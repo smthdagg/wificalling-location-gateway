@@ -16,7 +16,7 @@ define Package/wloc-service
   SECTION:=net
   CATEGORY:=Network
   TITLE:=Wi-Fi Calling WLOC location gateway control daemon
-  DEPENDS:=+sing-box
+  DEPENDS:=+nftables +kmod-nft-tproxy +kmod-nft-socket +ip-full
 endef
 
 define Package/wloc-ctl
@@ -61,6 +61,7 @@ define Package/wloc-service/install
 	$(INSTALL_BIN) ./files/etc/init.d/wificalling-location-gateway $(1)/etc/init.d/
 	$(INSTALL_DIR) $(1)/usr/libexec/wificalling-location-gateway
 	$(INSTALL_BIN) ./files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh $(1)/usr/libexec/wificalling-location-gateway/
+	$(INSTALL_BIN) ./files/usr/libexec/wificalling-location-gateway/singbox-runtime.sh $(1)/usr/libexec/wificalling-location-gateway/
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_DATA) ./files/etc/config/wloc-service $(1)/etc/config/
 endef

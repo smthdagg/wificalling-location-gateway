@@ -27,6 +27,10 @@ v2 will provide one product supervisor and one management plane:
 - one unified status, event, diagnostic, and update surface;
 - sing-box remains a managed child process and is shared by profiles that use
   the same node;
+- the package resolves an existing `sing-box-tiny`, `sing-box-lite`, or
+  PassWall-provided executable before falling back to a normal system
+  `sing-box`; it does not copy a second binary or attach to a PassWall-owned
+  process;
 - no per-device WLOC process and no duplicated sing-box configuration.
 
 Legacy init scripts and UCI files may remain as a one-release migration facade,

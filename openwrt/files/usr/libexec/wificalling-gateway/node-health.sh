@@ -1,4 +1,6 @@
 #!/bin/sh
+SINGBOX_RUNTIME_HELPER=${WIFICALLING_SINGBOX_RUNTIME:-/usr/libexec/wificalling-location-gateway/singbox-runtime.sh}
+SINGBOX_BIN=$([ -x "$SINGBOX_RUNTIME_HELPER" ] && "$SINGBOX_RUNTIME_HELPER" path 2>/dev/null || true)
 set -eu
 
 nodes=${1:?node list required}
@@ -77,7 +79,8 @@ wg_handshake_test() {
 		[ -n "$reserved" ] && printf ',"reserved":[%s]' "$(printf '%s' "$reserved" | tr -d ' ')"
 		printf '}],"mtu":%s}],"outbounds":[{"type":"direct","tag":"direct"}],"route":{"final":"wg"}}' "${mtu:-1420}"
 	} > "$cfg"
-	/usr/bin/sing-box run -c "$cfg" > /tmp/wg-health-$id.log 2>&1 &
+	[ -n "$SINGBOX_BIN" ] || { rm -f "$lock/pid"; rmdir "$lock" 2>/dev/null || true; return 1; }
+	"$SINGBOX_BIN" run -c "$cfg" > /tmp/wg-health-$id.log 2>&1 &
 	pid=$!
 	sleep 2
 	ip=$(curl -s --max-time 6 -x "http://127.0.0.1:$lport" 'http://ip-api.com/json?fields=query' 2>/dev/null | sed -n 's/.*"query":"\([0-9.]*\)".*/\1/p' || true)

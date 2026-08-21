@@ -49,9 +49,11 @@ if [ -f "$wloc_status" ]; then
 fi
 
 # --- wificalling-gateway / sing-box ---------------------------------------
+SINGBOX_RUNTIME_HELPER=${WIFICALLING_SINGBOX_RUNTIME:-/usr/libexec/wificalling-location-gateway/singbox-runtime.sh}
+SINGBOX_BIN=$([ -x "$SINGBOX_RUNTIME_HELPER" ] && "$SINGBOX_RUNTIME_HELPER" path 2>/dev/null || true)
 monitor_pid=$(pgrep -f 'monitor-loop.sh' 2>/dev/null | head -n 1 || true)
 monitor_running=0; [ -n "$monitor_pid" ] && monitor_running=1
-sb_pid=$(pgrep -f '/usr/bin/sing-box run' 2>/dev/null | head -n 1 || true)
+sb_pid=$(pgrep -f "${SINGBOX_BIN:-/usr/bin/sing-box} run" 2>/dev/null | head -n 1 || true)
 sb_running=0; [ -n "$sb_pid" ] && sb_running=1
 
 rundir=/var/run/wificalling-gateway
@@ -68,8 +70,8 @@ if [ -f "$rundir/sing-box.json" ]; then
 		&& [ /etc/config/wificalling-gateway -nt "$rundir/sing-box.json" ]; then
 		sb_config_stale=1
 	fi
-	if command -v sing-box >/dev/null 2>&1; then
-		if sing-box check -c "$rundir/sing-box.json" >/dev/null 2>&1; then
+	if [ -n "$SINGBOX_BIN" ]; then
+		if "$SINGBOX_BIN" check -c "$rundir/sing-box.json" >/dev/null 2>&1; then
 			sb_config_valid=1
 		fi
 	fi

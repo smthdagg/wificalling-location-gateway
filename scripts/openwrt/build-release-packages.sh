@@ -140,6 +140,8 @@ cp "$repo_root/openwrt/files/etc/init.d/wificalling-location-gateway" "$package_
 mkdir -p "$package_dir/files/usr/libexec/wificalling-location-gateway"
 cp "$repo_root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \
 	"$package_dir/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
+cp "$repo_root/openwrt/files/usr/libexec/wificalling-location-gateway/singbox-runtime.sh" \
+	"$package_dir/files/usr/libexec/wificalling-location-gateway/singbox-runtime.sh"
 cp "$repo_root/openwrt/files/etc/config/wloc-service" "$package_dir/files/etc/config/wloc-service"
 for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh wloc-profile-redirect.sh wloc-profile-status.sh wloc-health.sh wloc-support-bundle.sh wloc-component-update.sh; do
 	cp "$repo_root/openwrt/files/usr/sbin/$helper" "$package_dir/files/usr/sbin/$helper"
@@ -176,9 +178,12 @@ endef
 define Package/wificalling-location-gateway/postinst
 #!/bin/sh
 [ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
-for required in /usr/bin/sing-box /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd; do
+for required in /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd /usr/libexec/wificalling-location-gateway/singbox-runtime.sh; do
   [ -e "\$\$required" ] || echo "wificalling-location-gateway: prerequisite missing: \$\$required" >&2
 done
+if [ -x /usr/libexec/wificalling-location-gateway/singbox-runtime.sh ]; then
+  /usr/libexec/wificalling-location-gateway/singbox-runtime.sh path >/dev/null 2>&1 || echo "wificalling-location-gateway: install sing-box tiny/lite or a PassWall sing-box provider" >&2
+fi
 /etc/init.d/wificalling-gateway disable >/dev/null 2>&1 || true
 /etc/init.d/wloc-service disable >/dev/null 2>&1 || true
 mkdir -p /var/run/wificalling-gateway

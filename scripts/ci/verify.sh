@@ -23,6 +23,7 @@ done
 ./tests/scripts/test-standalone-ax6s-package.sh
 ./tests/scripts/test-release-version.sh
 ./tests/scripts/test-unified-supervisor.sh
+./tests/scripts/test-singbox-runtime.sh
 ./tests/scripts/test-profile-redirect.sh
 ./tests/scripts/test-profile-status.sh
 ./tests/scripts/test-structured-logs.sh

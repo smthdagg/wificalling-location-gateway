@@ -592,6 +592,9 @@ fn build_probe(assigned_device: &str, probe_port: u16) -> Box<dyn ExitProbeRunti
         device_ip,
         probe_port,
         std::path::PathBuf::from("/tmp/wloc-probe"),
+    )
+    .with_singbox_bin(
+        std::env::var("WLOC_SINGBOX_BIN").unwrap_or_else(|_| "/usr/bin/sing-box".to_owned()),
     );
     if assigned_device.trim().is_empty() {
         Box::new(probe)

@@ -99,8 +99,8 @@ printf '%s\n' "$control" | grep -F 'Provides: luci-app-wificalling-location-gate
 	fail 'standalone package must provide both bundled components'
 printf '%s\n' "$control" | grep -F 'Replaces: luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service' >/dev/null ||
 	fail 'standalone package must support upgrades from the former component package names'
-printf '%s\n' "$control" | grep -F 'Depends: luci-base, rpcd-mod-rpcsys, sing-box, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full' >/dev/null ||
-	fail 'standalone package must depend only on system packages'
+printf '%s\n' "$control" | grep -F 'Depends: luci-base, rpcd-mod-rpcsys, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full' >/dev/null ||
+	fail 'standalone package must depend only on system packages and reuse an installed sing-box provider'
 if printf '%s\n' "$control" | grep '^Depends:.*luci-app-wificalling-gateway' >/dev/null; then
 	fail 'standalone package must not depend on the separate Gateway package'
 fi
@@ -112,6 +112,8 @@ printf '%s\n' "$postinst" | grep -F 'mkdir -p /var/run/wificalling-gateway' >/de
 	fail 'standalone post-install must create the volatile Gateway runtime directory before restart'
 printf '%s\n' "$postinst" | grep -F 'chmod 0700 /var/run/wificalling-gateway' >/dev/null ||
 	fail 'standalone post-install must restrict the Gateway runtime directory'
+printf '%s\n' "$postinst" | grep -F 'install sing-box tiny/lite or a PassWall sing-box provider' >/dev/null ||
+	fail 'standalone post-install must explain the optional sing-box provider requirement'
 runtime_line=$(printf '%s\n' "$postinst" | grep -n -F 'mkdir -p /var/run/wificalling-gateway' | cut -d: -f1)
 restart_line=$(printf '%s\n' "$postinst" | grep -n -F '/etc/init.d/wificalling-location-gateway restart' | cut -d: -f1)
 [ "$runtime_line" -lt "$restart_line" ] ||
@@ -134,7 +136,8 @@ for member in \
 	'./usr/sbin/wloc-ctl' \
 	'./usr/sbin/wloc-profile-redirect.sh' \
 	'./usr/sbin/wloc-profile-status.sh' \
-	'./usr/libexec/wificalling-location-gateway/unified-supervisor.sh'; do
+	'./usr/libexec/wificalling-location-gateway/unified-supervisor.sh' \
+	'./usr/libexec/wificalling-location-gateway/singbox-runtime.sh'; do
 	printf '%s\n' "$data_members" | grep -Fx "$member" >/dev/null ||
 		fail "standalone package is missing $member"
 done

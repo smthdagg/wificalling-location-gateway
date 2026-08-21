@@ -18,7 +18,8 @@ for member in \
 	./usr/sbin/wloc-health.sh \
 	./usr/sbin/wloc-support-bundle.sh \
 	./etc/init.d/wificalling-location-gateway \
-	./usr/libexec/wificalling-location-gateway/unified-supervisor.sh; do
+	./usr/libexec/wificalling-location-gateway/unified-supervisor.sh \
+	./usr/libexec/wificalling-location-gateway/singbox-runtime.sh; do
 	tar -tzf "$data" | grep -Fx "$member" >/dev/null || {
 		echo "existing AX6S package is missing $member" >&2
 		exit 1

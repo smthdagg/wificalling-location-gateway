@@ -321,6 +321,13 @@ impl SingBoxProbe {
         self
     }
 
+    /// Use the provider selected by the OpenWrt runtime resolver. Tests and
+    /// development callers can still keep the deterministic default.
+    pub fn with_singbox_bin(mut self, binary: impl Into<String>) -> Self {
+        self.singbox_bin = binary.into();
+        self
+    }
+
     /// Read the Gateway config and select the outbound for the test device.
     fn load_outbound_tag(&self) -> Result<String, ProbeFailure> {
         let text =

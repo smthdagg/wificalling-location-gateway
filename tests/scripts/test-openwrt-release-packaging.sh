@@ -25,6 +25,10 @@ grep -F 'chmod 0700 /var/run/wificalling-gateway' "$builder" >/dev/null ||
 	fail 'release post-install must restrict the Gateway runtime directory'
 grep -F 'wificalling-location-gateway/unified-supervisor.sh' "$builder" >/dev/null ||
 	fail 'release builder must package the unified supervisor'
+grep -F 'wificalling-location-gateway/singbox-runtime.sh' "$builder" >/dev/null ||
+	fail 'release builder must package the shared sing-box runtime provider'
+grep -F 'install sing-box tiny/lite or a PassWall sing-box provider' "$builder" >/dev/null ||
+	fail 'release post-install must explain the optional sing-box provider requirement'
 grep -F '/etc/init.d/wificalling-gateway disable' "$builder" >/dev/null ||
 	fail 'release post-install must disable the legacy Gateway owner'
 grep -F '/etc/init.d/wloc-service disable' "$builder" >/dev/null ||
