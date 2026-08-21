@@ -1,3 +1,5 @@
 X-WLOC-Product: wificalling-location-gateway/v2
 X-WLOC-Api: wloc.service/v2
 X-WLOC-OpenWrt: 24.10+
+X-WLOC-Target: mediatek/mt7622
+X-WLOC-Package-Format: ipk

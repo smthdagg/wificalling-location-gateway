@@ -203,6 +203,7 @@ tar -xOzf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
 	product=$(field X-WLOC-Product "$control")
 	api=$(field X-WLOC-Api "$control")
 	openwrt=$(field X-WLOC-OpenWrt "$control")
+	target=$(field X-WLOC-Target "$control")
 	package_format=$(field X-WLOC-Package-Format "$control")
 	tar -xOzf "$package" data.tar.gz > "$work/data.tar.gz" 2>/dev/null \
 		|| tar -xOzf "$package" ./data.tar.gz > "$work/data.tar.gz"
@@ -213,6 +214,7 @@ tar -xOzf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
 		[ -n "$product" ] || product=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-Product:[[:space:]]*//p')
 		[ -n "$api" ] || api=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-Api:[[:space:]]*//p')
 		[ -n "$openwrt" ] || openwrt=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-OpenWrt:[[:space:]]*//p')
+		[ -n "$target" ] || target=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-Target:[[:space:]]*//p')
 		[ -n "$package_format" ] || package_format=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-Package-Format:[[:space:]]*//p')
 	fi
 	case "$name" in
@@ -223,15 +225,19 @@ tar -xOzf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
 	[ "$product" = 'wificalling-location-gateway/v2' ] || die 'update package compatibility metadata is missing'
 	[ "$api" = 'wloc.service/v2' ] || die 'update package requires an incompatible WLOC API'
 	[ "$openwrt" = '24.10+' ] || die 'update package requires OpenWrt 24.10 or newer'
+	[ -n "$target" ] || die 'update package firmware target metadata is missing'
 	[ "$package_format" = 'ipk' ] || die 'update package format is not supported by the opkg updater'
 	[ -x "$OPKG" ] || die 'opkg is required for an IPK update on this firmware'
 	if [ -f "$ROOT/etc/openwrt_release" ]; then
 		firmware_release=$(sed -n "s/^DISTRIB_RELEASE='\([^']*\)'.*/\1/p" "$ROOT/etc/openwrt_release" | head -n 1)
+		firmware_target=$(sed -n "s/^DISTRIB_TARGET='\([^']*\)'.*/\1/p" "$ROOT/etc/openwrt_release" | head -n 1)
 		case "$firmware_release" in
 			24.*|25.*|26.*) ;;
 			'') die 'OpenWrt release could not be detected' ;;
 			*) die 'firmware release is older than the WLOC package contract' ;;
 		esac
+		[ -n "$firmware_target" ] || die 'firmware target could not be detected'
+		[ "$firmware_target" = "$target" ] || die 'update package firmware target is incompatible'
 	fi
 	if [ "$architecture" != all ]; then
 		expected=${WLOC_UPDATE_ARCHITECTURE:-}

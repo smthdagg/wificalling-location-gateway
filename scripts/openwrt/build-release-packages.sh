@@ -99,6 +99,13 @@ cp -R "$repo_root/openwrt/luci-app-wificalling-location-gateway/files/." "$packa
 rm -rf "$package_dir/files/usr/libexec/wificalling-gateway" \
 	"$package_dir/files/www/luci-static/resources/view/wificalling-gateway" \
 	"$package_dir/files/www/luci-static/resources/wificalling-gateway"
+cat > "$package_dir/files/usr/share/wificalling-location-gateway/compatibility" <<'EOF'
+X-WLOC-Product: wificalling-location-gateway/v2
+X-WLOC-Api: wloc.service/v2
+X-WLOC-OpenWrt: 24.10+
+X-WLOC-Target: x86/64
+X-WLOC-Package-Format: ipk
+EOF
 mkdir -p "$package_dir/files/usr/sbin" "$package_dir/files/etc/init.d" "$package_dir/files/etc/config"
 cp "$service_bin" "$package_dir/files/usr/sbin/wloc-service"
 cp "$ctl_bin" "$package_dir/files/usr/sbin/wloc-ctl"

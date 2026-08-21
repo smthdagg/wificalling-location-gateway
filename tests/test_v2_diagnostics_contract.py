@@ -56,6 +56,7 @@ class V2DiagnosticsContractTests(unittest.TestCase):
             self.root / "openwrt/luci-app-wificalling-location-gateway/files/usr/share/wificalling-location-gateway/compatibility",
         ):
             self.assertIn("X-WLOC-Product: wificalling-location-gateway/v2", compatibility.read_text(encoding="utf-8"))
+            self.assertIn("X-WLOC-Target:", compatibility.read_text(encoding="utf-8"))
 
     def test_component_update_is_installed_and_exposed_with_minimum_acl(self):
         makefile = (self.root / "openwrt/Makefile").read_text(encoding="utf-8")

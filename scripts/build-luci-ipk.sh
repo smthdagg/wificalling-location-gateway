@@ -10,10 +10,12 @@ out_dir="$root/dist"
 architecture=all
 output_package=$package
 description='Standalone LuCI UI for the WLOC location service.'
+target=all
 if [ "$dependency_mode" = ax6s-standalone ]; then
 	architecture=aarch64_cortex-a53
 	output_package=wificalling-location-gateway
 	description='Standalone WLOC location service with unified LuCI.'
+	target=mediatek/mt7622
 fi
 out="$out_dir/${output_package}_${version}_${architecture}.ipk"
 stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-luci-ipk.XXXXXX")
@@ -206,6 +208,7 @@ printf '%s\n' \
 	'X-WLOC-Product: wificalling-location-gateway/v2' \
 	'X-WLOC-Api: wloc.service/v2' \
 	'X-WLOC-OpenWrt: 24.10+' \
+	"X-WLOC-Target: $target" \
 	"X-WLOC-Package-Format: ipk" \
 	'Section: luci' \
 	'Priority: optional' \
