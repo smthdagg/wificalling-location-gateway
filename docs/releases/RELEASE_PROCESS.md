@@ -54,9 +54,12 @@ This is also implemented as `scripts/openwrt/sign-feed.sh`.
      regression tests, packaging tests)
    - `cargo clippy --all-targets` and `cargo fmt --check`
    - privacy sweep: no real device IPs, credentials, or keys in the repo
-2. **Bump the version** (V2 candidate `1.2.0`, then the next approved patch): `VERSION`, `Cargo.toml`
-   (+ `Cargo.lock` via `cargo update -p wificalling-location-gateway
-   --offline`), `scripts/openwrt/build-release-packages.sh`,
+2. **Keep the integration baseline identifiable**: the current V2 staging
+   branch uses `1.2.0` so AX6S migration and rollback can be rehearsed against
+   the installed 1.2.x line. After all hardware gates are green, perform the
+   final major-version bump to `2.0.0` across `VERSION`, `Cargo.toml` (and
+   `Cargo.lock` via `cargo update -p wificalling-location-gateway --offline`),
+   `scripts/openwrt/build-release-packages.sh`,
    `scripts/build-luci-ipk.sh`, both `openwrt/*/Makefile` files, the
    version tests in `tests/scripts/` (mind the escaped regex line in
    `test-release-version.sh`), README install examples, and a new
@@ -78,7 +81,8 @@ This is also implemented as `scripts/openwrt/sign-feed.sh`.
    (`scripts/gen-feed-index.sh`), sign with
    `scripts/openwrt/sign-feed.sh` (same key as always), push `gh-pages`
    and `main`. The `wloc.pub` does **not** change.
-7. **GitHub**: only after Issue #41 acceptance is green, tag `v<version>`, create the Release with the three
+7. **GitHub**: only after Issue #41 acceptance is green and the final version
+   is `2.0.0`, tag `v<version>`, create the Release with the three
    packages, `SHA256SUMS`, and the signed `Packages`/`Packages.gz`(+`.sig`)
    assets, bilingual notes (English first, Chinese after).
 8. **Verify** the feed signature on the AX6S (`opkg update` must print

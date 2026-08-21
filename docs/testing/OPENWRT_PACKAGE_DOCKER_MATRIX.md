@@ -8,7 +8,8 @@ Rust ELF executables, so the runtime package must name the real OpenWrt CPU
 architecture. Marking an AArch64 or x86-64 ELF as `all` is invalid and can
 install an unusable binary on another router.
 
-V2.0/1.2.0 contains one architecture-specific integrated package for each
+The V2 staging baseline is `1.2.0`; the accepted V2.0 release will be
+`2.0.0`. Both use one architecture-specific integrated package for each
 package-manager generation. It combines the verified Wi-Fi Calling Gateway
 1.7 payload, `wloc-service`, `wloc-ctl`, procd/UCI/network helpers, and the
 unified LuCI/rpcd UI. The Docker builder is deliberately limited to `x86_64`;
@@ -83,6 +84,9 @@ candidate has these target assets:
 
 - `wificalling-location-gateway_1.2.0-r1_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
 - `wificalling-location-gateway-1.2.0-r1.apk` for OpenWrt 25.x.
+
+After AX6S acceptance, rebuild these assets as `2.0.0-r1` before signing or
+publishing the final release.
 
 The current host-side plan/static package checks pass. The final Docker install
 matrix and AX6S installation/upgrade/rollback result remain release gates and

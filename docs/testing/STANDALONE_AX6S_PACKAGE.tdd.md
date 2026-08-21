@@ -33,8 +33,10 @@ As an AX6S administrator, I can install one architecture-specific IPK that resto
 
 ## Scope and gap
 
-The current V2 package target is
-`wificalling-location-gateway_1.2.0-1_aarch64_cortex-a53.ipk`. The latest local
+The current staging package target is
+`wificalling-location-gateway_1.2.0-1_aarch64_cortex-a53.ipk`; the accepted V2.0
+release must be rebuilt as
+`wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk`. The latest local
 host release binaries are 1,654,336 bytes (`wloc-service`) and 369,488 bytes
 (`wloc-ctl`); they are not evidence of an AArch64 ELF cross-build. A final
 package SHA-256 and signed release manifest still require the
