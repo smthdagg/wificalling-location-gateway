@@ -21,7 +21,8 @@ They are not independently enabled in the v2 steady state.
    table; the supervisor does not call Gateway stop during a WLOC fault.
 3. Start WLOC without its legacy redirect side effect and wait for its
    root-only Unix socket.
-4. Check both child processes before enabling the WLOC redirect.
+4. Wait up to the bounded startup timeout for both child processes and the
+   WLOC socket before enabling the WLOC redirect.
 5. Install only the WLOC-owned redirect/table and publish `intercepting`.
 
 The supervisor never edits the stable Gateway nftables table and never
@@ -32,10 +33,15 @@ intercepts UDP 500/4500.
 Any WLOC child exit, health failure, or redirect setup failure first calls
 `wloc-redirect-sync.sh stop`, then stops WLOC while leaving the stable Gateway
 available in passthrough. An explicit service stop, SIGTERM, or reload also
-stops the Gateway because that is an operator-requested product shutdown. The
-WLOC table, policy route, DNS marker, socket, and supervisor state are handled
-idempotently. A failed cleanup is reported as `cleanup_unsafe`, never as a
-clean `stopped` state.
+only withdraws WLOC-owned rules; the stable Gateway remains under its original
+init/firewall owner. The WLOC table, policy route, DNS marker, socket, and
+supervisor state are handled idempotently. A failed cleanup is reported as
+`cleanup_unsafe`, never as a clean `stopped` state.
+
+The WLOC daemon applies its persisted `enabled` state in supervised mode with
+the first redirect installation deferred. The supervisor performs the actual
+redirect install after readiness, so daemon state and firewall transition
+cannot disagree during startup.
 
 procd allows at most three supervisor restarts in one hour (`3600 5 3`). The
 Rust supervisor policy additionally limits the managed child count to two
