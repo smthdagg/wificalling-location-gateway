@@ -58,10 +58,7 @@ impl ProfileRuntimeControl for FakeRuntime {
         Ok(())
     }
 
-    fn profile_redirect_present(
-        &mut self,
-        profile_id: &str,
-    ) -> Result<bool, ProfileRuntimeError> {
+    fn profile_redirect_present(&mut self, profile_id: &str) -> Result<bool, ProfileRuntimeError> {
         self.operations
             .push(format!("redirect.present:{profile_id}"));
         Ok(self.redirects.iter().any(|id| id == profile_id))
@@ -87,8 +84,14 @@ fn profiles_share_one_engine_but_install_independent_redirects() {
     manager.enable("phone").unwrap();
     manager.enable("tablet").unwrap();
 
-    assert_eq!(manager.status("phone").unwrap().phase, ProfileRuntimePhase::Intercepting);
-    assert_eq!(manager.status("tablet").unwrap().phase, ProfileRuntimePhase::Intercepting);
+    assert_eq!(
+        manager.status("phone").unwrap().phase,
+        ProfileRuntimePhase::Intercepting
+    );
+    assert_eq!(
+        manager.status("tablet").unwrap().phase,
+        ProfileRuntimePhase::Intercepting
+    );
     assert_eq!(
         manager
             .runtime()
@@ -113,8 +116,14 @@ fn disabling_one_profile_does_not_touch_the_other_redirect() {
 
     manager.disable("phone").unwrap();
 
-    assert_eq!(manager.status("phone").unwrap().phase, ProfileRuntimePhase::Disabled);
-    assert_eq!(manager.status("tablet").unwrap().phase, ProfileRuntimePhase::Intercepting);
+    assert_eq!(
+        manager.status("phone").unwrap().phase,
+        ProfileRuntimePhase::Disabled
+    );
+    assert_eq!(
+        manager.status("tablet").unwrap().phase,
+        ProfileRuntimePhase::Intercepting
+    );
     assert_eq!(manager.runtime().redirects, vec!["tablet".to_owned()]);
     assert!(manager
         .runtime()
@@ -139,8 +148,14 @@ fn failed_profile_install_degrades_only_that_profile() {
         manager.enable("tablet"),
         Err(ProfileRuntimeError::RedirectInstall)
     );
-    assert_eq!(manager.status("phone").unwrap().phase, ProfileRuntimePhase::Intercepting);
-    assert_eq!(manager.status("tablet").unwrap().phase, ProfileRuntimePhase::DegradedPassthrough);
+    assert_eq!(
+        manager.status("phone").unwrap().phase,
+        ProfileRuntimePhase::Intercepting
+    );
+    assert_eq!(
+        manager.status("tablet").unwrap().phase,
+        ProfileRuntimePhase::DegradedPassthrough
+    );
     assert_eq!(manager.runtime().redirects, vec!["phone".to_owned()]);
     assert!(manager
         .runtime()
@@ -155,7 +170,10 @@ fn unhealthy_shared_engine_never_installs_any_profile_redirect() {
         manager.enable("phone"),
         Err(ProfileRuntimeError::EngineUnhealthy)
     );
-    assert_eq!(manager.status("phone").unwrap().phase, ProfileRuntimePhase::DegradedPassthrough);
+    assert_eq!(
+        manager.status("phone").unwrap().phase,
+        ProfileRuntimePhase::DegradedPassthrough
+    );
     assert!(manager.runtime().redirects.is_empty());
 }
 
@@ -172,8 +190,14 @@ fn every_new_profile_enable_rechecks_shared_engine_health() {
         manager.enable("tablet"),
         Err(ProfileRuntimeError::EngineUnhealthy)
     );
-    assert_eq!(manager.status("phone").unwrap().phase, ProfileRuntimePhase::Intercepting);
-    assert_eq!(manager.status("tablet").unwrap().phase, ProfileRuntimePhase::DegradedPassthrough);
+    assert_eq!(
+        manager.status("phone").unwrap().phase,
+        ProfileRuntimePhase::Intercepting
+    );
+    assert_eq!(
+        manager.status("tablet").unwrap().phase,
+        ProfileRuntimePhase::DegradedPassthrough
+    );
     assert_eq!(manager.runtime().redirects, vec!["phone".to_owned()]);
 }
 
@@ -192,7 +216,10 @@ fn unsupported_mac_profile_is_rejected_without_runtime_operation() {
         manager.enable("phone"),
         Err(ProfileRuntimeError::UnsupportedDevice)
     );
-    assert_eq!(manager.status("phone").unwrap().phase, ProfileRuntimePhase::DegradedPassthrough);
+    assert_eq!(
+        manager.status("phone").unwrap().phase,
+        ProfileRuntimePhase::DegradedPassthrough
+    );
     assert!(manager.runtime().operations.is_empty());
 }
 

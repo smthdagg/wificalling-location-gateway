@@ -13,7 +13,9 @@ use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use wificalling_location_gateway::app::{WlocService, WlocServiceConfig};
-use wificalling_location_gateway::config::{DeviceProfile, LocationMode, RuntimeProfile, WlocUciConfig};
+use wificalling_location_gateway::config::{
+    DeviceProfile, LocationMode, RuntimeProfile, WlocUciConfig,
+};
 use wificalling_location_gateway::exitprobe::runtime::{ExitProbeRuntime, ProbeFailure};
 use wificalling_location_gateway::exitprobe::{NodeRef, ProbeLimits};
 use wificalling_location_gateway::georesolver::http::GeoHttpClient;
@@ -230,10 +232,7 @@ impl ProfileRuntimeControl for OpenWrtRuntime {
         self.run_profile_redirect("stop", profile_id, None)
     }
 
-    fn profile_redirect_present(
-        &mut self,
-        profile_id: &str,
-    ) -> Result<bool, ProfileRuntimeError> {
+    fn profile_redirect_present(&mut self, profile_id: &str) -> Result<bool, ProfileRuntimeError> {
         let status = std::process::Command::new(&self.profile_redirect_helper)
             .args(["status", profile_id])
             .status()

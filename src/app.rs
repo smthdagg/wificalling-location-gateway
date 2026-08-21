@@ -795,7 +795,7 @@ mod probe_needed_tests {
 
 #[cfg(test)]
 mod bounded_log_tests {
-    use super::{append_line, MAX_EVENT_LOG_BYTES, MAX_EVENT_LINE_BYTES};
+    use super::{append_line, MAX_EVENT_LINE_BYTES, MAX_EVENT_LOG_BYTES};
     use serde_json::json;
 
     #[test]
@@ -823,7 +823,10 @@ mod bounded_log_tests {
             super::current_unix()
         ));
         append_line(&path, &json!({"event": "kept"}));
-        append_line(&path, &json!({"payload": "x".repeat(MAX_EVENT_LINE_BYTES * 2)}));
+        append_line(
+            &path,
+            &json!({"payload": "x".repeat(MAX_EVENT_LINE_BYTES * 2)}),
+        );
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("kept"));
         assert!(!text.contains(&"x".repeat(MAX_EVENT_LINE_BYTES * 2)));

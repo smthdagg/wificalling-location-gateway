@@ -50,10 +50,7 @@ pub trait ProfileRuntimeControl {
         profile: &DeviceProfile,
     ) -> Result<(), ProfileRuntimeError>;
     fn remove_profile_redirect(&mut self, profile_id: &str) -> Result<(), ProfileRuntimeError>;
-    fn profile_redirect_present(
-        &mut self,
-        profile_id: &str,
-    ) -> Result<bool, ProfileRuntimeError>;
+    fn profile_redirect_present(&mut self, profile_id: &str) -> Result<bool, ProfileRuntimeError>;
 }
 
 pub struct ProfileRuntimeManager<R: ProfileRuntimeControl> {
@@ -125,15 +122,13 @@ impl<R: ProfileRuntimeControl> ProfileRuntimeManager<R> {
         }
 
         self.set_status(index, ProfileRuntimePhase::Preparing, "preparing");
-        if !self.shared_engine_ready {
-            if self.runtime.ensure_shared_engine().is_err() {
-                self.set_status(
-                    index,
-                    ProfileRuntimePhase::DegradedPassthrough,
-                    "engine_start_failed",
-                );
-                return Err(ProfileRuntimeError::EngineStart);
-            }
+        if !self.shared_engine_ready && self.runtime.ensure_shared_engine().is_err() {
+            self.set_status(
+                index,
+                ProfileRuntimePhase::DegradedPassthrough,
+                "engine_start_failed",
+            );
+            return Err(ProfileRuntimeError::EngineStart);
         }
         // Health is sampled for every new profile admission. The shared
         // process may have degraded after an earlier profile was enabled.
@@ -163,11 +158,9 @@ impl<R: ProfileRuntimeControl> ProfileRuntimeManager<R> {
                 ProfileRuntimeError::RedirectStillPresent,
                 profile_id,
             ),
-            Err(_) => self.fail_profile_redirect(
-                index,
-                ProfileRuntimeError::CleanupUnsafe,
-                profile_id,
-            ),
+            Err(_) => {
+                self.fail_profile_redirect(index, ProfileRuntimeError::CleanupUnsafe, profile_id)
+            }
         }
     }
 
@@ -231,10 +224,18 @@ impl<R: ProfileRuntimeControl> ProfileRuntimeManager<R> {
         profile_id: &str,
     ) -> Result<(), ProfileRuntimeError> {
         if self.runtime.remove_profile_redirect(profile_id).is_err() {
-            self.set_status(index, ProfileRuntimePhase::DegradedPassthrough, "cleanup_unsafe");
+            self.set_status(
+                index,
+                ProfileRuntimePhase::DegradedPassthrough,
+                "cleanup_unsafe",
+            );
             return Err(ProfileRuntimeError::CleanupUnsafe);
         }
-        self.set_status(index, ProfileRuntimePhase::DegradedPassthrough, reason_for(error));
+        self.set_status(
+            index,
+            ProfileRuntimePhase::DegradedPassthrough,
+            reason_for(error),
+        );
         Err(error)
     }
 }

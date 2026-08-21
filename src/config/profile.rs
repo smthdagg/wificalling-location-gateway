@@ -65,7 +65,10 @@ impl fmt::Display for ProfileError {
             Self::TooManyProfiles => write!(formatter, "too many device profiles"),
             Self::DuplicateId(id) => write!(formatter, "duplicate device profile id: {id}"),
             Self::DuplicateAssignedDevice(address) => {
-                write!(formatter, "device is assigned to multiple profiles: {address}")
+                write!(
+                    formatter,
+                    "device is assigned to multiple profiles: {address}"
+                )
             }
             Self::MissingAssignedDevice => {
                 formatter.write_str("assigned device address is required")

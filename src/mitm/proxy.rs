@@ -211,11 +211,7 @@ impl MitmProxy {
                                 return Ok((request_body.len(), out));
                             }
                         } else if let Ok(mut cache) = self.synthesized_payloads.lock() {
-                            cache_synthesized_payload(
-                                &mut cache,
-                                client_addr,
-                                payload.to_vec(),
-                            );
+                            cache_synthesized_payload(&mut cache, client_addr, payload.to_vec());
                         }
                         eprintln!(
                             "wloc proxy: synthesized {} -> {} bytes (is_wloc={is_wloc})",
@@ -406,7 +402,10 @@ fn cache_synthesized_payload(
     }
     cache.remove(client_addr);
     while cache.len() >= MAX_SYNTHESIZED_CLIENTS
-        || cache.values().map(Vec::len).sum::<usize>()
+        || cache
+            .values()
+            .map(Vec::len)
+            .sum::<usize>()
             .saturating_add(payload.len())
             > MAX_SYNTHESIZED_CACHE_BYTES
     {
