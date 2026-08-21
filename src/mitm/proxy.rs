@@ -28,6 +28,7 @@ const MAX_STREAMS: usize = 8;
 const MAX_SYNTHESIZED_CLIENTS: usize = 16;
 const MAX_SYNTHESIZED_CACHE_BYTES: usize = 64 * 1024;
 const MAX_SYNTHESIZED_PAYLOAD_BYTES: usize = 16 * 1024;
+const MAX_DEBUG_SAMPLE_BYTES: usize = 16 * 1024;
 
 /// HTTP/2 MITM proxy bound to one approved hostname's traffic.
 #[derive(Clone)]
@@ -369,18 +370,23 @@ pub(crate) fn dump_wloc_samples(
         .unwrap_or(0);
     let _ = std::fs::create_dir_all(dir);
     let safe = hostname.replace(['/', ':', '.'], "_");
-    let _ = std::fs::write(
-        format!("{dir}/{stamp}_{client_addr}_{safe}_req.bin"),
+    write_bounded_sample(
+        &format!("{dir}/{stamp}_{client_addr}_{safe}_req.bin"),
         request,
     );
-    let _ = std::fs::write(
-        format!("{dir}/{stamp}_{client_addr}_{safe}_resp.bin"),
+    write_bounded_sample(
+        &format!("{dir}/{stamp}_{client_addr}_{safe}_resp.bin"),
         response,
     );
-    let _ = std::fs::write(
-        format!("{dir}/{stamp}_{client_addr}_{safe}_patched.bin"),
+    write_bounded_sample(
+        &format!("{dir}/{stamp}_{client_addr}_{safe}_patched.bin"),
         patched,
     );
+}
+
+fn write_bounded_sample(path: &str, bytes: &[u8]) {
+    let end = bytes.len().min(MAX_DEBUG_SAMPLE_BYTES);
+    let _ = std::fs::write(path, &bytes[..end]);
 }
 
 fn maybe_patch_body(body: &[u8], is_wloc: bool, patch: Option<&PatchTarget>) -> Vec<u8> {
