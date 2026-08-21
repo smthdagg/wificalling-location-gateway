@@ -5,7 +5,7 @@
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test,security,docs
 - Branch: codex/issue-39-v2-update-rollback-codex-v2-lead-20260821095228-1bc1507b
-- Final local checkpoint before handoff: adbae03
+- Final local checkpoint before handoff: e5eaf9a
 - Credentials included: no
 
 ## Objective
@@ -85,13 +85,21 @@ transaction.
   validates that fallback.
 - Rollback now passes `--force-downgrade` to opkg and the test stub parses
   option-bearing invocations, matching OpenWrt downgrade behavior.
+- Validation and low-space failure paths now remove their temporary unpack
+  directories; the shell regression test asserts that no check workspace is
+  leaked.
+- GitHub run `32471646456` exposed a pre-existing nondeterministic sing-box
+  stderr fixture; it now emits one deterministic diagnostic and `exec`s a
+  long-lived process, with five repeated local runs passing.
 - Commit hooks report `lefthook` unavailable in PATH; repository verification
   completed successfully.
 
 ## Warnings and non-blocking notes
 
 - Existing cargo audit duplicate `socket2` and `windows-sys` lock entries remain
-  warnings; advisories, bans, licenses, and sources pass.
+  warnings; advisories, bans, licenses, and sources pass when the cached
+  advisory database is used. The final local online audit refresh was blocked
+  by a transient RustSec TLS error.
 - The LuCI surface expects the operator to stage the IPK locally under
   `/tmp/wloc-update`; it intentionally does not fetch arbitrary URLs or upload
   packages. Hardware flash-full and hard-power-cut evidence is Issue #40.
