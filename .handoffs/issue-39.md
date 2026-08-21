@@ -5,7 +5,7 @@
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test,security,docs
 - Branch: codex/issue-39-v2-update-rollback-codex-v2-lead-20260821095228-1bc1507b
-- Final local checkpoint before handoff: e5eaf9a
+- Final local checkpoint before handoff: 029f53b
 - Credentials included: no
 
 ## Objective
@@ -22,7 +22,8 @@ transaction.
   `recover`, and `status` actions.
 - Validates regular local IPK, archive paths, package identity, V2 product
   metadata, Gateway 1.7, WLOC v2 API, target architecture, semantic package
-  version, free space, downgrade authorization, and known-good rollback package.
+  version, signed SHA-256 manifest, free space, downgrade authorization, and
+  known-good rollback package.
 - Serializes updates with a persistent lock and transaction directory; stores
   previous package and both legacy component UCI files with mode-restricted
   state.
@@ -53,6 +54,8 @@ transaction.
 - `scripts/ci/verify.sh`
 - compatibility metadata files under both package source trees
 - `tests/scripts/test-component-update.sh`
+- `tests/scripts/test-existing-ax6s-package.sh`
+- `scripts/create-update-manifest.sh`
 - `tests/test_v2_diagnostics_contract.py`
 - `docs/operations/V2_COMPONENT_UPDATE.md`
 - `docs/testing/V2_COMPONENT_UPDATE.tdd.md`
@@ -62,8 +65,9 @@ transaction.
 | Command | Result | Evidence |
 |---|---|---|
 | `./scripts/ci/verify.sh` | Passed | 80 Python tests, all Rust targets, OpenWrt/AX6S/release packaging, update transaction, secret scan, cargo audit |
-| `cargo llvm-cov --workspace --all-targets --locked --fail-under-lines 80` | Passed | 80.11% total Rust line coverage |
+| `cargo llvm-cov --workspace --all-targets --locked --fail-under-lines 80` | Passed | 80.16% total Rust line coverage |
 | `sh tests/scripts/test-component-update.sh` | Passed | architecture rejection, unauthorized/authorized downgrade, config preservation, health rollback, interrupted recovery, low-space preflight |
+| `sh tests/scripts/test-existing-ax6s-package.sh` | Passed | actual legacy AX6S package build and helper/supervisor extraction |
 | `python3 -m unittest tests.test_v2_diagnostics_contract` | Passed | 6 contract tests covering helper/package/RPC/ACL/UI |
 | `sh tests/scripts/test-standalone-ax6s-package.sh` | Passed | standalone package path |
 | `sh tests/scripts/test-openwrt-release-packaging.sh` | Passed | release package path |
@@ -88,6 +92,15 @@ transaction.
 - Validation and low-space failure paths now remove their temporary unpack
   directories; the shell regression test asserts that no check workspace is
   leaked.
+- Rollback failures retain the transaction for a later `recover`; stale PID
+  locks from hard power loss are reclaimed only when the owner is dead.
+- Both persistent state and `/tmp` free space are checked, commit-copy errors
+  trigger rollback, and state/transaction files are root-only.
+- Update packages require a signed sidecar manifest with outer-package,
+  control-archive, and data-archive SHA-256 values. The builder emits the
+  manifest and release signing is supplied through `WFC_UPDATE_SIGNING_KEY`.
+- `ax6s-existing` now packages the V2 helper/supervisor adapter and has an
+  actual build-and-unpack regression test.
 - GitHub run `32471646456` exposed a pre-existing nondeterministic sing-box
   stderr fixture; it now emits one deterministic diagnostic and `exec`s a
   long-lived process, with five repeated local runs passing.
