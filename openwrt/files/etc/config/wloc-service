@@ -36,3 +36,17 @@ config preset 'hong_kong'
 	option label 'Hong Kong'
 	option latitude '22.3193'
 	option longitude '114.1694'
+
+# v2 migration example (disabled by default): one config device section is
+# the future unit for node binding, WLOC mode, service enablement, logs, and
+# monitoring. If any device sections are present, they take precedence over
+# the legacy singleton fields above. Keep addresses and locations local to
+# the router; they are never returned by the redacted status API.
+#
+# config device 'phone'
+# 	option label 'Living room phone'
+# 	option assigned_device '192.168.1.100'
+# 	option node_ref 'default'
+# 	option node_mode 'fixed'
+# 	option geo_source 'auto'
+# 	option enabled '1'

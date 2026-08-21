@@ -196,6 +196,19 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     /// Probe and resolve evidence when the cached observation is missing,
     /// stale, or the last probe failed.
     fn refresh_evidence_at(&mut self, now_unix: u64) {
+        // An invalid or unsupported profile is disabled at startup, but
+        // status and periodic refreshes still run independently of the
+        // enable path. Do not let those paths create an unbound legacy probe
+        // that silently selects the first outbound, and withdraw any stale
+        // evidence/patch target already held by the service.
+        if !self.scope_valid {
+            self.exit_evidence = ExitEvidence::Unavailable;
+            self.geo_resolution = GeoResolution::Unavailable;
+            self.last_probe_fingerprint = None;
+            self.last_probe_error = Some("invalid service scope".to_owned());
+            self.publish_patch_target();
+            return;
+        }
         // Manual mode pins the location to the preset coordinates; exit
         // probing exists only to drive auto-follow, so it is skipped
         // entirely in manual mode (no reverse probe, no misleading IP).
@@ -246,6 +259,14 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     /// Publish the current patch target: a manual preset when set, otherwise
     /// the freshest Geo record (in Auto mode).
     fn publish_patch_target(&self) {
+        if !self.scope_valid {
+            if let Some(sink) = &self.patch_sink {
+                if let Ok(mut guard) = sink.lock() {
+                    *guard = None;
+                }
+            }
+            return;
+        }
         let target = match self.geo_source {
             GeoSource::Manual {
                 latitude,
