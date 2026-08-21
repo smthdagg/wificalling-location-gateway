@@ -91,6 +91,11 @@ if PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" \
   exit 1
 fi
 if PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" \
+  "$helper" start phone-2 192.168.1.12; then
+  printf '%s\n' 'hyphenated profile id must be rejected' >&2
+  exit 1
+fi
+if PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" \
   "$helper" start documentation 192.0.2.1; then
   printf '%s\n' 'non-private 192/8 address must be rejected' >&2
   exit 1

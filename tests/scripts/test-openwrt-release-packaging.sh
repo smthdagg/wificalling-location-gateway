@@ -15,6 +15,12 @@ grep -F -- '--ax6s-package' "$builder" >/dev/null
 grep -F 'expected three integrated packages' "$builder" >/dev/null
 grep -F 'X-WLOC-Product' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null
 grep -F 'X-WLOC-Target: x86/64' "$builder" >/dev/null
+grep -F 'X-WLOC-OpenWrt: 24.10+' "$builder" >/dev/null
+grep -F 'X-WLOC-Package-Format: ipk' "$builder" >/dev/null
+grep -F "wificalling-location-gateway*.manifest" "$builder" >/dev/null
+grep -F "wificalling-location-gateway*.sig" "$builder" >/dev/null
+grep -F 'WLOC_UPDATE_SIGNING_KEY is required' "$builder" >/dev/null
+grep -F '/etc/init.d/wificalling-location-gateway restart' "$matrix" >/dev/null
 if grep -E -- '--gateway-ipk|GATEWAY_IPK' "$builder" >/dev/null; then
   echo 'release builder still exposes a Gateway package input' >&2
   exit 1

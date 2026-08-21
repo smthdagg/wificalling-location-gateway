@@ -82,6 +82,10 @@ if [ "$plan_only" -eq 0 ]; then
 	case "$ax6s_package" in /*) ;; *) fail '--ax6s-package must be absolute' ;; esac
 	[ -f "$ax6s_package" ] || fail "AX6S package is not a regular file: $ax6s_package"
 	[ ! -L "$ax6s_package" ] || fail 'AX6S package must not be a symbolic link'
+	[ -n "${WLOC_UPDATE_SIGNING_KEY:-}" ] || fail 'WLOC_UPDATE_SIGNING_KEY is required for a signed release build'
+	[ -f "$WLOC_UPDATE_SIGNING_KEY" ] || fail 'WLOC_UPDATE_SIGNING_KEY must point to a regular file'
+	update_usign=${WLOC_UPDATE_USIGN:-/usr/bin/usign}
+	[ -x "$update_usign" ] || fail "release signing usign is not executable: $update_usign"
 fi
 
 stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-openwrt-package.XXXXXX")
@@ -195,6 +199,7 @@ build_with_sdk openwrt-25.12 "$OPENWRT_25_SDK"
 mkdir -p "$out_dir"
 find "$out_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk' \
 	-o -name 'wificalling-location-gateway*.apk' -o -name 'SHA256SUMS' \
+	-o -name 'wificalling-location-gateway*.manifest' -o -name 'wificalling-location-gateway*.sig' \
 	-o -name 'docker-matrix-report.txt' \) -delete
 find "$stage/output" -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp {} "$out_dir/" \;
 cp "$ax6s_package" "$out_dir/"
@@ -233,6 +238,12 @@ validate_ax6s_package() {
 		|| fail 'AX6S package is missing standalone product metadata'
 	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Api: wloc.service/v2' >/dev/null \
 		|| fail 'AX6S package is missing WLOC API metadata'
+	printf '%s\n' "$control" | grep -Fx 'X-WLOC-OpenWrt: 24.10+' >/dev/null \
+		|| fail 'AX6S package is missing OpenWrt compatibility metadata'
+	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Target: mediatek/mt7622' >/dev/null \
+		|| fail 'AX6S package has the wrong firmware target metadata'
+	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Package-Format: ipk' >/dev/null \
+		|| fail 'AX6S package is missing package-format metadata'
 	if printf '%s\n' "$control" | grep -E 'Wi-Fi Calling Gateway|luci-app-wificalling-gateway|X-WFC' >/dev/null; then
 		fail 'AX6S package contains Gateway coupling metadata'
 	fi

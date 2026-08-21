@@ -16,8 +16,10 @@ file_age() {
 
 wloc_pid=$(pgrep -f '/usr/sbin/wloc-service' 2>/dev/null | head -n 1 || true)
 wloc_running=0; [ -n "$wloc_pid" ] && wloc_running=1
-wloc_socket=0; [ -S /var/run/wloc-service/control.sock ] && wloc_socket=1
-wloc_status=/var/run/wloc-service/status.json
+WLOC_SOCKET=${WLOC_HEALTH_SOCKET:-/var/run/wloc-service/control.sock}
+WLOC_STATUS=${WLOC_HEALTH_STATUS_FILE:-/var/run/wloc-service/status.json}
+wloc_socket=0; [ -S "$WLOC_SOCKET" ] && wloc_socket=1
+wloc_status=$WLOC_STATUS
 wloc_status_fresh=0; wloc_phase=unknown; wloc_exit=unknown; wloc_geo=unknown; wloc_error=null
 if [ -f "$wloc_status" ]; then
 	age=$(file_age "$wloc_status")
@@ -36,7 +38,7 @@ HELPER=${WLOC_PROVIDER_HELPER:-/usr/libexec/wificalling-location-gateway/singbox
 provider_bin=$([ -x "$HELPER" ] && "$HELPER" path 2>/dev/null || true)
 provider_available=0; provider_valid=0
 [ -n "$provider_bin" ] && provider_available=1
-config_path=$(uci -q get wloc-service.main.singbox_config 2>/dev/null || echo /var/run/wloc-service/sing-box.json)
+config_path=${WLOC_HEALTH_CONFIG_PATH:-$(uci -q get wloc-service.main.singbox_config 2>/dev/null || echo /var/run/wloc-service/sing-box.json)}
 config_present=0; config_valid=0; config_age=-1
 if [ -f "$config_path" ]; then
 	config_present=1; config_age=$(file_age "$config_path")
@@ -44,14 +46,39 @@ if [ -f "$config_path" ]; then
 fi
 [ "$provider_available" -eq 1 ] && [ "$config_valid" -eq 1 ] && provider_valid=1
 
+nft_table_present=0
 nft_rules=0
-if command -v nft >/dev/null 2>&1; then
-	nft list table inet wloc_service >/dev/null 2>&1 && nft_rules=1 || true
+NFT_BINARY=${WLOC_HEALTH_NFT_BINARY:-$(command -v nft 2>/dev/null || true)}
+if [ -n "$NFT_BINARY" ]; then
+	# Single-device mode uses the legacy table. Multi-device mode deliberately
+	# removes it and creates one isolated table per active profile, so the health
+	# gate must recognize either ownership shape.
+	if "$NFT_BINARY" list table inet wloc_service >/dev/null 2>&1; then
+		nft_table_present=1
+		nft_rules=1
+	else
+		profile_tables=$("$NFT_BINARY" list tables inet 2>/dev/null || true)
+		while IFS= read -r profile_table; do
+			case "$profile_table" in
+				table\ inet\ wloc_profile_[a-z0-9_]* )
+					table=${profile_table#table inet }
+					[ "$table" != wloc_profile_ ] || continue
+					if table_dump=$("$NFT_BINARY" list table inet "$table" 2>/dev/null); then
+						nft_table_present=1
+						printf '%s\n' "$table_dump" | grep -E 'tproxy|meta mark set' >/dev/null 2>&1 && nft_rules=1
+					fi
+					;;
+			esac
+		done <<EOF
+$profile_tables
+EOF
+	fi
 fi
 
 profiles='[]'
-if [ -x /usr/sbin/wloc-profile-status.sh ]; then
-	profile_json=$(/usr/sbin/wloc-profile-status.sh 2>/dev/null || true)
+PROFILE_STATUS=${WLOC_HEALTH_PROFILE_STATUS:-/usr/sbin/wloc-profile-status.sh}
+if [ -x "$PROFILE_STATUS" ]; then
+	profile_json=$($PROFILE_STATUS 2>/dev/null || true)
 	profiles=$(printf '%s\n' "$profile_json" | sed -n 's/^{"profiles":\(.*\)}$/\1/p')
 	[ -n "$profiles" ] || profiles='[]'
 fi
@@ -61,5 +88,5 @@ printf '"services":{"wloc":{"running":%s,"socket":%s,"status_fresh":%s,"phase":"
 	"$wloc_running" "$wloc_socket" "$wloc_status_fresh" "$wloc_phase" "$wloc_exit" "$wloc_geo" "$wloc_error"
 printf '"provider":{"available":%s,"valid":%s,"config_present":%s,"config_valid":%s,"config_age":%s},' \
 	"$provider_available" "$provider_valid" "$config_present" "$config_valid" "$config_age"
-printf '"redirect":{"table_present":%s,"rules":%s}},' "$nft_rules" "$nft_rules"
+printf '"redirect":{"table_present":%s,"rules":%s}},' "$nft_table_present" "$nft_rules"
 printf '"nodes":{"total":0,"ok":0,"down":0,"unknown":0},"profiles":%s}\n' "$profiles"

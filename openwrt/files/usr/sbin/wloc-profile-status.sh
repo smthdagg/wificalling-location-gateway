@@ -16,7 +16,7 @@ json_escape() {
 
 valid_profile_id() {
 	case "$1" in
-		''|*[!a-z0-9_-]*) return 1 ;;
+		''|*[!a-z0-9_]*) return 1 ;;
 	esac
 	[ "${#1}" -le 32 ]
 }

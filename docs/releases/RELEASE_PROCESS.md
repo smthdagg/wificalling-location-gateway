@@ -64,6 +64,10 @@ This is also implemented as `scripts/openwrt/sign-feed.sh`.
 4. **Build packages**: `build-luci-ipk.sh <ver>-1 ax6s-standalone`
    (aarch64) and `build-release-packages.sh` (x86_64 ipk + apk), then
    write `SHA256SUMS` in `dist/openwrt-release/`.
+   Set `WLOC_UPDATE_SIGNING_KEY` to the protected release key and
+   `WLOC_UPDATE_USIGN` to the approved `usign` binary when invoking the
+   release builder; it refuses to emit an unsigned release. Rebuilding an
+   unsigned manifest removes any old detached signature first.
 5. **Install test**: `verify-docker-matrix.sh --dist-dir
    dist/openwrt-release` (four environments). On the space-constrained AX6S,
    back up UCI/CA, stop and remove the old Wificalling/WLOC application

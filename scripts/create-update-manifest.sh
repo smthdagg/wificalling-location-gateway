@@ -40,6 +40,10 @@ manifest="$package.manifest"
 } > "$manifest"
 chmod 0600 "$manifest"
 
+# A manifest rebuilt without a signing key is intentionally unsigned. Remove
+# any pre-existing detached signature so it cannot be mistaken for a signature
+# over this newly generated manifest.
+rm -f "$package.sig"
 if [ -n "${WLOC_UPDATE_SIGNING_KEY:-}" ]; then
 	usign=${WLOC_UPDATE_USIGN:-/usr/bin/usign}
 	[ -x "$usign" ] || { echo 'configured WLOC_UPDATE_SIGNING_KEY requires usign' >&2; exit 2; }

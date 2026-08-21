@@ -80,7 +80,7 @@ if [ -d "$PROFILE_LOG_ROOT" ] && [ ! -L "$PROFILE_LOG_ROOT" ]; then
 		[ ! -L "$profile_dir" ] || continue
 		profile_id=${profile_dir##*/}
 		case "$profile_id" in
-			''|*[!a-z0-9_-]*) continue ;;
+			''|*[!a-z0-9_]*) continue ;;
 		esac
 		profile_log="$profile_dir/events.jsonl"
 		[ -r "$profile_log" ] || continue

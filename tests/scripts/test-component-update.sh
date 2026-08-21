@@ -112,6 +112,16 @@ make_manifest "$new_package"
 make_manifest "$bad_arch_package"
 make_manifest "$bad_target_package"
 
+# Rebuilding an unsigned manifest must not leave a stale detached signature
+# beside it; otherwise a later update could verify a signature for old content.
+stale_package="$tmp/stale.ipk"
+cp "$new_package" "$stale_package"
+printf '%s\n' 'stale-signature' > "$stale_package.sig"
+WLOC_UPDATE_SIGNING_KEY= WLOC_UPDATE_USIGN= \
+    "$repo_root/scripts/create-update-manifest.sh" "$stale_package" >/dev/null
+[ ! -e "$stale_package.sig" ]
+[ -s "$stale_package.manifest" ]
+
 export WLOC_UPDATE_TEST_TMP="$tmp"
 export WLOC_UPDATE_ROOT="$root"
 export WLOC_UPDATE_STATE_DIR="$state"

@@ -116,8 +116,11 @@ run_case() {
 			"/packages/${package_path##*/}" >/dev/null
 	fi
 
-	docker exec "$container" /etc/init.d/wloc-service enable
-	docker exec "$container" /etc/init.d/wloc-service restart
+	# Exercise the shipped standalone lifecycle. The legacy wloc-service init
+	# facade must not be the matrix's primary startup path.
+	docker exec "$container" /etc/init.d/wificalling-location-gateway enable
+	docker exec "$container" /etc/init.d/wificalling-location-gateway restart
+	docker exec "$container" /etc/init.d/wificalling-location-gateway status >/dev/null
 	socket_ready=0
 	for _attempt in 1 2 3 4 5 6 7 8 9 10; do
 		if docker exec "$container" test -S /var/run/wloc-service/control.sock; then

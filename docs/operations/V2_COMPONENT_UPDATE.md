@@ -55,8 +55,10 @@ X-WLOC-Api: wloc.service/v2
 X-WLOC-OpenWrt: 24.10+
 ```
 
-`scripts/build-luci-ipk.sh` also writes the unsigned manifest sidecar. Release
-automation must sign it before staging:
+`scripts/build-luci-ipk.sh` writes an unsigned manifest sidecar for local
+packaging. The OpenWrt release builder requires the signing key and `usign` and
+emits signed IPK manifests; it refuses to create a release without them. For
+the standalone builder, release automation must sign before staging:
 
 ```sh
 for package in dist/wificalling-location-gateway_*.ipk; do

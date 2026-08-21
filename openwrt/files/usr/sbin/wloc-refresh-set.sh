@@ -97,12 +97,8 @@ profile_is_live() {
 }
 while IFS= read -r profile_table; do
     [ -n "$profile_table" ] || continue
-    case "$profile_table" in
-        wloc_profile_*|*[!a-z0-9_-]*)
-            case "$profile_table" in
-                *[!a-z0-9_-]*) continue ;;
-            esac
-            ;;
+	case "$profile_table" in
+		wloc_profile_[a-z0-9_]*) ;;
 		*) continue ;;
 	esac
 	profile_id=${profile_table#wloc_profile_}

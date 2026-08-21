@@ -22,7 +22,7 @@ fail() {
 
 valid_profile_id() {
 	case "$1" in
-		''|*[!a-z0-9_-]*) return 1 ;;
+		''|*[!a-z0-9_]*) return 1 ;;
 	esac
 	[ "${#1}" -le 32 ]
 }
@@ -62,9 +62,7 @@ stop_all_profiles() {
 	for table in $("$nft_binary" list tables inet 2>/dev/null \
 		| sed -n 's/^table inet \(wloc_profile_[a-z0-9_]*\)$/\1/p'); do
 		case "$table" in
-			wloc_profile_*|*[!a-z0-9_-]*)
-				case "$table" in *[!a-z0-9_-]*) continue ;; esac
-				;;
+			wloc_profile_[a-z0-9_]*) ;;
 			*) continue ;;
 		esac
 		"$nft_binary" delete table inet "$table" 2>/dev/null || true

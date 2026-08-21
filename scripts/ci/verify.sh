@@ -26,6 +26,7 @@ done
 ./tests/scripts/test-singbox-runtime.sh
 ./tests/scripts/test-ax6s-migration-contract.sh
 ./tests/scripts/test-profile-redirect.sh
+./tests/scripts/test-wloc-health.sh
 ./tests/scripts/test-profile-status.sh
 ./tests/scripts/test-structured-logs.sh
 ./tests/scripts/test-support-bundle.sh
