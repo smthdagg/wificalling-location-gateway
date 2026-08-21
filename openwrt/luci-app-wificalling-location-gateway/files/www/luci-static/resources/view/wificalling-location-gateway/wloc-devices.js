@@ -22,6 +22,8 @@ function profileStatus(status) {
 	return (status.phase || 'unknown') + ' (' + (status.reason_code || 'unknown') + ')';
 }
 
+function normalizeDeviceAddress(value) { var address = String(value || '').trim().toLowerCase(), octets = address.split('.'); if (octets.length === 4 && octets.every(function(octet) { return /^\d{1,3}$/.test(octet) && Number(octet) <= 255; })) { var numbers = octets.map(Number), first = numbers[0]; if (first === 10 || (first === 172 && numbers[1] >= 16 && numbers[1] <= 31) || (first === 192 && numbers[1] === 168)) return numbers.join('.'); } if (/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(address) || /^([0-9a-f]{2}-){5}[0-9a-f]{2}$/.test(address)) { var hex = address.replace(/[:-]/g, ''); if (!/^0+$/.test(hex) && !(parseInt(hex.slice(0, 2), 16) & 1)) return hex; } return null; }
+
 function profileFromFields(section, fields) {
 	return { '.name': section['.name'], label: fields.label.value.trim(), assigned_device: fields.address.value.trim(), node_ref: fields.node.value.trim(), node_mode: fields.nodeMode.value, geo_source: fields.geoMode.value, manual_lat: fields.latitude.value.trim(), manual_lon: fields.longitude.value.trim(), enabled: fields.enabled.checked ? '1' : '0' };
 }
@@ -29,7 +31,7 @@ function profileFromFields(section, fields) {
 function validateProfile(profile) {
 	if (!/^[a-z0-9_-]{1,32}$/.test(profile['.name'])) return 'invalid profile id';
 	if (!profile.label || profile.label.length > 48) return 'label must be 1-48 characters';
-	if (!profile.assigned_device || profile.assigned_device.length > 64) return 'device address is required and bounded';
+	if (!profile.assigned_device || profile.assigned_device.length > 64 || profile.assigned_device !== profile.assigned_device.trim() || !normalizeDeviceAddress(profile.assigned_device)) return 'device address must be a private IPv4 address or unicast MAC';
 	if (!profile.node_ref || profile.node_ref.length > 96) return 'node reference is required and bounded';
 	if (['fixed', 'gateway_default'].indexOf(profile.node_mode || 'fixed') < 0) return 'invalid node mode';
 	if (['auto', 'manual'].indexOf(profile.geo_source || 'auto') < 0) return 'invalid location mode';
@@ -40,7 +42,7 @@ function validateProfile(profile) {
 		function validateProfiles(profiles) {
 	if (profiles.length > MAX_PROFILES) return ['at most ' + MAX_PROFILES + ' profiles are supported'];
 	var ids = {}, devices = {}, errors = [];
-	profiles.forEach(function(profile) { var error = validateProfile(profile), device = String(profile.assigned_device || '').toLowerCase(); if (ids[profile['.name']]) error = 'duplicate profile id'; if (devices[device]) error = 'each device may have only one profile'; ids[profile['.name']] = true; devices[device] = true; if (error) errors.push(profile['.name'] + ': ' + error); });
+	profiles.forEach(function(profile) { var error = validateProfile(profile), device = normalizeDeviceAddress(profile.assigned_device) || String(profile.assigned_device || '').toLowerCase(); if (ids[profile['.name']]) error = 'duplicate profile id'; if (devices[device]) error = 'each device may have only one profile'; ids[profile['.name']] = true; devices[device] = true; if (error) errors.push(profile['.name'] + ': ' + error); });
 	return errors;
 }
 

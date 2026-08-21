@@ -17,7 +17,9 @@ precise runtime probe data.
    or persistent commit occurs at this point.
 3. Press `Apply & restart`. The page validates profile count, IDs, duplicate
    device bindings, bounded strings, node/location modes, coordinates, probe
-   interval, and provider before calling the single save/apply/restart path.
+   interval, provider, and private-IPv4/unicast-MAC device binding before
+   calling the single save/apply/restart path. Device duplicate detection
+   canonicalizes IPv4 text and MAC separators.
 4. Enter an invalid value and apply. Validation stops before `uci.save()`;
    the running configuration is therefore unchanged.
 5. Leave the page open. Status refreshes at 15-second intervals without
@@ -44,3 +46,6 @@ precise runtime probe data.
 - Logs, support bundles, component update/rollback, and resource gates are
   separate V2 issues (#38–#40) and must not be implemented by adding high-rate
   polling or unbounded browser-side history here.
+- The `restart_unified` RPC is write-only in both packaged ACL sources; the
+  canonical and package ACL files are tested byte-for-byte to prevent a
+  permission drift during packaging.
