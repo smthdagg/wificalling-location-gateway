@@ -39,4 +39,20 @@ grep -E '^elapsed_ms=[0-9]+$' "$tmp/report.env" >/dev/null
 grep -E '^peak_rss_kib=[0-9]+$' "$tmp/report.env" >/dev/null
 grep -E '^cpu_percent=[0-9]+$' "$tmp/report.env" >/dev/null
 
+mkdir -p "$tmp/bins"
+for binary in wloc-gateway-spike wloc-service wloc-ctl; do
+	cp "$repo_root/tests/scripts/resource-fixture.sh" "$tmp/bins/$binary"
+done
+WLOC_RESOURCE_ARTIFACT_DIR="$tmp/bins" "$gate"
+
+oversized="$tmp/bins/wloc-service"
+limit=$(sed -n 's/^runtime_binary_total_max_bytes=//p' "$budget")
+dd if=/dev/zero of="$oversized" bs=1 count=$((limit + 1)) >/dev/null 2>&1
+if WLOC_RESOURCE_ARTIFACT_DIR="$tmp/bins" "$gate" >/dev/null 2>&1; then
+	echo 'resource gate accepted oversized runtime binaries' >&2
+	exit 1
+fi
+
+printf 'resource budget tests passed\n'
+
 printf 'resource budget tests passed\n'

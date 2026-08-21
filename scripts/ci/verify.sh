@@ -29,6 +29,7 @@ done
 ./tests/scripts/test-support-bundle.sh
 ./tests/scripts/test-component-update.sh
 ./tests/scripts/test-existing-ax6s-package.sh
+./tests/scripts/test-resource-budgets.sh
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 ./scripts/scan_secrets.py
 
