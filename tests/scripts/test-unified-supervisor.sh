@@ -16,7 +16,9 @@ grep -F 'procd_set_param respawn 3600 5 3' "$init" >/dev/null
 grep -F 'procd_add_reload_trigger wificalling-gateway' "$init" >/dev/null
 grep -F 'procd_add_reload_trigger wloc-service' "$init" >/dev/null
 grep -F 'WLOC_SUPERVISED=1 WLOC_SKIP_REDIRECT=1 "$WLOC_INIT" start' "$supervisor" >/dev/null
+grep -F 'WLOC_SUPERVISED=1 "$GATEWAY_INIT" start' "$supervisor" >/dev/null
 grep -F 'WLOC_SKIP_REDIRECT' "$wloc_init" >/dev/null
+grep -F 'WLOC_SUPERVISED' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null
 
 gateway_start=$(grep -n '"$GATEWAY_INIT" start' "$supervisor" | cut -d: -f1)
 wloc_start=$(grep -n '"$WLOC_INIT" start' "$supervisor" | cut -d: -f1)
