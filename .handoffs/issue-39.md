@@ -5,7 +5,7 @@
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test,security,docs
 - Branch: codex/issue-39-v2-update-rollback-codex-v2-lead-20260821095228-1bc1507b
-- Final local checkpoint before handoff: 2463ce9
+- Final local checkpoint before handoff: adbae03
 - Credentials included: no
 
 ## Objective
@@ -83,6 +83,8 @@ transaction.
 - Release package control metadata is not assumed to support arbitrary custom
   control fields; the package also ships a compatibility file, and the updater
   validates that fallback.
+- Rollback now passes `--force-downgrade` to opkg and the test stub parses
+  option-bearing invocations, matching OpenWrt downgrade behavior.
 - Commit hooks report `lefthook` unavailable in PATH; repository verification
   completed successfully.
 
