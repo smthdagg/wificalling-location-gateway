@@ -11,6 +11,11 @@ events=${5:-$output_dir/events.log}
 event_interval=${6:-60}
 max_events=${7:-20}
 log_enabled=${8:-1}
+max_event_bytes=${WFC_MAX_EVENT_LOG_BYTES:-65536}
+case "$max_event_bytes" in
+	''|*[!0-9]*) max_event_bytes=65536 ;;
+esac
+[ "$max_event_bytes" -gt 0 ] 2>/dev/null || max_event_bytes=65536
 tmp="${output}.tmp.$$"
 state_tmp="${state}.tmp.$$"
 event_tmp="${events}.tmp.$$"
@@ -111,6 +116,17 @@ FNR==NR { count[$2 FS $3]++; next }
 { key=$2 FS $3; seen[key]++; if (seen[key] > count[key]-limit) print }
 ' "$events" "$events" > "$trim_tmp"
 mv "$trim_tmp" "$events"
+
+# A record-count limit alone is not sufficient: labels and future fields can
+# make a small number of records consume the whole flash partition. Keep the
+# newest complete lines under a hard byte cap; never leave a partial first
+# record for the LuCI parser.
+event_bytes=$(wc -c < "$events" | tr -d ' ')
+if [ "$event_bytes" -gt "$max_event_bytes" ]; then
+	tail -c "$max_event_bytes" "$events" \
+		| awk -F '|' 'NR == 1 && NF != 8 { next } { print }' > "$trim_tmp"
+	mv "$trim_tmp" "$events"
+fi
 chmod 644 "$tmp" "$events"
 chmod 600 "$state_tmp"
 mv "$state_tmp" "$state"
