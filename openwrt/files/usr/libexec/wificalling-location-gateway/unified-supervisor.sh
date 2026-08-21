@@ -18,6 +18,9 @@ WLOC_INIT=${WLOC_INIT:-/etc/init.d/wloc-service}
 GATEWAY_INIT=${GATEWAY_INIT:-/etc/init.d/wificalling-gateway}
 REDIRECT_HELPER=${WLOC_REDIRECT_HELPER:-/usr/sbin/wloc-redirect-sync.sh}
 PROFILE_REDIRECT_HELPER=${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.sh}
+PROFILE_PROXY_READY_FILE=${WLOC_PROFILE_PROXY_READY_FILE:-/var/run/wloc-service/profiles/.proxy-ready}
+PROFILE_ACTIVATE_FILE=${WLOC_PROFILE_ACTIVATE_FILE:-/var/run/wloc-service/profiles/.activate}
+PROFILE_READY_FILE=${WLOC_PROFILE_READY_FILE:-/var/run/wloc-service/profiles/.ready}
 CHECK_INTERVAL=${WLOC_SUPERVISOR_HEALTH_INTERVAL:-10}
 MAX_RUNTIME_SECONDS=${WLOC_SUPERVISOR_MAX_RUNTIME:-0}
 START_TIMEOUT=${WLOC_SUPERVISOR_START_TIMEOUT:-30}
@@ -73,6 +76,7 @@ withdraw_redirect() {
 withdraw_profile_redirects() {
 	[ -x "$PROFILE_REDIRECT_HELPER" ] && \
 		"$PROFILE_REDIRECT_HELPER" stop-all >/dev/null 2>&1 || true
+	rm -f "$PROFILE_PROXY_READY_FILE" "$PROFILE_ACTIVATE_FILE" "$PROFILE_READY_FILE"
 }
 
 profile_mode() {
@@ -96,6 +100,12 @@ install_redirect() {
 		"$REDIRECT_HELPER" legacy-stop
 		[ -x "$PROFILE_REDIRECT_HELPER" ] || return 1
 		"$PROFILE_REDIRECT_HELPER" route-start
+		: > "$PROFILE_ACTIVATE_FILE"
+		deadline=$(( $(now) + START_TIMEOUT ))
+		while [ ! -f "$PROFILE_READY_FILE" ]; do
+			[ "$(now)" -lt "$deadline" ] || return 1
+			sleep 1
+		done
 		redirect_present=1
 		return 0
 	fi
@@ -145,6 +155,9 @@ health_ok() {
 		return 1
 	fi
 	[ -S "${WLOC_SOCKET:-/var/run/wloc-service/control.sock}" ] || return 1
+	if profile_mode; then
+		[ -f "$PROFILE_PROXY_READY_FILE" ] || return 1
+	fi
 }
 
 gateway_healthy() {
@@ -184,8 +197,9 @@ start_supervisor() {
 	[ -x "$GATEWAY_INIT" ] && "$GATEWAY_INIT" disable >/dev/null 2>&1 || true
 	stop_child "$WLOC_INIT"
 	if profile_mode; then
-		# Remove a legacy all-device table before either child becomes ready;
-		# startup must never inherit interception from the previous mode.
+		# Remove all profile and legacy tables before either child becomes
+		# ready; startup must never inherit interception from the previous mode.
+		withdraw_profile_redirects
 		"$REDIRECT_HELPER" legacy-stop >/dev/null 2>&1 || true
 	fi
 

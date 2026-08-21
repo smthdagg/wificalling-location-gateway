@@ -52,6 +52,36 @@ fn now_unix() -> u64 {
         .unwrap_or(0)
 }
 
+fn profile_marker_path(name: &str, default: &str) -> std::path::PathBuf {
+    std::env::var(name)
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from(default))
+}
+
+fn write_profile_marker(path: &std::path::Path) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, b"ready\n")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
+fn wait_for_profile_marker(path: &std::path::Path, timeout: Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    while !path.exists() {
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    true
+}
+
 fn disabled_runtime_profile() -> RuntimeProfile {
     RuntimeProfile {
         id: "invalid".to_owned(),
@@ -308,6 +338,16 @@ impl ProfileServiceGroup {
         handlers: HashMap<String, BoxedProfileService>,
         runtime: OpenWrtRuntime,
     ) -> Self {
+        let ready = profile_marker_path(
+            "WLOC_PROFILE_READY_FILE",
+            "/var/run/wloc-service/profiles/.ready",
+        );
+        let activate = profile_marker_path(
+            "WLOC_PROFILE_ACTIVATE_FILE",
+            "/var/run/wloc-service/profiles/.activate",
+        );
+        let _ = std::fs::remove_file(ready);
+        let _ = std::fs::remove_file(activate);
         let default_profile_id = model
             .profiles()
             .first()
@@ -334,6 +374,13 @@ impl ProfileServiceGroup {
             if self.enable_profile(&profile_id).is_err() {
                 let _ = self.router.set_enabled(&profile_id, false);
             }
+        }
+        let ready = profile_marker_path(
+            "WLOC_PROFILE_READY_FILE",
+            "/var/run/wloc-service/profiles/.ready",
+        );
+        if let Err(error) = write_profile_marker(&ready) {
+            eprintln!("wloc-service: profile readiness marker failed: {error}");
         }
     }
 
@@ -377,6 +424,10 @@ impl ProfileServiceGroup {
 }
 
 impl ServiceDispatch for ProfileServiceGroup {
+    fn activate_profiles(&mut self) {
+        self.activate_enabled_profiles();
+    }
+
     fn status(&mut self) -> Result<serde_json::Value, DispatchError> {
         self.default_handler()?.status()
     }
@@ -715,13 +766,12 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 build_profile_handler(profile, &uci, config_valid, &geo_provider, router)?;
             handlers.insert(profile.id.clone(), handler);
         }
-        let mut group = ProfileServiceGroup::new(
+        let group = ProfileServiceGroup::new(
             model,
             std::sync::Arc::clone(router),
             handlers,
             OpenWrtRuntime::from_env(),
         );
-        group.activate_enabled_profiles();
         Box::new(group)
     } else {
         let service = WlocService::new(
@@ -921,6 +971,36 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // REDIRECT, which rewrites the destination to this router and newer iOS
     // versions answer with RST.
     let proxy_listener = runtime.block_on(async { bind_tproxy_listener(proxy_port) })?;
+    let multi_profile_mode = profile_model
+        .as_ref()
+        .is_some_and(|model| model.profiles().len() > 1);
+    if multi_profile_mode {
+        let proxy_ready = profile_marker_path(
+            "WLOC_PROFILE_PROXY_READY_FILE",
+            "/var/run/wloc-service/profiles/.proxy-ready",
+        );
+        let _ = std::fs::remove_file(&proxy_ready);
+        write_profile_marker(&proxy_ready)?;
+        if std::env::var("WLOC_SUPERVISED").as_deref() == Ok("1") {
+            let activate = profile_marker_path(
+                "WLOC_PROFILE_ACTIVATE_FILE",
+                "/var/run/wloc-service/profiles/.activate",
+            );
+            let timeout = Duration::from_secs(env_or("WLOC_PROFILE_ACTIVATE_TIMEOUT", 30_u64));
+            if !wait_for_profile_marker(&activate, timeout) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "supervisor did not authorize profile activation",
+                )
+                .into());
+            }
+        }
+        // In supervised mode this runs only after the supervisor has passed
+        // its child health gate, installed the shared route, and published
+        // the activation marker. Standalone mode still activates only after
+        // the listener is bound, never during daemon construction.
+        service.activate_profiles();
+    }
     runtime.spawn(async move {
         loop {
             if let Ok((stream, _)) = proxy_listener.accept().await {

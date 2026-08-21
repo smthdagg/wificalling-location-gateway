@@ -68,6 +68,10 @@ impl DispatchError {
 /// Abstract service handlers behind the control methods. Production adapters
 /// implement this against the real OpenWrt runtime; tests use mocks.
 pub trait ServiceDispatch {
+    /// Admit enabled profile redirects after the shared proxy/listener
+    /// readiness gate. Singleton handlers keep the no-op default.
+    fn activate_profiles(&mut self) {}
+
     /// Return a coordinate-free status snapshot as a JSON value.
     fn status(&mut self) -> Result<Value, DispatchError>;
     /// Start interception behind the transactional safety ordering.
@@ -95,6 +99,10 @@ pub trait ServiceDispatch {
 }
 
 impl ServiceDispatch for Box<dyn ServiceDispatch> {
+    fn activate_profiles(&mut self) {
+        (**self).activate_profiles();
+    }
+
     fn status(&mut self) -> Result<Value, DispatchError> {
         (**self).status()
     }

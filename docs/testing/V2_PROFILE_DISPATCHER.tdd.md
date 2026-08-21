@@ -20,6 +20,9 @@ proxy resolves the source TCP address to exactly one profile target.
 - Supervisor, init, and CA/reload cleanup paths remove all profile tables;
   refresh deletes disabled or orphaned tables instead of refreshing them. A
   stale legacy table is removed during profile-mode startup and refresh.
+- In supervised mode, the daemon publishes proxy-listener readiness first;
+  the supervisor then installs the shared route and signals profile activation.
+  Profile redirects are not installed until that signal and readiness return.
 
 ## Verification
 
