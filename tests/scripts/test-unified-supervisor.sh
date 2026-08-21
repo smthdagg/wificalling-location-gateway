@@ -22,6 +22,7 @@ grep -F 'WLOC_SUPERVISED=1 "$GATEWAY_INIT" start' "$supervisor" >/dev/null
 grep -F 'WLOC_DEFER_REDIRECT=1' "$supervisor" >/dev/null
 grep -F 'PROFILE_REDIRECT_HELPER' "$supervisor" >/dev/null
 grep -F 'stop-all' "$supervisor" >/dev/null
+grep -F 'legacy-stop' "$supervisor" "$redirect" >/dev/null
 grep -F 'multiple_profiles_configured' "$redirect" >/dev/null
 grep -F 'WLOC_SKIP_REDIRECT' "$wloc_init" >/dev/null
 grep -F 'WLOC_SUPERVISED' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null
@@ -54,15 +55,29 @@ if [ "$2" = show ]; then
 fi
 EOF
 chmod 0755 "$tmp/bin/uci"
+cat > "$tmp/bin/nft" <<'EOF'
+#!/bin/sh
+printf 'nft %s\n' "$*" >> "$WLOC_TEST_LOG"
+EOF
+cat > "$tmp/bin/ip" <<'EOF'
+#!/bin/sh
+printf 'ip %s\n' "$*" >> "$WLOC_TEST_LOG"
+EOF
+chmod 0755 "$tmp/bin/nft" "$tmp/bin/ip"
 : > "$tmp/commands.log"
 if ! PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" \
+  WLOC_NFT_BINARY="$tmp/bin/nft" WLOC_IP_BINARY="$tmp/bin/ip" \
+  WLOC_PROFILE_REDIRECT_HELPER="$repo_root/openwrt/files/usr/sbin/wloc-profile-redirect.sh" \
   "$redirect" start; then
 
-  printf '%s\n' 'legacy redirect helper must fail closed only on invalid input, not profile mode' >&2
+  printf '%s\n' 'profile mode must preserve the shared TPROXY route' >&2
   exit 1
 fi
-if grep -E '^nft |^ip ' "$tmp/commands.log" >/dev/null; then
-  printf '%s\n' 'multi-profile mode must not install the legacy all-device redirect' >&2
+grep -F 'nft delete table inet wloc_service' "$tmp/commands.log" >/dev/null
+grep -F 'ip rule add fwmark 1 lookup 100' "$tmp/commands.log" >/dev/null
+grep -F 'ip route add local 0.0.0.0/0 dev lo table 100' "$tmp/commands.log" >/dev/null
+if grep -F 'nft add table inet wloc_service' "$tmp/commands.log" >/dev/null; then
+  printf '%s\n' 'multi-profile mode must not install the legacy all-device table' >&2
   exit 1
 fi
 if grep -E 'gs-loc-corpa|apple\.com\.cn|bluedot' "$redirect" "$wloc_refresh" >/dev/null; then

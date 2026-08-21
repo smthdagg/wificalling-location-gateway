@@ -15,8 +15,11 @@ proxy resolves the source TCP address to exactly one profile target.
 - MAC and IPv6 bindings are rejected by the current IPv4 redirect adapter.
 - Multi-profile mode never installs the legacy all-device `wloc_service` table;
   only verified profile-scoped tables may intercept.
+- Profile-scoped start installs the shared fwmark/local policy route required
+  by every profile TPROXY chain, without recreating the legacy table.
 - Supervisor, init, and CA/reload cleanup paths remove all profile tables;
-  refresh deletes disabled or orphaned tables instead of refreshing them.
+  refresh deletes disabled or orphaned tables instead of refreshing them. A
+  stale legacy table is removed during profile-mode startup and refresh.
 
 ## Verification
 
@@ -31,9 +34,9 @@ proxy resolves the source TCP address to exactly one profile target.
 | `cargo llvm-cov --workspace --all-targets --locked --fail-under-lines 80` | Passed; 80.74% lines |
 
 The independent review initially returned `REQUEST_CHANGES` for global redirect
-ownership and stale profile-table cleanup. Those findings were fixed before
-handoff and are covered by the profile helper and unified supervisor shell
-tests above.
+ownership, stale profile-table cleanup, and the shared policy route. Those
+findings were fixed before handoff and are covered by the profile helper and
+unified supervisor shell tests above.
 
 ## Remaining release gates
 

@@ -18,6 +18,8 @@ FWMARK=1
 ROUTE_TABLE=100
 action=${1:-start}
 NFT_BINARY=${WLOC_NFT_BINARY:-nft}
+IP_BINARY=${WLOC_IP_BINARY:-ip}
+PROFILE_HELPER=${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.sh}
 
 multiple_profiles_configured() {
 	command -v uci >/dev/null 2>&1 || return 1
@@ -27,24 +29,34 @@ multiple_profiles_configured() {
 	[ "${profiles:-0}" -gt 1 ] 2>/dev/null
 }
 
-if [ "$action" = stop ]; then
+withdraw_legacy_redirect() {
 	# Only remove the WLOC-owned table, policy route, and DNS marker. The
 	# stable Gateway 1.7 nftables table (and UDP 500/4500 handling) is never
 	# touched by this cleanup path.
 	"$NFT_BINARY" delete table inet "$TABLE" 2>/dev/null || true
-	ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
-	ip route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
-	[ -x "${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.sh}" ] && \
-		"${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.sh}" stop-all >/dev/null 2>&1 || true
+	"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
+	"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
 	for hosts_file in ${WLOC_HOSTS_FILES:-/etc/hosts\ /tmp/hosts/wloc-hosts}; do
 		sed -i '/# wloc-service DNS hijack (do not edit)/,/^# wloc-service end/d' "$hosts_file" 2>/dev/null || true
 	done
+	}
+
+if [ "$action" = stop ] || [ "$action" = legacy-stop ]; then
+	withdraw_legacy_redirect
+	if [ "$action" = stop ] && [ -x "$PROFILE_HELPER" ]; then
+		"$PROFILE_HELPER" stop-all >/dev/null 2>&1 || true
+	fi
 	exit 0
 fi
 
 if [ "$action" = start ] && multiple_profiles_configured; then
 	# The profile dispatcher installs only verified, profile-scoped rules. The
-	# legacy all-device table must not be installed alongside it.
+	# legacy all-device table must not be installed alongside it. Its stale
+	# table and DNS marker are removed, while the shared policy route remains
+	# available to the profile-scoped TPROXY chains.
+	withdraw_legacy_redirect
+	[ -x "$PROFILE_HELPER" ] || exit 1
+	"$PROFILE_HELPER" route-start
 	exit 0
 fi
 
@@ -94,26 +106,26 @@ EOF
 done
 
 # TPROXY plumbing: marked packets are routed back to the local stack.
-ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
-ip route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
-ip rule add fwmark "$FWMARK" lookup "$ROUTE_TABLE"
-ip route add local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"
+"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
+"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+"$IP_BINARY" rule add fwmark "$FWMARK" lookup "$ROUTE_TABLE"
+"$IP_BINARY" route add local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"
 
 # Table + set + mangle prerouting chain (filter hook, before DNAT).
-nft add table inet "$TABLE" 2>/dev/null || true
-nft add set inet "$TABLE" apple_hosts '{ type ipv4_addr; }' 2>/dev/null || true
+"$NFT_BINARY" add table inet "$TABLE" 2>/dev/null || true
+"$NFT_BINARY" add set inet "$TABLE" apple_hosts '{ type ipv4_addr; }' 2>/dev/null || true
 # The chain must be a filter/mangle chain for tproxy; drop a leftover
 # nat chain (from the old redirect scheme) first.
-nft flush chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
-nft delete chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
-nft "add chain inet $TABLE $CHAIN { type filter hook prerouting priority mangle; }"
+"$NFT_BINARY" flush chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
+"$NFT_BINARY" delete chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
+"$NFT_BINARY" "add chain inet $TABLE $CHAIN { type filter hook prerouting priority mangle; }"
 
 # Rebuild only the rules; the apple_hosts set content is untouched.
 # Match both the DNS-set Apple IPs and the hijacked local address.
-nft flush chain inet "$TABLE" "$CHAIN"
+"$NFT_BINARY" flush chain inet "$TABLE" "$CHAIN"
 for ip in $ips; do
-    nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr @apple_hosts meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
-    nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr $ROUTER_IP meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
+    "$NFT_BINARY" "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr @apple_hosts meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
+    "$NFT_BINARY" "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr $ROUTER_IP meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
 done
 
 echo "wloc-redirect-sync: tproxy $ips -> :$PROXY_PORT (mark $FWMARK, table $ROUTE_TABLE)"

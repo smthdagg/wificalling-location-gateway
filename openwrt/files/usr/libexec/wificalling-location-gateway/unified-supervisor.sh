@@ -91,7 +91,11 @@ install_redirect() {
 	if profile_mode; then
 		# In multi-profile mode wloc-service owns one verified redirect per
 		# profile. Installing the legacy all-device table here would bypass
-		# ProfilePatchRouter's disabled/fail-closed boundary.
+		# ProfilePatchRouter's disabled/fail-closed boundary. The shared
+		# policy route is still required by every profile-scoped TPROXY chain.
+		"$REDIRECT_HELPER" legacy-stop
+		[ -x "$PROFILE_REDIRECT_HELPER" ] || return 1
+		"$PROFILE_REDIRECT_HELPER" route-start
 		redirect_present=1
 		return 0
 	fi
@@ -179,6 +183,11 @@ start_supervisor() {
 	[ -x "$WLOC_INIT" ] && "$WLOC_INIT" disable >/dev/null 2>&1 || true
 	[ -x "$GATEWAY_INIT" ] && "$GATEWAY_INIT" disable >/dev/null 2>&1 || true
 	stop_child "$WLOC_INIT"
+	if profile_mode; then
+		# Remove a legacy all-device table before either child becomes ready;
+		# startup must never inherit interception from the previous mode.
+		"$REDIRECT_HELPER" legacy-stop >/dev/null 2>&1 || true
+	fi
 
 	if ! gateway_healthy; then
 		if ! WLOC_SUPERVISED=1 "$GATEWAY_INIT" start >/dev/null 2>&1; then

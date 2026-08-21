@@ -20,6 +20,10 @@ if [ "$*" = 'list table inet wloc_service' ]; then
 fi
 exit 0
 EOF
+cat > "$tmp/bin/ip" <<'EOF'
+#!/bin/sh
+printf 'ip %s\n' "$*" >> "$WLOC_TEST_LOG"
+EOF
 cat > "$tmp/bin/uci" <<'EOF'
 #!/bin/sh
 case "$2" in
@@ -39,7 +43,7 @@ cat > "$tmp/bin/nslookup" <<'EOF'
 #!/bin/sh
 printf '%s\n' 'Address: 59.82.17.33'
 EOF
-chmod 0755 "$tmp/bin/nft" "$tmp/bin/uci" "$tmp/bin/nslookup"
+chmod 0755 "$tmp/bin/nft" "$tmp/bin/ip" "$tmp/bin/uci" "$tmp/bin/nslookup"
 : > "$tmp/commands.log"
 
 PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" \
@@ -58,8 +62,11 @@ if grep -F 'nft delete table inet wloc_profile_tablet' "$tmp/commands.log" >/dev
 fi
 grep -F 'ip saddr 192.168.1.10 tcp dport 443' "$tmp/commands.log" >/dev/null
 grep -F 'ip daddr @apple_hosts' "$tmp/commands.log" >/dev/null
+grep -F 'ip rule add fwmark 1 lookup 100' "$tmp/commands.log" >/dev/null
+grep -F 'ip route add local 0.0.0.0/0 dev lo table 100' "$tmp/commands.log" >/dev/null
 
 PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" "$refresh"
+grep -F 'nft delete table inet wloc_service' "$tmp/commands.log" >/dev/null
 grep -F 'nft flush set inet wloc_profile_phone apple_hosts' "$tmp/commands.log" >/dev/null
 grep -F 'nft delete table inet wloc_profile_tablet' "$tmp/commands.log" >/dev/null
 if grep -F 'nft flush set inet wloc_profile_tablet apple_hosts' "$tmp/commands.log" >/dev/null; then
@@ -71,6 +78,7 @@ fi
 PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" "$helper" stop-all
 grep -F 'nft delete table inet wloc_profile_phone' "$tmp/commands.log" >/dev/null
 grep -F 'nft delete table inet wloc_profile_tablet' "$tmp/commands.log" >/dev/null
+grep -F 'ip rule del fwmark 1 lookup 100' "$tmp/commands.log" >/dev/null
 
 if PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" \
   "$helper" start '../phone' 192.168.1.12; then

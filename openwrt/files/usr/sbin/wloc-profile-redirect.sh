@@ -12,6 +12,8 @@ set -eu
 PROFILE_TABLE_PREFIX=wloc_profile_
 PROXY_PORT=${WLOC_PROFILE_PROXY_PORT:-${WLOC_PROXY_PORT:-8443}}
 FWMARK=1
+ROUTE_TABLE=100
+IP_BINARY=${WLOC_IP_BINARY:-ip}
 
 fail() {
 	printf 'wloc-profile-redirect: %s\n' "$*" >&2
@@ -67,6 +69,19 @@ stop_all_profiles() {
 		esac
 		"$nft_binary" delete table inet "$table" 2>/dev/null || true
 	done
+	remove_policy_route
+}
+
+install_policy_route() {
+	"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
+	"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+	"$IP_BINARY" rule add fwmark "$FWMARK" lookup "$ROUTE_TABLE"
+	"$IP_BINARY" route add local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"
+}
+
+remove_policy_route() {
+	"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
+	"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
 }
 
 action=${1:-}
@@ -74,6 +89,14 @@ profile_id=${2:-}
 nft_binary=${WLOC_NFT_BINARY:-nft}
 
 case "$action" in
+	route-start)
+		[ "$#" -eq 1 ] || fail 'usage: route-start'
+		install_policy_route
+		;;
+	route-stop)
+		[ "$#" -eq 1 ] || fail 'usage: route-stop'
+		remove_policy_route
+		;;
 	stop-all)
 		[ "$#" -eq 1 ] || fail 'usage: stop-all'
 		stop_all_profiles
@@ -91,12 +114,16 @@ case "$action" in
 		"$nft_binary" delete chain inet "$table" prerouting 2>/dev/null || true
 		"$nft_binary" "add chain inet $table prerouting { type filter hook prerouting priority mangle; }"
 		"$nft_binary" "add rule inet $table prerouting ip saddr $device_ip tcp dport 443 ip daddr @apple_hosts meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
+		install_policy_route
 		printf 'wloc-profile-redirect: %s -> :%s\n' "$profile_id" "$PROXY_PORT"
 		;;
 	stop)
 		[ "$#" -eq 2 ] || fail 'usage: stop PROFILE_ID'
 		valid_profile_id "$profile_id" || fail 'invalid profile id'
 		"$nft_binary" delete table inet "${PROFILE_TABLE_PREFIX}${profile_id}" 2>/dev/null || true
+		remaining=$("$nft_binary" list tables inet 2>/dev/null \
+			| sed -n 's/^table inet \(wloc_profile_[a-z0-9_-]*\)$/\1/p')
+		[ -n "$remaining" ] || remove_policy_route
 		;;
 	status)
 		[ "$#" -eq 2 ] || fail 'usage: status PROFILE_ID'
