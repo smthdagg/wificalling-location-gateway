@@ -103,6 +103,10 @@ measurement template. Do not claim real-device measurements from the host.
 - The CI runner exposed that the resource fixture could exit before procfs
   sampling, producing the intentional unmeasured-RSS failure; the fixture now
   has a one-second deterministic observation window.
+- The first CI timeout assertion required the implementation-specific exit
+  code 124, but GNU time/timeout combinations can preserve a different
+  non-zero wrapper code; the regression now requires failed status and any
+  non-zero command status while the report still records the exact code.
 - The local commit hook reports `lefthook` unavailable in PATH; repository
   verification itself passed.
 

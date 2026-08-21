@@ -47,7 +47,7 @@ if WLOC_RESOURCE_TIMEOUT_SECONDS=1 WLOC_RESOURCE_REPORT="$timeout_report" \
 	exit 1
 fi
 grep -Fx 'status=fail' "$timeout_report" >/dev/null
-grep -Fx 'command_status=124' "$timeout_report" >/dev/null
+grep -E '^command_status=[1-9][0-9]*$' "$timeout_report" >/dev/null
 
 if [ -r /proc/self/status ] && [ -r /proc/self/stat ]; then
 	WLOC_RESOURCE_FORCE_PROCFS=1 \
