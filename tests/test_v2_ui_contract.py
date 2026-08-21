@@ -80,6 +80,23 @@ class V2UiContractTests(unittest.TestCase):
             acl_sources.append(acl.read_text(encoding="utf-8"))
         self.assertEqual(acl_sources[0], acl_sources[1])
 
+    def test_v2_ui_restart_actions_use_only_the_unified_lifecycle(self):
+        for prefix in (
+            self.root / "openwrt/files",
+            self.root / "openwrt/luci-app-wificalling-location-gateway/files",
+        ):
+            rpc = (prefix / "usr/libexec/rpcd/luci.wloc").read_text(encoding="utf-8")
+            wloc = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc.js").read_text(encoding="utf-8")
+            health = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js").read_text(encoding="utf-8")
+            restart_block = rpc[rpc.index("\trestart_service)"):rpc.index("\n\trestart_gateway)")]
+            self.assertIn("/etc/init.d/wificalling-location-gateway restart", restart_block)
+            self.assertNotIn("/etc/init.d/wloc-service restart", restart_block)
+            self.assertNotIn("/etc/init.d/wificalling-gateway restart", restart_block)
+            self.assertIn("method: 'restart_unified'", wloc)
+            self.assertNotIn("method: 'restart_service'", wloc)
+            self.assertIn("method: 'restart_unified'", health)
+            self.assertNotIn("method: 'restart_gateway'", health)
+
 
 if __name__ == "__main__":
     unittest.main()

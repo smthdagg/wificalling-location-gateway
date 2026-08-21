@@ -65,7 +65,7 @@ async function loadModeHandler(sourcePath, manualLat, manualLon, ctlResults) {
 					return Promise.resolve(result);
 				};
 			}
-			if (spec.method === 'restart_service') {
+			if (spec.method === 'restart_unified') {
 				return function() {
 					calls.restart += 1;
 					return Promise.resolve({ ok: true });

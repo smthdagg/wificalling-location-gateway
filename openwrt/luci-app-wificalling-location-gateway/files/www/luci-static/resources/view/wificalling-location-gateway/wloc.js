@@ -41,9 +41,9 @@ var regenCa = rpc.declare({
 	method: 'regen_ca'
 });
 
-var restartService = rpc.declare({
+var restartUnified = rpc.declare({
 	object: 'luci.wloc',
-	method: 'restart_service'
+	method: 'restart_unified'
 });
 
 var verifyFingerprint = rpc.declare({
@@ -186,7 +186,7 @@ return view.extend({
 			uci.save('wloc-service').then(function() {
 				return ui.changes.apply(true);
 			}).then(function() {
-				return restartService();
+				return restartUnified();
 			}).then(function(r) {
 				if (r && r.error)
 					notify(wlocI18n.t('Apply failed'), r.error);

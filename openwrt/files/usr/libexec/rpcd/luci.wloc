@@ -221,18 +221,17 @@ call)
 		exit 0
 		;;
 	restart_service)
-		# Re-sync the redirect rules first (the followed device may have
-		# changed), then restart the daemon so it reads the new config.
-		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
-		/etc/init.d/wloc-service restart >/dev/null 2>&1
+		# V2 has one lifecycle owner. Keep this legacy method as a
+		# compatibility alias so old LuCI pages cannot bypass the supervisor.
+		/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1
 		sleep 2
 		echo '{"ok":true}'
 		exit 0
 		;;
 	restart_gateway)
-		# Regenerate the sing-box config and restart the proxy for the
-		# Wi-Fi Calling Gateway (brief interruption of device proxy).
-		/etc/init.d/wificalling-gateway restart >/dev/null 2>&1
+		# V2 has one lifecycle owner; the supervisor coordinates the
+		# Gateway child and WLOC redirect ordering.
+		/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1
 		sleep 2
 		echo '{"ok":true}'
 		exit 0

@@ -15,14 +15,9 @@ var getHealth = rpc.declare({
 	method: 'health'
 });
 
-var restartWloc = rpc.declare({
+var restartUnified = rpc.declare({
 	object: 'luci.wloc',
-	method: 'restart_service'
-});
-
-var restartGateway = rpc.declare({
-	object: 'luci.wloc',
-	method: 'restart_gateway'
+	method: 'restart_unified'
 });
 
 var createSupportBundle = rpc.declare({
@@ -212,17 +207,10 @@ return view.extend({
 					'class': 'cbi-button cbi-button-apply',
 					'id': 'wloc-restart-gateway',
 					style: 'margin-right:8px',
-					click: restartAction(restartGateway,
-						wlocI18n.t('Gateway restarted - proxy was briefly interrupted'),
+					click: restartAction(restartUnified,
+						wlocI18n.t('Unified Gateway / WLOC service restarted'),
 						wlocI18n.t('Restarting…'))
-				}, wlocI18n.t('Restart Wi-Fi Calling gateway')),
-				E('button', {
-					'class': 'cbi-button cbi-button-apply',
-					'id': 'wloc-restart-wloc',
-					click: restartAction(restartWloc,
-						wlocI18n.t('WLOC service restarted'),
-						wlocI18n.t('Restarting…'))
-				}, wlocI18n.t('Restart WLOC service'))
+				}, wlocI18n.t('Restart unified service'))
 			]),
 			E('p', { style: 'color:#666;font-size:12px;margin-bottom:0' },
 				wlocI18n.t('Restarting the gateway regenerates the proxy config and briefly interrupts device proxying.')),
