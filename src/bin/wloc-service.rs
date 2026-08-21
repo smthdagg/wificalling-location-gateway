@@ -1,9 +1,9 @@
 //! Run the WLOC service control daemon over a root-owned Unix socket.
 //!
-//! The daemon serves the frozen control API on a local Unix socket. Runtime
-//! adapters are stubs until the OpenWrt sing-box/nftables/Geo adapters land;
-//! their behavior is configurable through the `WLOC_STUB_*` environment
-//! variables so the control plane can be exercised end to end on any host.
+//! The daemon serves the frozen control API on a local Unix socket. Its
+//! OpenWrt runtime adapter delegates only the component-owned WLOC redirect;
+//! process ownership and the Gateway data plane remain with the unified
+//! supervisor.
 //!
 //! Socket path: `WLOC_SOCKET` (default `/var/run/wloc-service/control.sock`).
 
@@ -45,11 +45,46 @@ fn now_unix() -> u64 {
         .unwrap_or(0)
 }
 
-/// No-op runtime control: every adapter step succeeds and the engine is
-/// healthy. Replaced by the nftables/procd adapter on OpenWrt.
-struct StubRuntime;
+/// Runtime control for the daemon's OpenWrt boundary.
+///
+/// The outer unified supervisor owns process start/stop and watchdogs. This
+/// daemon delegates the component-owned redirect and queries its presence;
+/// self-stop/drain operations are no-ops because the control server must not
+/// terminate itself.
+struct OpenWrtRuntime {
+    redirect_helper: std::path::PathBuf,
+    nft_binary: std::path::PathBuf,
+}
 
-impl RuntimeControl for StubRuntime {
+impl OpenWrtRuntime {
+    fn from_env() -> Self {
+        Self::new(
+            std::env::var("WLOC_REDIRECT_HELPER")
+                .unwrap_or_else(|_| "/usr/sbin/wloc-redirect-sync.sh".to_owned()),
+            std::env::var("WLOC_NFT_BINARY").unwrap_or_else(|_| "nft".to_owned()),
+        )
+    }
+
+    fn new(
+        redirect_helper: impl Into<std::path::PathBuf>,
+        nft_binary: impl Into<std::path::PathBuf>,
+    ) -> Self {
+        Self {
+            redirect_helper: redirect_helper.into(),
+            nft_binary: nft_binary.into(),
+        }
+    }
+
+    fn run_redirect(&self, action: &str) -> Result<(), RuntimeFailure> {
+        std::process::Command::new(&self.redirect_helper)
+            .arg(action)
+            .status()
+            .map_err(|_| RuntimeFailure)
+            .and_then(|status| status.success().then_some(()).ok_or(RuntimeFailure))
+    }
+}
+
+impl RuntimeControl for OpenWrtRuntime {
     fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
     }
@@ -60,13 +95,17 @@ impl RuntimeControl for StubRuntime {
         Ok(())
     }
     fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure> {
-        Ok(())
+        self.run_redirect("start")
     }
     fn remove_redirect(&mut self) -> Result<(), RuntimeFailure> {
-        Ok(())
+        self.run_redirect("stop")
     }
     fn redirect_present(&mut self) -> Result<bool, RuntimeFailure> {
-        Ok(false)
+        std::process::Command::new(&self.nft_binary)
+            .args(["list", "table", "inet", "wloc_service"])
+            .status()
+            .map(|status| status.success())
+            .map_err(|_| RuntimeFailure)
     }
     fn disarm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
@@ -217,6 +256,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             WlocUciConfig::default()
         }
     };
+    let supervised = std::env::var("WLOC_SUPERVISED").as_deref() == Ok("1");
     // The device whose node binding the location follows. It is normally
     // chosen from LuCI; when unset, fall back to the first device policy of
     // the Gateway config so a fresh install follows something on any subnet
@@ -253,7 +293,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     };
 
     let service = WlocService::new(
-        StubRuntime,
+        OpenWrtRuntime::from_env(),
         build_probe(&assigned_device, uci.probe_port),
         geo,
         WlocServiceConfig {
@@ -401,7 +441,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             );
         }
     }
-    if uci.enabled {
+    if uci.enabled && !supervised {
         if let Err(error) = service.enable() {
             eprintln!("wloc-service: enable failed: {error:?}");
         }
@@ -607,5 +647,33 @@ mod tests {
     fn ignores_non_ip_tokens() {
         let output = "elements = { 59.82.17.33, hostname, 10.0.0.1/8 }\n";
         assert_eq!(parse_apple_ips(output), vec!["59.82.17.33"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn openwrt_runtime_delegates_only_component_redirect_actions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "wloc-runtime-test-{}-{}",
+            std::process::id(),
+            now_unix()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let log = root.join("actions.log");
+        let helper = root.join("redirect-helper.sh");
+        let script = format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$1\" >> '{}'\n",
+            log.display()
+        );
+        std::fs::write(&helper, script).unwrap();
+        std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+        let mut runtime = OpenWrtRuntime::new(&helper, &helper);
+        runtime.install_exact_redirect().unwrap();
+        runtime.remove_redirect().unwrap();
+
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), "start\nstop\n");
+        let _ = std::fs::remove_dir_all(root);
     }
 }

@@ -136,11 +136,16 @@ mkdir -p "$package_dir/files/usr/sbin" "$package_dir/files/etc/init.d" "$package
 cp "$service_bin" "$package_dir/files/usr/sbin/wloc-service"
 cp "$ctl_bin" "$package_dir/files/usr/sbin/wloc-ctl"
 cp "$repo_root/openwrt/files/etc/init.d/wloc-service" "$package_dir/files/etc/init.d/wloc-service"
+cp "$repo_root/openwrt/files/etc/init.d/wificalling-location-gateway" "$package_dir/files/etc/init.d/wificalling-location-gateway"
+mkdir -p "$package_dir/files/usr/libexec/wificalling-location-gateway"
+cp "$repo_root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \
+	"$package_dir/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
 cp "$repo_root/openwrt/files/etc/config/wloc-service" "$package_dir/files/etc/config/wloc-service"
 for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh wloc-health.sh; do
 	cp "$repo_root/openwrt/files/usr/sbin/$helper" "$package_dir/files/usr/sbin/$helper"
 done
-chmod 0755 "$package_dir/files/usr/sbin/"* "$package_dir/files/etc/init.d/"*
+chmod 0755 "$package_dir/files/usr/sbin/"* "$package_dir/files/etc/init.d/"* \
+	"$package_dir/files/usr/libexec/wificalling-location-gateway/"*
 
 cat > "$package_dir/Makefile" <<EOF
 include \$(TOPDIR)/rules.mk
@@ -174,12 +179,12 @@ define Package/wificalling-location-gateway/postinst
 for required in /usr/bin/sing-box /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd; do
   [ -e "\$\$required" ] || echo "wificalling-location-gateway: prerequisite missing: \$\$required" >&2
 done
-/etc/init.d/wificalling-gateway enable >/dev/null 2>&1 || true
-/etc/init.d/wloc-service enable >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway disable >/dev/null 2>&1 || true
+/etc/init.d/wloc-service disable >/dev/null 2>&1 || true
 mkdir -p /var/run/wificalling-gateway
 chmod 0700 /var/run/wificalling-gateway
-/etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || true
-/etc/init.d/wloc-service restart >/dev/null 2>&1 || true
+/etc/init.d/wificalling-location-gateway enable >/dev/null 2>&1 || true
+/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1 || true
 rm -f /tmp/luci-indexcache.*
 /etc/init.d/rpcd reload >/dev/null 2>&1 || true
 exit 0
