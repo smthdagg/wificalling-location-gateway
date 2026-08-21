@@ -17,6 +17,7 @@ grep -F 'procd_add_reload_trigger wificalling-gateway' "$init" >/dev/null
 grep -F 'procd_add_reload_trigger wloc-service' "$init" >/dev/null
 grep -F 'WLOC_SUPERVISED=1 WLOC_SKIP_REDIRECT=1 "$WLOC_INIT" start' "$supervisor" >/dev/null
 grep -F 'WLOC_SUPERVISED=1 "$GATEWAY_INIT" start' "$supervisor" >/dev/null
+grep -F 'WLOC_DEFER_REDIRECT=1' "$supervisor" >/dev/null
 grep -F 'WLOC_SKIP_REDIRECT' "$wloc_init" >/dev/null
 grep -F 'WLOC_SUPERVISED' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null
 
@@ -27,8 +28,13 @@ redirect_start=$(grep -n '"$REDIRECT_HELPER" start' "$supervisor" | cut -d: -f1)
 [ "$gateway_start" -lt "$wloc_start" ]
 [ "$wloc_start" -lt "$health" ]
 [ "$health" -lt "$redirect_start" ]
-grep -F 'cleanup_runtime wloc_start_failed keep_gateway' "$supervisor" >/dev/null
-grep -F 'cleanup_runtime health_failed keep_gateway' "$supervisor" >/dev/null
+grep -F 'cleanup_runtime wloc_start_failed 1' "$supervisor" >/dev/null
+grep -F 'cleanup_runtime health_failed 1' "$supervisor" >/dev/null
+if grep -F 'stop_child "$GATEWAY_INIT"' "$supervisor" >/dev/null; then
+	printf '%s\n' 'unified supervisor must not stop the stable Gateway table owner' >&2
+	exit 1
+fi
+grep -F 'START_TIMEOUT' "$supervisor" >/dev/null
 
 if grep -E 'udp[[:space:]]+500|udp[[:space:]]+4500|wificalling_gateway' "$supervisor" "$redirect" >/dev/null; then
 	printf '%s\n' 'unified supervisor must not own Gateway nftables or UDP 500/4500' >&2
