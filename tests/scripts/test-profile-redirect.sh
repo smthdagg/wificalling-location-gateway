@@ -3,17 +3,29 @@ set -eu
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 helper="$repo_root/openwrt/files/usr/sbin/wloc-profile-redirect.sh"
+refresh="$repo_root/openwrt/files/usr/sbin/wloc-refresh-set.sh"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-profile-redirect.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
-sh -n "$helper"
+sh -n "$helper" "$refresh"
 mkdir -p "$tmp/bin"
 cat > "$tmp/bin/nft" <<'EOF'
 #!/bin/sh
 printf 'nft %s\n' "$*" >> "$WLOC_TEST_LOG"
+if [ "$*" = 'list tables inet' ]; then
+  printf '%s\n' 'table inet wloc_profile_phone' 'table inet wloc_profile_tablet'
+fi
 exit 0
 EOF
-chmod 0755 "$tmp/bin/nft"
+cat > "$tmp/bin/uci" <<'EOF'
+#!/bin/sh
+printf '%s\n' '192.168.1.1'
+EOF
+cat > "$tmp/bin/nslookup" <<'EOF'
+#!/bin/sh
+printf '%s\n' 'Address: 59.82.17.33'
+EOF
+chmod 0755 "$tmp/bin/nft" "$tmp/bin/uci" "$tmp/bin/nslookup"
 : > "$tmp/commands.log"
 
 PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" \
@@ -32,6 +44,10 @@ if grep -F 'nft delete table inet wloc_profile_tablet' "$tmp/commands.log" >/dev
 fi
 grep -F 'ip saddr 192.168.1.10 tcp dport 443' "$tmp/commands.log" >/dev/null
 grep -F 'ip daddr @apple_hosts' "$tmp/commands.log" >/dev/null
+
+PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" "$refresh"
+grep -F 'nft flush set inet wloc_profile_phone apple_hosts' "$tmp/commands.log" >/dev/null
+grep -F 'nft flush set inet wloc_profile_tablet apple_hosts' "$tmp/commands.log" >/dev/null
 
 if PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" \
   "$helper" start '../phone' 192.168.1.12; then
