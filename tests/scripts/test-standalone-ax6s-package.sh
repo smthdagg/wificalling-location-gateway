@@ -132,6 +132,7 @@ for member in \
 	'./etc/init.d/wloc-service' \
 	'./usr/sbin/wloc-service' \
 	'./usr/sbin/wloc-ctl' \
+	'./usr/sbin/wloc-profile-redirect.sh' \
 	'./usr/libexec/wificalling-location-gateway/unified-supervisor.sh'; do
 	printf '%s\n' "$data_members" | grep -Fx "$member" >/dev/null ||
 		fail "standalone package is missing $member"
