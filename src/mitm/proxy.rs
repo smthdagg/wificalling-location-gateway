@@ -24,6 +24,10 @@ pub const WLOC_PATH: &str = "/clls/wloc";
 const MAX_FORWARD_BODY_BYTES: usize = 512 * 1024;
 /// Concurrent upstream streams per client connection.
 const MAX_STREAMS: usize = 8;
+/// Resource bounds for the per-client synthesis cache on small gateways.
+const MAX_SYNTHESIZED_CLIENTS: usize = 16;
+const MAX_SYNTHESIZED_CACHE_BYTES: usize = 64 * 1024;
+const MAX_SYNTHESIZED_PAYLOAD_BYTES: usize = 16 * 1024;
 
 /// HTTP/2 MITM proxy bound to one approved hostname's traffic.
 #[derive(Clone)]
@@ -206,7 +210,11 @@ impl MitmProxy {
                                 return Ok((request_body.len(), out));
                             }
                         } else if let Ok(mut cache) = self.synthesized_payloads.lock() {
-                            cache.insert(client_addr.to_string(), payload.to_vec());
+                            cache_synthesized_payload(
+                                &mut cache,
+                                client_addr,
+                                payload.to_vec(),
+                            );
                         }
                         eprintln!(
                             "wloc proxy: synthesized {} -> {} bytes (is_wloc={is_wloc})",
@@ -380,6 +388,28 @@ fn maybe_patch_body(body: &[u8], is_wloc: bool, patch: Option<&PatchTarget>) -> 
         Some(patch) if is_wloc => patch_wloc_response(body, patch),
         _ => body.to_vec(),
     }
+}
+
+fn cache_synthesized_payload(
+    cache: &mut HashMap<String, Vec<u8>>,
+    client_addr: &str,
+    payload: Vec<u8>,
+) {
+    if payload.is_empty() || payload.len() > MAX_SYNTHESIZED_PAYLOAD_BYTES {
+        return;
+    }
+    cache.remove(client_addr);
+    while cache.len() >= MAX_SYNTHESIZED_CLIENTS
+        || cache.values().map(Vec::len).sum::<usize>()
+            .saturating_add(payload.len())
+            > MAX_SYNTHESIZED_CACHE_BYTES
+    {
+        let Some(oldest) = cache.keys().next().cloned() else {
+            break;
+        };
+        cache.remove(&oldest);
+    }
+    cache.insert(client_addr.to_owned(), payload);
 }
 
 /// Proxy-level failure; the caller treats any error as "close this
