@@ -112,8 +112,18 @@ END {
 
 cat "$event_tmp" >> "$events"
 awk -F '|' -v limit="$max_events" '
-FNR==NR { count[$2 FS $3]++; next }
-{ key=$2 FS $3; seen[key]++; if (seen[key] > count[key]-limit) print }
+FNR==NR {
+  if ($0 ~ /^\{/) { structured_count++; next }
+  count[$2 FS $3]++; next
+}
+{
+  if ($0 ~ /^\{/) {
+    structured_seen++
+    if (structured_seen > structured_count-limit) print
+    next
+  }
+  key=$2 FS $3; seen[key]++; if (seen[key] > count[key]-limit) print
+}
 ' "$events" "$events" > "$trim_tmp"
 mv "$trim_tmp" "$events"
 
@@ -124,7 +134,7 @@ mv "$trim_tmp" "$events"
 event_bytes=$(wc -c < "$events" | tr -d ' ')
 if [ "$event_bytes" -gt "$max_event_bytes" ]; then
 	tail -c "$max_event_bytes" "$events" \
-		| awk -F '|' 'NR == 1 && NF != 8 { next } { print }' > "$trim_tmp"
+		| awk -F '|' 'NR == 1 && $0 !~ /^\{/ && NF != 8 { next } { print }' > "$trim_tmp"
 	mv "$trim_tmp" "$events"
 fi
 chmod 644 "$tmp" "$events"

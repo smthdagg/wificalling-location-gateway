@@ -15,6 +15,15 @@ class V2DiagnosticsContractTests(unittest.TestCase):
         self.assertIn("no-credentials-no-device-identifiers-no-precise-location", source)
         self.assertIn("redacted diagnostic event", source)
         self.assertIn("tar -czf", source)
+        self.assertIn("wloc-support-bundle.lock", source)
+
+    def test_support_bundle_is_installed_by_all_openwrt_package_paths(self):
+        makefile = (self.root / "openwrt/Makefile").read_text(encoding="utf-8")
+        standalone = (self.root / "scripts/build-luci-ipk.sh").read_text(encoding="utf-8")
+        release = (self.root / "scripts/openwrt/build-release-packages.sh").read_text(encoding="utf-8")
+        self.assertIn("files/usr/sbin/wloc-support-bundle.sh", makefile)
+        self.assertIn("wloc-support-bundle.sh", standalone)
+        self.assertIn("wloc-support-bundle.sh", release)
 
     def test_diagnostics_rpc_acl_and_ui_are_present_in_both_package_sources(self):
         for prefix in (

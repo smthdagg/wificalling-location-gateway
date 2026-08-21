@@ -219,9 +219,12 @@ async fn wloc_response_is_patched_through_the_proxy() {
     // The rewrite event must be appended to the events file.
     let events_text = std::fs::read_to_string(&events_path).unwrap_or_default();
     assert!(
-        events_text.contains("\"type\":\"rewritten\""),
+        events_text.contains("\"event_code\":\"response_rewritten\""),
         "rewrite must be logged"
     );
+    assert!(events_text.contains("\"profile_scope\":\"device-policy\""));
+    assert!(!events_text.contains("latitude"));
+    assert!(!events_text.contains("longitude"));
     let _ = std::fs::remove_file(&events_path);
 }
 

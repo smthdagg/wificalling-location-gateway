@@ -9,6 +9,7 @@ HEALTH=${WLOC_SUPPORT_HEALTH:-/var/run/wloc-service/health.json}
 WLOC_LOG=${WLOC_SUPPORT_WLOC_LOG:-/var/run/wloc-service/events.jsonl}
 GATEWAY_LOG=${WLOC_SUPPORT_GATEWAY_LOG:-/var/run/wificalling-gateway/events.log}
 MAX_BYTES=${WLOC_SUPPORT_MAX_BYTES:-65536}
+LOCK=/tmp/wloc-support-bundle.lock
 
 case "$MAX_BYTES" in
 	''|*[!0-9]*) MAX_BYTES=65536 ;;
@@ -16,8 +17,12 @@ esac
 [ "$MAX_BYTES" -ge 4096 ] 2>/dev/null || MAX_BYTES=4096
 [ "$MAX_BYTES" -le 131072 ] 2>/dev/null || MAX_BYTES=131072
 
+if ! mkdir "$LOCK" 2>/dev/null; then
+	echo '{"error":"support bundle collection already in progress"}' >&2
+	exit 1
+fi
 work=$(mktemp -d /tmp/wloc-support.XXXXXX)
-trap 'rm -rf "$work"' EXIT HUP INT TERM
+trap 'rm -rf "$work" "$LOCK"' EXIT HUP INT TERM
 mkdir -p "$work/wloc-support"
 
 safe_token() {
@@ -52,8 +57,13 @@ write_events() {
 }
 
 health_available=false
-[ -r "$HEALTH" ] && health_available=true
-[ -x /usr/sbin/wloc-health.sh ] && health_available=true
+if [ -r "$HEALTH" ]; then
+	health_available=true
+elif [ -x /usr/sbin/wloc-health.sh ]; then
+	if /usr/sbin/wloc-health.sh > "$work/health.generated" 2>/dev/null; then
+		health_available=true
+	fi
+fi
 gateway_available=false
 [ -r "$GATEWAY_LOG" ] && gateway_available=true
 wloc_available=false
@@ -75,15 +85,32 @@ printf '{"schema":"wificalling-location-gateway.support.v1","health_available":%
 write_events "$WLOC_LOG" "$work/wloc-support/events.jsonl"
 write_events "$GATEWAY_LOG" "$work/wloc-support/gateway-events.jsonl"
 
-tar -czf "$OUTPUT" -C "$work" wloc-support
-size=$(wc -c < "$OUTPUT" | tr -d ' ')
+output_dir=${OUTPUT%/*}
+[ "$output_dir" = "$OUTPUT" ] && output_dir=.
+[ -d "$output_dir" ] || { echo '{"error":"support bundle output directory is unavailable"}' >&2; exit 1; }
+[ ! -L "$OUTPUT" ] || { echo '{"error":"support bundle output must not be a symlink"}' >&2; exit 1; }
+archive="$work/wloc-support-bundle.tar.gz"
+if ! tar -czf "$archive" -C "$work" wloc-support; then
+	rm -f "$archive"
+	echo '{"error":"support bundle archive creation failed"}' >&2
+	exit 1
+fi
+size=$(wc -c < "$archive" | tr -d ' ')
 if [ "$size" -gt "$MAX_BYTES" ]; then
 	# Preserve the manifest and health summary under pressure; never emit an
 	# over-cap bundle or silently truncate a tar stream.
 	rm -f "$work/wloc-support/events.jsonl" "$work/wloc-support/gateway-events.jsonl"
-	tar -czf "$OUTPUT" -C "$work" wloc-support
-	size=$(wc -c < "$OUTPUT" | tr -d ' ')
+	rm -f "$archive"
+	if ! tar -czf "$archive" -C "$work" wloc-support; then
+		rm -f "$archive"
+		echo '{"error":"support bundle archive creation failed"}' >&2
+		exit 1
+	fi
+	size=$(wc -c < "$archive" | tr -d ' ')
 fi
-[ "$size" -le "$MAX_BYTES" ] || { rm -f "$OUTPUT"; echo '{"error":"support bundle exceeds storage cap"}' >&2; exit 1; }
+[ "$size" -le "$MAX_BYTES" ] || { rm -f "$archive"; echo '{"error":"support bundle exceeds storage cap"}' >&2; exit 1; }
+chmod 600 "$archive"
+[ ! -L "$OUTPUT" ] || { rm -f "$archive"; echo '{"error":"support bundle output became a symlink"}' >&2; exit 1; }
+mv -f "$archive" "$OUTPUT"
 chmod 600 "$OUTPUT"
 printf '{"path":"%s","bytes":%s,"expires_seconds":600}\n' "$OUTPUT" "$size"

@@ -36,4 +36,17 @@ if tar -xOzf "$output" wloc-support/health.json | grep -E 'Alice|192\.168\.1\.10
   echo 'support bundle leaked private health material' >&2
   exit 1
 fi
+
+victim="$tmp/victim"
+printf 'do not replace this file\n' > "$victim"
+ln -s "$victim" "$tmp/symlink.tar.gz"
+if WLOC_SUPPORT_OUTPUT="$tmp/symlink.tar.gz" \
+   WLOC_SUPPORT_HEALTH="$tmp/health.json" \
+   WLOC_SUPPORT_WLOC_LOG="$tmp/wloc.jsonl" \
+   WLOC_SUPPORT_GATEWAY_LOG="$tmp/gateway.jsonl" \
+   sh "$repo_root/openwrt/files/usr/sbin/wloc-support-bundle.sh"; then
+  echo 'support bundle accepted a symlink output' >&2
+  exit 1
+fi
+grep 'do not replace this file' "$victim" >/dev/null
 echo 'support bundle tests passed'

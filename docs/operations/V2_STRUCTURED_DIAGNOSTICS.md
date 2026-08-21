@@ -2,7 +2,7 @@
 
 ## Event contract
 
-Gateway and WLOC activity logs use one JSONL envelope:
+Gateway, WLOC, and the WLOC interception path use one JSONL envelope:
 
 ```json
 {
@@ -10,7 +10,7 @@ Gateway and WLOC activity logs use one JSONL envelope:
   "component": "wloc|gateway",
   "profile_scope": "service|device-policy",
   "severity": "info|warning|error",
-  "event_code": "target_updated|handshake_success|handshake_failed|sustained_traffic",
+  "event_code": "target_updated|response_rewritten|handshake_success|handshake_failed|sustained_traffic",
   "message": "stable non-sensitive summary",
   "fields": {}
 }
@@ -22,9 +22,12 @@ status projection, but event history is deliberately less sensitive.
 
 ## Bounds and retention
 
-- WLOC events are capped at 64 KiB and 2 KiB per JSON line.
-- Gateway events default to 64 KiB and are also constrained by the existing
-  per-device event count setting.
+- Rust WLOC events, including response-rewrite events, are capped at 64 KiB
+  and 2 KiB per JSON line. Rewrite events contain byte counters only; they do
+  not contain target coordinates or device addresses.
+- Gateway events default to 64 KiB. Legacy pipe records retain the existing
+  per-device event count setting; privacy-safe JSON events have no device key,
+  so their retention is bounded globally by the same recent-record limit.
 - Rotation keeps complete newest records and never leaves a partial first
   record for LuCI parsing.
 - Debug output is not enabled by the structured event path; normal operation
@@ -35,9 +38,11 @@ status projection, but event history is deliberately less sensitive.
 The `support_bundle` rpcd method invokes `/usr/sbin/wloc-support-bundle.sh`.
 The helper writes a mode-0600 archive to `/tmp/wloc-support-bundle.tar.gz`,
 with a default 64 KiB cap (hard maximum 128 KiB) and a 600-second operational
-expiry expectation. It includes only a manifest, health availability summary,
-and whitelisted event envelope fields. It does not copy UCI, status JSON,
-profile records, raw logs, CA material, node configuration, or coordinates.
+expiry expectation. Collection is serialized with a lock and the archive is
+built in a private temporary directory before an atomic move. It includes only
+a manifest, health availability summary, and whitelisted event envelope
+fields. It does not copy UCI, status JSON, profile records, raw logs, CA
+material, node configuration, or coordinates.
 
 When storage pressure prevents a full event collection, the helper drops the
 event files and preserves the manifest/health summary; it never emits an
