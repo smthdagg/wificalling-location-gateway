@@ -4,6 +4,7 @@ set -eu
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 doc="$repo_root/docs/deployment/AX6S_DEPLOYMENT.md"
 readme="$repo_root/README.md"
+evidence="$repo_root/docs/testing/AX6S_RESOURCE_EVIDENCE.template.md"
 fail() {
 	printf 'FAIL: %s\n' "$*" >&2
 	exit 1
@@ -11,6 +12,7 @@ fail() {
 
 [ -s "$doc" ] || fail 'AX6S deployment contract is missing'
 [ -s "$readme" ] || fail 'README is missing'
+[ -s "$evidence" ] || fail 'AX6S evidence template is missing'
 
 grep -F 'cp -p /etc/config/wificalling-gateway /tmp/wificalling-gateway.backup' "$doc" >/dev/null ||
 	fail 'migration must back up Gateway UCI before removal'
@@ -56,5 +58,14 @@ grep -F 'Host/package gates passed; AX6S pending' "$readme" >/dev/null ||
 	fail 'README must not claim unrecorded AX6S evidence'
 grep -F '主机/构建门禁通过；AX6S 待测' "$readme" >/dev/null ||
 	fail 'Chinese README must not claim unrecorded AX6S evidence'
+
+grep -F '## Space-constrained migration evidence' "$evidence" >/dev/null ||
+	fail 'AX6S evidence must include the space-constrained migration section'
+grep -F 'Old application package names removed' "$evidence" >/dev/null ||
+	fail 'AX6S evidence must record removed application packages'
+grep -F 'Selected sing-box provider class retained' "$evidence" >/dev/null ||
+	fail 'AX6S evidence must record retained provider class'
+grep -F 'free-space bucket after old application removal' "$evidence" >/dev/null ||
+	fail 'AX6S evidence must record post-removal free space'
 
 printf '%s\n' 'AX6S migration contract tests passed'

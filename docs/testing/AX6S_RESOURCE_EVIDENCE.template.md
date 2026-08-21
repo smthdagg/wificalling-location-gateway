@@ -20,6 +20,21 @@ material. Use broad firmware and memory/storage values where possible.
 - `/tmp` free-space bucket before install:
 - Existing Gateway 1.7 configuration backed up: `yes/no`
 
+## Space-constrained migration evidence
+
+AX6S must not be tested by installing the new package alongside the old
+application packages. Record package classes and coarse values only; do not
+copy package-manager output containing credentials or device-specific data.
+
+- Old Wificalling/WLOC application packages stopped and disabled: `yes/no`
+- Old application package names removed (no provider packages):
+- Selected sing-box provider class retained (`tiny`/`lite`/`PassWall`):
+- Retained provider executable path category (not a private custom path):
+- `/overlay` free-space bucket after old application removal:
+- `/tmp` free-space bucket after old application removal:
+- New integrated package installed only after the post-removal space check: `yes/no`
+- UCI/CA backup hashes verified after migration: `yes/no`
+
 ## Measurements
 
 | Scenario | Startup ms | Idle RSS KiB | Peak RSS KiB | CPU % | Persistent bytes | Log/cache bytes | Result |
@@ -42,6 +57,7 @@ material. Use broad firmware and memory/storage values where possible.
 - Ordinary HTTPS remained outside the WLOC data plane: `pass/fail`
 - Stop/restart restored passthrough: `pass/fail`
 - Configuration preserved across update/rollback: `pass/fail`
+- Old application packages were absent while the selected provider remained: `pass/fail`
 - No secrets or device identifiers in logs/support bundle: `pass/fail`
 
 ## Acceptance
