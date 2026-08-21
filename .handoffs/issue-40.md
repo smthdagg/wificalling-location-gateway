@@ -4,7 +4,7 @@
 
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test
-- Branch: codex/issue-40-ax6s-resource-gates-review-codex-v2-lead-20260821114718-3db18a06
+- Branch: codex/issue-40-ax6s-resource-gates-review2-codex-v2-lead-20260821120115-0b0f2a16
 - Final local checkpoint before handoff: pending independent review, CI, and AX6S hardware evidence
 - Credentials included: no
 
@@ -21,7 +21,7 @@ measurement template. Do not claim real-device measurements from the host.
   cache, profile count, startup, RSS, and CPU ceilings.
 - Added portable `profile-resource.sh` plus Python and procfs fallbacks. Reports
   contain only bounded status, elapsed time, peak RSS, CPU, and command status
-  fields.
+  fields; commands have a bounded timeout and an unsampled RSS result fails.
 - Added `verify-resource-budgets.sh` to reject missing/irregular artifacts,
   oversized runtime binaries, failed commands, and out-of-budget resource
   reports; added `verify-package-budget.sh` for each actual IPK/APK output.
@@ -36,6 +36,8 @@ measurement template. Do not claim real-device measurements from the host.
 - Added package artifact and resource-report assertions to the regression test;
   oversized runtime/package artifacts, failed reports, RSS, CPU, and startup
   reports are rejected.
+- Enforced package budgets through both integrated OpenWrt release packaging
+  and the standalone AX6S/LuCI IPK builder, with shell-loop failure propagation.
 
 ## Files changed
 
@@ -47,6 +49,7 @@ measurement template. Do not claim real-device measurements from the host.
 - `scripts/ci/profile-resource.sh`
 - `scripts/ci/verify-resource-budgets.sh`
 - `scripts/ci/verify-package-budget.sh`
+- `scripts/build-luci-ipk.sh`
 - `scripts/ci/verify-rust.sh`
 - `scripts/ci/verify.sh`
 - `scripts/openwrt/build-release-packages.sh`
@@ -86,6 +89,14 @@ measurement template. Do not claim real-device measurements from the host.
   dedicated package gate is now invoked for every release IPK/APK.
 - The profiler initially required GNU time or Python 3 on target; a lightweight
   `/proc` sampler now covers small Linux/OpenWrt images.
+- The first package-builder integration used `find -exec`, which could hide a
+  child failure; it was replaced with an explicit shell loop and the standalone
+  builder now invokes the same gate.
+- The procfs sampler initially polled once per second and could under-sample a
+  short-lived command; it now polls at 100ms, rejects zero RSS as unmeasured,
+  and bounds all paths with a timeout.
+- Python fallback initially inherited a shell temporary file before `exec`;
+  the temporary file is now created only for GNU time mode.
 - The local commit hook reports `lefthook` unavailable in PATH; repository
   verification itself passed.
 

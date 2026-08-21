@@ -13,6 +13,7 @@ from pathlib import Path
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--timeout-seconds", required=True, type=int)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -23,9 +24,22 @@ def main() -> int:
         parser.error("command is required")
     if args.report.is_symlink():
         parser.error("report must not be a symlink")
+    if args.timeout_seconds <= 0:
+        parser.error("timeout must be a positive integer")
 
     started = time.monotonic()
-    completed = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    timed_out = False
+    try:
+        completed = subprocess.run(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=args.timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        completed = subprocess.CompletedProcess(command, 124)
     elapsed = time.monotonic() - started
     usage = resource.getrusage(resource.RUSAGE_CHILDREN)
     rss = int(usage.ru_maxrss)
@@ -34,7 +48,7 @@ def main() -> int:
     cpu = round(((usage.ru_utime + usage.ru_stime) / max(elapsed, 0.001)) * 100)
     report = "".join(
         (
-            f"status={'pass' if completed.returncode == 0 else 'fail'}\n",
+            f"status={'pass' if completed.returncode == 0 and not timed_out else 'fail'}\n",
             f"elapsed_ms={round(elapsed * 1000)}\n",
             f"peak_rss_kib={rss}\n",
             f"cpu_percent={cpu}\n",

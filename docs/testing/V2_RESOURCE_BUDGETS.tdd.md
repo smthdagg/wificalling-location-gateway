@@ -25,7 +25,7 @@ The installed contract is
 | Budget | Ceiling | Enforced by |
 |---|---:|---|
 | Runtime binaries combined | 8 MiB | `verify-resource-budgets.sh` |
-| Integrated package | 20 MiB | `verify-resource-budgets.sh` when artifact is supplied |
+| Integrated package | 20 MiB | `verify-package-budget.sh` in every release package builder |
 | Persistent update/config state | 10 MiB | package contract and device checklist |
 | Logs combined | 1 MiB | package contract; individual WLOC log is 64 KiB |
 | Caches combined | 1 MiB | package contract and device checklist |
@@ -61,5 +61,6 @@ Hardware acceptance is intentionally not claimed in this change until an
 actual staging AX6S is available. Fill
 `docs/testing/AX6S_RESOURCE_EVIDENCE.template.md` using the target-side
 `scripts/ci/profile-resource.sh` (which has a `/proc` fallback and does not
-require GNU time or Python 3) or an equivalent BusyBox-compatible capture,
-then attach only redacted aggregate values to the Issue/PR.
+require GNU time or Python 3), with a bounded timeout and explicit failure when
+RSS cannot be sampled, or an equivalent BusyBox-compatible capture; then attach
+only redacted aggregate values to the Issue/PR.

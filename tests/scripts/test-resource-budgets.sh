@@ -40,6 +40,15 @@ grep -E '^elapsed_ms=[0-9]+$' "$tmp/report.env" >/dev/null
 grep -E '^peak_rss_kib=[0-9]+$' "$tmp/report.env" >/dev/null
 grep -E '^cpu_percent=[0-9]+$' "$tmp/report.env" >/dev/null
 
+timeout_report="$tmp/timeout-report.env"
+if WLOC_RESOURCE_TIMEOUT_SECONDS=1 WLOC_RESOURCE_REPORT="$timeout_report" \
+	"$profile" -- sleep 2 >/dev/null 2>&1; then
+	echo 'resource profiler accepted a timed-out command' >&2
+	exit 1
+fi
+grep -Fx 'status=fail' "$timeout_report" >/dev/null
+grep -Fx 'command_status=124' "$timeout_report" >/dev/null
+
 if [ -r /proc/self/status ] && [ -r /proc/self/stat ]; then
 	WLOC_RESOURCE_FORCE_PROCFS=1 \
 		WLOC_RESOURCE_REPORT="$tmp/procfs-report.env" \

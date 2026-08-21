@@ -21,8 +21,9 @@ parent=${report%/*}
 [ -d "$parent" ] || { echo 'profile-resource: report parent is missing' >&2; exit 2; }
 [ ! -L "$report" ] || { echo 'profile-resource: report must not be a symlink' >&2; exit 2; }
 
-tmp=$(mktemp "${TMPDIR:-/tmp}/wloc-resource-time.XXXXXX")
-trap 'rm -f "$tmp"' EXIT HUP INT TERM
+timeout_seconds=${WLOC_RESOURCE_TIMEOUT_SECONDS:-30}
+case "$timeout_seconds" in ''|*[!0-9]*) echo 'profile-resource: timeout must be a positive integer' >&2; exit 2 ;; esac
+[ "$timeout_seconds" -gt 0 ] || { echo 'profile-resource: timeout must be a positive integer' >&2; exit 2; }
 time_bin=
 if [ "${WLOC_RESOURCE_FORCE_PROCFS:-0}" != 1 ]; then
 	for candidate in /usr/bin/time "$(command -v gtime 2>/dev/null || true)"; do
@@ -32,6 +33,11 @@ if [ "${WLOC_RESOURCE_FORCE_PROCFS:-0}" != 1 ]; then
 		fi
 	done
 fi
+timeout_bin=$(command -v timeout || true)
+if [ -n "$time_bin" ] && [ -z "$timeout_bin" ] \
+	&& [ -r /proc/self/status ] && [ -r /proc/self/stat ]; then
+	time_bin=
+fi
 if [ -z "$time_bin" ]; then
 	python3=
 	if [ "${WLOC_RESOURCE_FORCE_PROCFS:-0}" != 1 ]; then
@@ -39,7 +45,7 @@ if [ -z "$time_bin" ]; then
 	fi
 	if [ -n "$python3" ]; then
 		exec "$python3" "$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)/profile-resource.py" \
-			--report "$report" -- "$@"
+			--timeout-seconds "$timeout_seconds" --report "$report" -- "$@"
 	fi
 	[ -r /proc/self/status ] && [ -r /proc/self/stat ] || {
 		echo 'profile-resource: GNU time, Python 3, or procfs is required' >&2
@@ -61,12 +67,20 @@ if [ -z "$time_bin" ]; then
 	last_ticks=$start_ticks
 	peak_rss_kib=$(proc_rss_kib "$pid")
 	case "$peak_rss_kib" in ''|*[!0-9]*) peak_rss_kib=0 ;; esac
+	timed_out=0
 	while kill -0 "$pid" 2>/dev/null; do
+		now=$(date +%s)
+		if [ $((now - started)) -ge "$timeout_seconds" ]; then
+			kill "$pid" 2>/dev/null || true
+			sleep 1
+			kill -9 "$pid" 2>/dev/null || true
+			timed_out=1
+		fi
 		rss=$(proc_rss_kib "$pid")
 		case "$rss" in ''|*[!0-9]*) rss=0 ;; esac
 		[ "$rss" -gt "$peak_rss_kib" ] && peak_rss_kib=$rss
 		last_ticks=$(proc_ticks "$pid")
-		sleep 1
+		sleep 0.1
 	done
 	wait "$pid"
 	command_status=$?
@@ -80,6 +94,8 @@ if [ -z "$time_bin" ]; then
 	delta_ticks=$((last_ticks - start_ticks))
 	[ "$delta_ticks" -gt 0 ] || delta_ticks=0
 	cpu_percent=$((delta_ticks * 100 / (elapsed_seconds * hz)))
+	[ "$peak_rss_kib" -gt 0 ] || command_status=125
+	[ "$timed_out" -eq 0 ] || command_status=124
 	if [ "$command_status" -eq 0 ]; then status=pass; else status=fail; fi
 	umask 077
 	{
@@ -91,9 +107,16 @@ if [ -z "$time_bin" ]; then
 	} > "$report"
 	exit "$command_status"
 fi
+
+[ -n "$timeout_bin" ] || {
+	echo 'profile-resource: timeout utility or procfs is required for GNU time mode' >&2
+	exit 127
+}
+tmp=$(mktemp "${TMPDIR:-/tmp}/wloc-resource-time.XXXXXX")
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
 set +e
 "$time_bin" -f 'elapsed_seconds=%e\npeak_rss_kib=%M\ncpu_percent_raw=%P\n' \
-	"$@" >/dev/null 2>"$tmp"
+	"$timeout_bin" "$timeout_seconds" "$@" >/dev/null 2>"$tmp"
 command_status=$?
 set -e
 
