@@ -4,9 +4,9 @@
 
 - Source agent ID: codex-v2-lead
 - Capabilities used: rust,openwrt,test
-- Branch: codex/issue-33-unified-supervisor-codex-v2-lead-20260821044654
-- Checkpoint parent: 601097f
-- Updated at (UTC): 2026-08-21T06:26:00Z
+- Branch: codex/issue-33-v2-02-rebase-codex-v2-lead-20260821071934-414461b6
+- Checkpoint parent: f84b41b
+- Updated at (UTC): 2026-08-21T07:24:00Z
 - Credentials included: no
 
 ## Objective
@@ -39,6 +39,8 @@ rollback documentation.
   install and enable the unified entry point while retaining legacy rollback
   scripts.
 - Added shell, Rust, package, TDD evidence, and operations documentation.
+- Reconciled the supervisor branch with the merged V2-01 profile model and
+  preserved both the unified runtime adapter and profile-source validation.
 
 ## Files changed
 
@@ -70,6 +72,9 @@ rollback documentation.
 
 - Initial full verification found one rustfmt difference; `cargo fmt --all`
   fixed it and the complete verification was rerun successfully.
+- The first integration attempt conflicted in `wloc-service.rs` after V2-01
+  merged; the conflict was resolved by retaining the OpenWrt adapter and
+  adding the explicit single-profile runtime guard/tests.
 - Independent review initially found early legacy redirect installation and
   WLOC-fault Gateway shutdown; both were corrected and covered by regression
   assertions.
