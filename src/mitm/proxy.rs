@@ -200,7 +200,7 @@ impl MitmProxy {
         let is_wloc =
             request.uri().path() == WLOC_PATH || request.uri().path().ends_with("/clls/wloc");
         eprintln!(
-            "wloc proxy: request from {client_addr} host={hostname} method={} uri={} is_wloc={is_wloc}",
+            "wloc proxy: request host={hostname} method={} uri={} is_wloc={is_wloc}",
             request.method(),
             request.uri()
         );
@@ -421,7 +421,7 @@ pub(crate) fn dump_wloc_samples(
         let _ = std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700));
     }
     let safe_host = safe_file_token(hostname);
-    let safe_client = safe_file_token(client_addr);
+    let safe_client = opaque_client_token(client_addr);
     write_bounded_sample(
         &directory.join(format!("{stamp}_{safe_client}_{safe_host}_req.bin")),
         request,
@@ -453,6 +453,16 @@ fn safe_file_token(value: &str) -> String {
     } else {
         token
     }
+}
+
+fn opaque_client_token(value: &str) -> String {
+    let digest = ring::digest::digest(&ring::digest::SHA256, value.as_bytes());
+    digest
+        .as_ref()
+        .iter()
+        .take(8)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn write_bounded_sample(path: &std::path::Path, bytes: &[u8]) {
@@ -595,7 +605,12 @@ mod tests {
             &large,
         );
         for entry in std::fs::read_dir(&dir).unwrap() {
-            assert!(entry.unwrap().metadata().unwrap().len() <= MAX_DEBUG_SAMPLE_BYTES as u64);
+            let entry = entry.unwrap();
+            assert!(!entry
+                .file_name()
+                .to_string_lossy()
+                .contains("192.168.31.175"));
+            assert!(entry.metadata().unwrap().len() <= MAX_DEBUG_SAMPLE_BYTES as u64);
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

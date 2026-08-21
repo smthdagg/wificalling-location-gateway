@@ -30,11 +30,6 @@ function normalizeDeviceAddress(value) {
 		if (first === 10 || (first === 172 && numbers[1] >= 16 && numbers[1] <= 31) ||
 			(first === 192 && numbers[1] === 168)) return numbers.join('.');
 	}
-	if (/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(address) ||
-		/^([0-9a-f]{2}-){5}[0-9a-f]{2}$/.test(address)) {
-		var hex = address.replace(/[:-]/g, '');
-		if (!/^0+$/.test(hex) && !(parseInt(hex.slice(0, 2), 16) & 1)) return hex;
-	}
 	return null;
 }
 
@@ -58,7 +53,7 @@ function validateProfile(profile) {
 	if (!profile.assigned_device || profile.assigned_device.length > 64 ||
 		profile.assigned_device !== profile.assigned_device.trim() ||
 		!normalizeDeviceAddress(profile.assigned_device))
-		return 'device address must be a private IPv4 address or unicast MAC';
+		return 'device address must be a private IPv4 address';
 	if (!profile.node_ref || profile.node_ref.length > 96) return 'node reference is required and bounded';
 	if ((profile.node_mode || 'fixed') !== 'fixed') return 'only explicit WLOC node bindings are supported';
 	if (['auto', 'manual'].indexOf(profile.geo_source || 'auto') < 0) return 'invalid location mode';
@@ -186,7 +181,7 @@ return view.extend({
 			profiles.forEach(function(section) {
 				var fields = {
 					label: textInput(section.label, wlocI18n.t('Label')),
-					address: textInput(section.assigned_device, wlocI18n.t('192.168.1.100 or MAC')),
+					address: textInput(section.assigned_device, wlocI18n.t('192.168.1.100')),
 					node: textInput(section.node_ref || 'default', wlocI18n.t('node reference')),
 					latitude: textInput(section.manual_lat, wlocI18n.t('lat')),
 					longitude: textInput(section.manual_lon, wlocI18n.t('lon')),

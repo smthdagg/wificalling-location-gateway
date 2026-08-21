@@ -6,7 +6,7 @@
 //! any UCI write, nftables operation, or child-process change.
 
 use std::fmt;
-use std::net::IpAddr;
+use std::net::Ipv4Addr;
 
 use serde::Serialize;
 
@@ -170,7 +170,7 @@ impl ProfileModel {
             runtime_supported: profile
                 .assigned_device
                 .as_deref()
-                .map(|address| address.parse::<IpAddr>().is_ok())
+                .map(|address| address.parse::<Ipv4Addr>().is_ok())
                 .unwrap_or(true),
             assigned_device: profile.assigned_device.clone(),
             node_ref: profile.node_ref.clone(),
@@ -323,55 +323,22 @@ fn validate_bounded_text(field: &'static str, value: &str, max: usize) -> Result
 }
 
 fn is_valid_device_address(value: &str) -> bool {
-    if let Ok(address) = value.parse::<IpAddr>() {
-        return match address {
-            IpAddr::V4(ip) => {
-                let octets = ip.octets();
-                !(ip.is_unspecified()
-                    || ip.is_loopback()
-                    || ip.is_multicast()
-                    || ip == std::net::Ipv4Addr::BROADCAST
-                    || (octets[0] == 169 && octets[1] == 254))
-                    && (octets[0] == 10
-                        || (octets[0] == 172 && (16..=31).contains(&octets[1]))
-                        || (octets[0] == 192 && octets[1] == 168))
-            }
-            IpAddr::V6(ip) => {
-                let first = ip.segments()[0];
-                !ip.is_unspecified()
-                    && !ip.is_loopback()
-                    && !ip.is_multicast()
-                    && (first & 0xffc0) != 0xfe80
-                    && (first & 0xfe00) == 0xfc00
-            }
-        };
-    }
-    is_valid_mac(value)
+    value.parse::<Ipv4Addr>().is_ok_and(|ip| {
+        let octets = ip.octets();
+        !(ip.is_unspecified()
+            || ip.is_loopback()
+            || ip.is_multicast()
+            || ip == Ipv4Addr::BROADCAST
+            || (octets[0] == 169 && octets[1] == 254))
+            && (octets[0] == 10
+                || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+                || (octets[0] == 192 && octets[1] == 168))
+    })
 }
 
 fn normalize_device_address(value: &str) -> String {
-    if let Ok(address) = value.parse::<IpAddr>() {
-        return address.to_string();
-    }
     value
-        .bytes()
-        .filter(|byte| *byte != b':' && *byte != b'-')
-        .map(|byte| byte.to_ascii_lowercase() as char)
-        .collect()
-}
-
-fn is_valid_mac(value: &str) -> bool {
-    let separator = if value.contains(':') { ':' } else { '-' };
-    let parts: Vec<_> = value.split(separator).collect();
-    let first = parts
-        .first()
-        .and_then(|part| u8::from_str_radix(part, 16).ok());
-    parts.len() == 6
-        && parts
-            .iter()
-            .all(|part| part.len() == 2 && part.bytes().all(|byte| byte.is_ascii_hexdigit()))
-        && parts
-            .iter()
-            .any(|part| part.bytes().any(|byte| byte != b'0'))
-        && first.is_some_and(|byte| byte & 1 == 0)
+        .parse::<Ipv4Addr>()
+        .map(|address| address.to_string())
+        .unwrap_or_default()
 }

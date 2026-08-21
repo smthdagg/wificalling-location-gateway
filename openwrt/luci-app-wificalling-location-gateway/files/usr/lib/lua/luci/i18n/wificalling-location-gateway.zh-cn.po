@@ -16,8 +16,8 @@ msgstr "，经度 "
 msgid "1. Open the profile link in Safari on the test iPhone. "
 msgstr "1. 在测试 iPhone 的 Safari 中打开描述文件链接。 "
 
-msgid "192.168.1.100 or MAC"
-msgstr "192.168.1.100 或 MAC"
+msgid "192.168.1.100"
+msgstr "192.168.1.100"
 
 msgid "2. Install the configuration profile. "
 msgstr "2. 安装配置描述文件。 "
@@ -763,8 +763,8 @@ msgstr "可用"
 msgid "compact"
 msgstr "精简"
 
-msgid "device address must be a private IPv4 address or unicast MAC"
-msgstr "设备地址必须是私有 IPv4 地址或单播 MAC 地址"
+msgid "device address must be a private IPv4 address"
+msgstr "设备地址必须是私有 IPv4 地址"
 
 msgid "duplicate profile id"
 msgstr "档案 ID 重复"

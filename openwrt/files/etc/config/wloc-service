@@ -6,7 +6,7 @@
 #   geo_source       auto (follow the bound node exit) | manual (fixed preset)
 #   manual_lat/lon   coordinates used when geo_source=manual
 #   node_ref         sing-box node tag selected by the profile
-#   assigned_device  LAN IP or unicast MAC of the WLOC device profile
+#   assigned_device  private LAN IPv4 address of the WLOC device profile
 #   probe_interval   max age of a probe observation before re-probing (seconds)
 #   geo_provider     http (ip-api.com) | stub (deterministic, for staging)
 #   probe_port       local HTTP proxy port used to observe the exit IP

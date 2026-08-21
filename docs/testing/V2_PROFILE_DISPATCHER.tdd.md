@@ -12,7 +12,8 @@ proxy resolves the source TCP address to exactly one profile target.
 - A route is enabled only after its isolated redirect is installed and verified.
 - Unknown, invalid, disabled, degraded, or target-less routes return no target.
 - Manual target clear withdraws that profile until fresh auto evidence returns.
-- MAC and IPv6 bindings are rejected by the current IPv4 redirect adapter.
+- MAC and IPv6 bindings are rejected by the profile model before the current
+  IPv4 redirect adapter is reached.
 - Multi-profile mode never installs the legacy all-device `wloc_service` table;
   only verified profile-scoped tables may intercept.
 - Profile-scoped start installs the shared fwmark/local policy route required

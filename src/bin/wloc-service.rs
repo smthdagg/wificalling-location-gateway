@@ -791,16 +791,12 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         runtime_profile.assigned_device.clone().unwrap_or_default()
     };
     eprintln!(
-        "wloc-service: profile={} enabled={} geo_source={:?} node={} device={}",
+        "wloc-service: profile={} enabled={} geo_source={:?} node={} device_configured={}",
         runtime_profile.id,
         runtime_profile.enabled,
         runtime_profile.location_mode,
         runtime_profile.node_ref,
-        if assigned_device.is_empty() {
-            "(none)".to_owned()
-        } else {
-            assigned_device.clone()
-        }
+        !assigned_device.is_empty()
     );
 
     let profile_model = uci.profile_model().ok();

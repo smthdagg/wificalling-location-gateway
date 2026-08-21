@@ -139,6 +139,7 @@ define Package/wificalling-location-gateway
   SECTION:=net
   CATEGORY:=Network
   TITLE:=Standalone WLOC Location Gateway
+  DEPENDS:=+luci-base +rpcd-mod-rpcsys +nftables +firewall4 +kmod-nft-tproxy +kmod-nft-socket +ip-full
   PROVIDES:=wloc-service luci-app-wificalling-location-gateway
 endef
 define Package/wificalling-location-gateway/description

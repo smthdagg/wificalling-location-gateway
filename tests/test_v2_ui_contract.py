@@ -68,7 +68,7 @@ class V2UiContractTests(unittest.TestCase):
             self.assertIn("ui.changes.apply(true)", source)
             self.assertIn("removeProfile(section)", source)
             self.assertIn("normalizeDeviceAddress", source)
-            self.assertIn("device address must be a private IPv4 address or unicast MAC", source)
+            self.assertIn("device address must be a private IPv4 address", source)
             self.assertEqual(source.count("uci.save('wloc-service')"), 1)
 
     def test_monitor_reads_only_validated_profile_state_paths(self):

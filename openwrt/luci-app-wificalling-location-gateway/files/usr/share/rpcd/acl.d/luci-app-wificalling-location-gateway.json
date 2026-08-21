@@ -4,14 +4,10 @@
     "read": {
       "ubus": {
         "luci.wloc": [
-          "ctl",
-          "regen_profile",
           "cert_info",
-          "regen_ca",
-          "restart_service",
           "verify_fingerprint",
           "health",
-		  "provider_test",
+          "provider_test",
           "update_status"
         ],
         "file": [
@@ -47,13 +43,11 @@
         "luci.wloc": [
           "ctl",
           "regen_profile",
-          "cert_info",
           "regen_ca",
           "restart_service",
           "restart_unified",
           "support_bundle",
           "verify_fingerprint",
-		  "provider_test",
           "clear_log",
           "update_preflight",
           "update_apply",

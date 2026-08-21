@@ -14,12 +14,10 @@ UPDATE=/usr/sbin/wloc-component-update.sh
 
 ctl_live() {
 	out="$("$CTL" "$@" 2>&1)" && return 0
-	# A pre-package hand deployment may leave an untracked process holding
-	# port 8443 after its control socket dies.  Remove only this service's
-	# process before handing lifecycle ownership back to procd.
-	killall -q wloc-service >/dev/null 2>&1 || true
-	rm -f /var/run/wloc-service/control.sock
-	/etc/init.d/wloc-service restart >/dev/null 2>&1 || return 1
+	# The unified supervisor is the only lifecycle owner. Never kill or
+	# directly restart the legacy child from an RPC facade: doing so can leave
+	# redirect state outside the supervisor's fail-open cleanup boundary.
+	/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1 || return 1
 	retry=0
 	while [ "$retry" -lt 10 ]; do
 		sleep 1
@@ -265,7 +263,11 @@ call)
 		;;
 	provider_test)
 		# Read-only provider capability check.
-		if /usr/libexec/wificalling-location-gateway/singbox-runtime.sh check >/dev/null 2>&1; then
+		read -r input
+		json_load "$input"
+		config=$(uci -q get wloc-service.main.singbox_config 2>/dev/null || true)
+		[ -n "$config" ] || config=/var/run/wloc-service/sing-box.json
+		if /usr/libexec/wificalling-location-gateway/singbox-runtime.sh check -c "$config" >/dev/null 2>&1; then
 			echo '{"state":"ok","reason":"provider_available"}'
 		else
 			echo '{"state":"failed","reason":"provider_unavailable"}'
@@ -314,8 +316,7 @@ call)
 		# the iOS profile. The iPhone must reinstall and re-trust the CA.
 		rm -f /etc/wloc-service/ca.pem /etc/wloc-service/ca.key /etc/wloc-service/ca.info.json
 		/usr/sbin/wloc-profile-redirect.sh stop-all >/dev/null 2>&1 || true
-		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
-		/etc/init.d/wloc-service restart >/dev/null 2>&1
+		/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1
 		sleep 3
 		if [ ! -f /etc/wloc-service/ca.info.json ]; then
 			json_init
