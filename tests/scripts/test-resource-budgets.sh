@@ -40,13 +40,16 @@ grep -E '^elapsed_ms=[0-9]+$' "$tmp/report.env" >/dev/null
 grep -E '^peak_rss_kib=[0-9]+$' "$tmp/report.env" >/dev/null
 grep -E '^cpu_percent=[0-9]+$' "$tmp/report.env" >/dev/null
 
-timeout_report="$tmp/timeout-report.env"
-if WLOC_RESOURCE_TIMEOUT_SECONDS=1 WLOC_RESOURCE_REPORT="$timeout_report" \
-	"$profile" -- sleep 2 >/dev/null 2>&1; then
-	echo 'resource profiler accepted a timed-out command' >&2
-	exit 1
+if command -v python3 >/dev/null 2>&1; then
+	timeout_report="$tmp/python-timeout-report.env"
+	if python3 "$repo_root/scripts/ci/profile-resource.py" \
+		--timeout-seconds 1 --report "$timeout_report" -- \
+		python3 -c 'import time; time.sleep(2)' >/dev/null 2>&1; then
+		echo 'Python resource profiler accepted a timed-out command' >&2
+		exit 1
+	fi
+	grep -E '^command_status=[1-9][0-9]*$' "$timeout_report" >/dev/null
 fi
-grep -E '^command_status=[1-9][0-9]*$' "$timeout_report" >/dev/null
 
 if [ -r /proc/self/status ] && [ -r /proc/self/stat ]; then
 	WLOC_RESOURCE_FORCE_PROCFS=1 \
