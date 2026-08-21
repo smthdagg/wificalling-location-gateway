@@ -48,9 +48,14 @@ collect() {
 ips=$(collect | grep -v "^$ROUTER_IP$" | sort -u | tr '
 ' ',' | sed 's/,\$$//')
 [ -n "$ips" ] || {
-    echo "wloc-refresh-set: no A records resolved (DNS unavailable?)" >&2
-    exit 1
+	echo "wloc-refresh-set: no A records resolved (DNS unavailable?)" >&2
+	exit 1
 }
+
+# Elements expire when this component stops refreshing them. The rules remain
+# present but their destination set becomes empty, so a hard kill cannot leave
+# an indefinite interception path behind.
+timed_ips=$(printf '%s' "$ips" | sed 's/,/, timeout 30s, /g; s/$/ timeout 30s/')
 
 multiple_profiles_configured() {
 	command -v uci >/dev/null 2>&1 || return 1
@@ -66,8 +71,8 @@ if multiple_profiles_configured; then
 	"$NFT_BINARY" delete table inet "$TABLE" 2>/dev/null || true
 elif "$NFT_BINARY" list table inet "$TABLE" >/dev/null 2>&1; then
 	"$NFT_BINARY" flush set inet "$TABLE" "$SET" 2>/dev/null || \
-		"$NFT_BINARY" add set inet "$TABLE" "$SET" '{ type ipv4_addr; }'
-	"$NFT_BINARY" add element inet "$TABLE" "$SET" "{ $ips }"
+		"$NFT_BINARY" add set inet "$TABLE" "$SET" '{ type ipv4_addr; flags timeout; timeout 30s; }'
+	"$NFT_BINARY" add element inet "$TABLE" "$SET" "{ $timed_ips }"
 fi
 
 # V2 profiles each have an isolated nft table and set. Refresh the same
@@ -109,8 +114,8 @@ while IFS= read -r profile_table; do
 		continue
 	fi
 	"$NFT_BINARY" flush set inet "$profile_table" "$SET" 2>/dev/null || \
-        "$NFT_BINARY" add set inet "$profile_table" "$SET" '{ type ipv4_addr; }'
-    "$NFT_BINARY" add element inet "$profile_table" "$SET" "{ $ips }"
+		"$NFT_BINARY" add set inet "$profile_table" "$SET" '{ type ipv4_addr; flags timeout; timeout 30s; }'
+	"$NFT_BINARY" add element inet "$profile_table" "$SET" "{ $timed_ips }"
 done <<EOF
 $profile_tables
 EOF

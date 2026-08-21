@@ -34,6 +34,10 @@ fi
 grep -F 'WLOC_SERVICE_PIDFILE' "$supervisor" >/dev/null
 grep -F 'service_pid_matches' "$supervisor" >/dev/null
 grep -F 'health)' "$supervisor" >/dev/null
+grep -F 'WLOC_REFRESH_SET_HELPER' "$supervisor" >/dev/null
+grep -F 'refresh_set' "$supervisor" >/dev/null
+grep -F 'flags timeout' "$redirect" "$wloc_refresh" "$repo_root/openwrt/files/usr/sbin/wloc-profile-redirect.sh" >/dev/null
+grep -F 'timeout 30s' "$redirect" "$wloc_refresh" "$repo_root/openwrt/files/usr/sbin/wloc-profile-redirect.sh" >/dev/null
 
 mkdir -p "$tmp/health-bin" "$tmp/gateway"
 cat > "$tmp/health-bin/nft" <<'EOF'

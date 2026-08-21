@@ -113,7 +113,7 @@ done
 
 # Table + set + mangle prerouting chain (filter hook, before DNAT).
 "$NFT_BINARY" add table inet "$TABLE" 2>/dev/null || true
-"$NFT_BINARY" add set inet "$TABLE" apple_hosts '{ type ipv4_addr; }' 2>/dev/null || true
+"$NFT_BINARY" add set inet "$TABLE" apple_hosts '{ type ipv4_addr; flags timeout; timeout 30s; }' 2>/dev/null || true
 # The chain must be a filter/mangle chain for tproxy; drop a leftover
 # nat chain (from the old redirect scheme) first.
 "$NFT_BINARY" flush chain inet "$TABLE" "$CHAIN" 2>/dev/null || true

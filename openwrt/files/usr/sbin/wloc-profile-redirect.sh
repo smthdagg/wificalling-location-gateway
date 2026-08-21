@@ -109,7 +109,7 @@ case "$action" in
 		table=${PROFILE_TABLE_PREFIX}${profile_id}
 		device_ip=$3
 		"$nft_binary" add table inet "$table" 2>/dev/null || true
-		"$nft_binary" add set inet "$table" apple_hosts '{ type ipv4_addr; }' 2>/dev/null || true
+		"$nft_binary" add set inet "$table" apple_hosts '{ type ipv4_addr; flags timeout; timeout 30s; }' 2>/dev/null || true
 		"$nft_binary" flush chain inet "$table" prerouting 2>/dev/null || true
 		"$nft_binary" delete chain inet "$table" prerouting 2>/dev/null || true
 		"$nft_binary" "add chain inet $table prerouting { type filter hook prerouting priority mangle; }"

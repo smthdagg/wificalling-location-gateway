@@ -26,6 +26,7 @@ GATEWAY_NFT_BINARY=${GATEWAY_NFT_BINARY:-nft}
 PROFILE_PROXY_READY_FILE=${WLOC_PROFILE_PROXY_READY_FILE:-/var/run/wloc-service/profiles/.proxy-ready}
 PROFILE_ACTIVATE_FILE=${WLOC_PROFILE_ACTIVATE_FILE:-/var/run/wloc-service/profiles/.activate}
 PROFILE_READY_FILE=${WLOC_PROFILE_READY_FILE:-/var/run/wloc-service/profiles/.ready}
+WLOC_REFRESH_SET_HELPER=${WLOC_REFRESH_SET_HELPER:-/usr/sbin/wloc-refresh-set.sh}
 CHECK_INTERVAL=${WLOC_SUPERVISOR_HEALTH_INTERVAL:-10}
 MAX_RUNTIME_SECONDS=${WLOC_SUPERVISOR_MAX_RUNTIME:-0}
 START_TIMEOUT=${WLOC_SUPERVISOR_START_TIMEOUT:-30}
@@ -105,6 +106,7 @@ install_redirect() {
 		"$REDIRECT_HELPER" legacy-stop
 		[ -x "$PROFILE_REDIRECT_HELPER" ] || return 1
 		"$PROFILE_REDIRECT_HELPER" route-start
+		[ ! -x "$WLOC_REFRESH_SET_HELPER" ] || "$WLOC_REFRESH_SET_HELPER" >/dev/null 2>&1 || true
 		: > "$PROFILE_ACTIVATE_FILE"
 		deadline=$(( $(now) + START_TIMEOUT ))
 		while [ ! -f "$PROFILE_READY_FILE" ]; do
@@ -115,6 +117,12 @@ install_redirect() {
 		return 0
 	fi
 	"$REDIRECT_HELPER" start
+	[ ! -x "$WLOC_REFRESH_SET_HELPER" ] || "$WLOC_REFRESH_SET_HELPER" >/dev/null 2>&1 || true
+}
+
+refresh_set() {
+	[ -x "$WLOC_REFRESH_SET_HELPER" ] || return 0
+	"$WLOC_REFRESH_SET_HELPER" >/dev/null 2>&1 || true
 }
 
 cleanup_runtime() {
@@ -250,6 +258,9 @@ start_supervisor() {
 
 	started=$(now)
 	while :; do
+		# Renew only the component-owned WLOC destination lease. If DNS or the
+		# helper fails, nft timeout expiry removes the elements automatically.
+		refresh_set
 		if ! health_ok; then
 			cleanup_runtime health_failed 1
 			exit 1
