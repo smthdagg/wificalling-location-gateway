@@ -6,7 +6,7 @@
 - Capabilities used: integration,security,test,openwrt,ui
 - Branch: codex/issue-41-v2-release-codex-v2-lead-20260821133002-404596fe
 - Checkpoint parent: 501dea9
-- Updated at (UTC): 2026-08-21T19:17:19Z
+- Updated at (UTC): 2026-08-21T19:42:41Z
 - Credentials included: no
 
 ## Objective
@@ -42,6 +42,15 @@ that have not been observed.
 - Release packaging now emits and verifies three assets: AX6S AArch64 IPK,
   OpenWrt 24.x x86_64 IPK, and OpenWrt 25.x APK. The four-case Docker matrix
   passed with socket/status checks.
+- The V2 LuCI source and package copy are identical for the device page and
+  translation map. All current `i18n.t()` keys have Chinese entries in the
+  mirrored PO catalogue and formal `po/zh_Hans` source; a test rejects stale
+  Gateway-only UI text.
+- The final rebuilt package was installed again on AX6S after removing the old
+  package. Its final hash is
+  `58cc90e5ac5e05af26760984ac3b3a82a84cb32d93f554f37c067e01fc8f05cd`; API,
+  UI/PO files, mobileconfig export, service health, RSS, storage and memory
+  checks passed.
 
 ## Files changed
 
@@ -60,11 +69,13 @@ that have not been observed.
 | Command | Result | Evidence |
 |---|---|---|
 | `./scripts/ci/verify.sh` | Passed | Rust, Python, JavaScript, package/UI/shell/security/resource/update checks |
-| Rust coverage | Passed | 80.44% line coverage, above the 80% gate |
+| Rust coverage | Passed | 80.40% line coverage, above the 80% gate |
 | `tests/scripts/test-singbox-runtime.sh` | Passed | provider selection, version validation and explicit invalid-provider rejection |
 | `tests/scripts/test-ax6s-migration-contract.sh` | Passed | backup, stop/disable, remove-only-old-apps, post-removal space check and install ordering |
 | `tests/scripts/test-standalone-ax6s-package.sh` | Passed | architecture-specific package layout and provider warning |
-| `git diff --check` | Warnings only | blank-line-at-EOF notices; no content errors |
+| `python3 -m unittest discover -s tests -p 'test_v2_ui_contract.py'` | Passed | 9 UI/catalogue contract tests |
+| `./scripts/openwrt/verify-docker-matrix.sh --dist-dir dist/openwrt-release` | Passed | 4 OpenWrt/iStoreOS package installs and status checks |
+| `git diff --check` | Passed | no whitespace errors |
 
 ## Failed attempts
 
@@ -91,13 +102,16 @@ that have not been observed.
   to the standalone WLOC v2 guide.
 - Mobileconfig export now uses a unique mode-0600 temporary file under `/tmp`
   with cleanup traps instead of the fixed `/tmp/wloc-ca.b64` path.
+- The device page was synchronized between canonical and package sources; all
+  current UI keys were added to the formal Chinese PO catalogue, and the stale
+  `restart the gateway` translation was removed from the standalone product.
 
 ## Final acceptance status
 
 - AX6S standalone runtime, migration, provider reuse, resource, fail-open,
   profile CRUD, manual/auto location persistence, stop/start, reboot, signed
-  update, transactional health-rollback, final release-candidate install, and
-  mobileconfig export gates:
+  update, transactional health-rollback, final release-candidate install,
+  UI/PO assets, and mobileconfig export gates:
   **pass**.
 - Real iPhone WLOC traffic was not run because no client fixture was supplied.
 - Hard power-cut during opkg, flash-full injection, and real iPhone WLOC

@@ -57,9 +57,12 @@ contract when a real package exists.
 
 ## AX6S acceptance
 
-The AX6S resource gate is recorded in
-`docs/testing/AX6S_REAL_DEVICE_2026-08-22.md`: 242,260 KiB RAM, 36,156 KiB
-available in the steady-state snapshot, 1,948 KiB WLOC RSS, 30,176 KiB reused
-PassWall sing-box RSS, and 15,868 KiB persistent storage free after install.
-The remaining resource work is repeatable CPU sampling under real WLOC traffic
-and a flash-full update fault; no unredacted device data belongs in the repo.
+The latest AX6S release-candidate gate is recorded in
+`docs/testing/AX6S_REAL_DEVICE_2026-08-22.md`: 242,260 KiB RAM, 22,484 KiB
+available after restart, 1,948 KiB WLOC RSS, and 14,240 KiB persistent storage
+free after reinstall and the preserved configuration backup. An earlier steady
+state sample measured the reused PassWall sing-box at 30,176 KiB RSS; the final
+retest confirmed the same provider path but did not re-sample provider RSS.
+Repeatable CPU sampling under real WLOC traffic, hard power loss during opkg,
+and a flash-full update fault remain explicit gaps; no unredacted device data
+belongs in the repo.

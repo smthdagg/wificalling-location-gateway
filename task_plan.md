@@ -1,4 +1,9 @@
-# Wi-Fi Calling + wloc 开发前期集成规划
+# 历史规划档案：Wi-Fi Calling + WLOC
+
+> 本文件记录早期 Gateway/WLOC 集成方向和协作准备过程，不是当前 v2
+> 产品规格。当前项目是独立 WLOC；请以 `DEVELOPMENT_TEST_PLAN.md`、
+> `docs/adr/0003-standalone-wloc-product-boundary.md` 和
+> `docs/releases/V2.0_TASK_BREAKDOWN.md` 为准。
 
 ## 目标
 读取正确的 Codex 历史任务，结合 Wi-Fi Calling Gateway 1.7，形成路由器侧自动定位组件的独立 PoC、真机验证和可选集成计划。

@@ -25,15 +25,15 @@ package, UCI file, init script, or runtime dependency was installed.
 
 ## Resource observations
 
-- Persistent storage: 87,620 KiB total; 15,412 KiB free after the final
+- Persistent storage: 87,620 KiB total; 14,240 KiB free after the final
   package and configuration backup were present.
 - Temporary storage: 121,128 KiB total; 45,664 KiB free after installation.
-- Memory: 242,260 KiB total; 19,088 KiB available in the final steady-state
+- Memory: 242,260 KiB total; 22,484 KiB available in the final steady-state
   snapshot; no swap configured.
-- WLOC RSS: 1,952 KiB, three threads.
+- WLOC RSS: 1,948 KiB, three threads.
 - Reused PassWall sing-box RSS: 30,176 KiB, eight threads; no duplicate WLOC
   provider process was launched.
-- The final AX6S package itself is 1,437,440 bytes and the AArch64 WLOC service
+- The final AX6S package itself is 1,445,635 bytes and the AArch64 WLOC service
   binary is 2,035,872 bytes; the OpenWrt cross-build gate also
   reported static AArch64 ELF with no dynamic dependency.
 
@@ -59,6 +59,7 @@ package, UCI file, init script, or runtime dependency was installed.
 | Rollback removes the transaction directory and restores `current.version` | pass |
 | Independent LuCI basic/devices/monitor/update assets present | pass |
 | Final release candidate remove/install/restart on AX6S | pass |
+| Final V2 device page, English source, and formal Chinese PO assets on AX6S | pass |
 | Mobileconfig generation with unique private intermediate and cleanup | pass |
 | Real iPhone WLOC traffic and packet capture | not run; no device fixture supplied |
 
@@ -112,15 +113,15 @@ matrix installed and started all four cases: AX6S/OpenWrt 24.10.5,
 OpenWrt 24.10.8 x86_64, OpenWrt 25.12.3 x86_64, and iStoreOS 24.10.5 x86_64.
 The exact host-side package hashes are recorded in the release staging
 directory's `SHA256SUMS`; the final AX6S package hash is
-`28b56a27bc393a5fb94bd73220470c5b2755e1f28511b94d14694e0e71fd744f`.
+`58cc90e5ac5e05af26760984ac3b3a82a84cb32d93f554f37c067e01fc8f05cd`.
 Publication still requires the release signing key and explicit external
 release approval.
 
 ## Acceptance status
 
 AX6S standalone runtime, migration, resource, provider, reboot, fail-open,
-mobileconfig, release-candidate installation, and transactional health-rollback
-gates: **pass**.
+mobileconfig, UI/PO asset, release-candidate installation, and transactional
+health-rollback gates: **pass**.
 
 The real-device WLOC client traffic path was not exercised because no test
 device/fixture was supplied during this run. That is a separate functional

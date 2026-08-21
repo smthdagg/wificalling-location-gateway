@@ -72,7 +72,7 @@ function validateProfile(profile) {
 }
 
 function validateProfiles(profiles) {
-	if (profiles.length > MAX_PROFILES) return ['at most ' + MAX_PROFILES + ' profiles are supported'];
+	if (profiles.length > MAX_PROFILES) return [wlocI18n.t('at most %d profiles are supported').replace('%d', MAX_PROFILES)];
 	var ids = {}, devices = {}, errors = [];
 	profiles.forEach(function(profile) {
 		var error = validateProfile(profile);
@@ -81,7 +81,7 @@ function validateProfiles(profiles) {
 		if (devices[device]) error = 'each device may have only one profile';
 		ids[profile['.name']] = true;
 		devices[device] = true;
-		if (error) errors.push(profile['.name'] + ': ' + error);
+		if (error) errors.push(profile['.name'] + ': ' + wlocI18n.t(error));
 	});
 	return errors;
 }
@@ -111,8 +111,8 @@ return view.extend({
 			current = current || {};
 			var services = (current || {}).services || {};
 			var wloc = services.wloc || {}, provider = services.provider || {};
-			healthSummary.textContent = 'Provider: ' + (provider.available ? 'available' : 'unavailable') +
-				' | WLOC: ' + (wloc.running ? 'running' : 'stopped') +
+			healthSummary.textContent = wlocI18n.t('Provider: ') + (provider.available ? wlocI18n.t('available') : wlocI18n.t('unavailable')) +
+				' | WLOC: ' + (wloc.running ? wlocI18n.t('running') : wlocI18n.t('stopped')) +
 				' | ' + (wloc.phase || 'unknown');
 			(current.profiles || []).forEach(function(profile) {
 				if (stateCells[profile.id]) stateCells[profile.id].textContent = profileStatus(profile);
@@ -128,11 +128,11 @@ return view.extend({
 		function stageBasic() {
 			var interval = Number(basic.interval.value);
 			if (!isFinite(interval) || interval < 30 || interval > 86400 || Math.floor(interval) !== interval) {
-				notify(wlocI18n.t('Apply failed'), 'probe interval must be between 30 and 86400 seconds', 'error');
+				notify(wlocI18n.t('Apply failed'), wlocI18n.t('probe interval must be between 30 and 86400 seconds'), 'error');
 				return false;
 			}
 			if (['http', 'stub'].indexOf(basic.provider.value) < 0) {
-				notify(wlocI18n.t('Apply failed'), 'geo provider is invalid', 'error');
+				notify(wlocI18n.t('Apply failed'), wlocI18n.t('geo provider is invalid'), 'error');
 				return false;
 			}
 			uci.set('wloc-service', 'main', 'enabled', basic.enabled.checked ? '1' : '0');
@@ -145,7 +145,7 @@ return view.extend({
 			var profile = profileFromFields(section, fields);
 			var error = validateProfile(profile);
 			if (error) {
-				notify(wlocI18n.t('Stage failed'), profile['.name'] + ': ' + error, 'error');
+				notify(wlocI18n.t('Stage failed'), profile['.name'] + ': ' + wlocI18n.t(error), 'error');
 				return;
 			}
 			Object.keys(profile).forEach(function(key) {
@@ -186,14 +186,14 @@ return view.extend({
 			profiles.forEach(function(section) {
 				var fields = {
 					label: textInput(section.label, wlocI18n.t('Label')),
-					address: textInput(section.assigned_device, '192.168.1.100 or MAC'),
-					node: textInput(section.node_ref || 'default', 'node reference'),
-					latitude: textInput(section.manual_lat, 'lat'),
-					longitude: textInput(section.manual_lon, 'lon'),
+					address: textInput(section.assigned_device, wlocI18n.t('192.168.1.100 or MAC')),
+					node: textInput(section.node_ref || 'default', wlocI18n.t('node reference')),
+					latitude: textInput(section.manual_lat, wlocI18n.t('lat')),
+					longitude: textInput(section.manual_lon, wlocI18n.t('lon')),
 					enabled: E('input', { type: 'checkbox', checked: section.enabled === '1' }),
 					geoMode: E('select', {})
 				};
-				setOption(fields.geoMode, [['auto', 'Auto follow selected node'], ['manual', 'Manual location']], section.geo_source || 'auto');
+				setOption(fields.geoMode, [['auto', wlocI18n.t('Auto follow selected node')], ['manual', wlocI18n.t('Manual location')]], section.geo_source || 'auto');
 				var state = E('span', {});
 				stateCells[section['.name']] = state;
 				state.textContent = profileStatus((health.profiles || []).filter(function(p) { return p.id === section['.name']; })[0]);
@@ -215,7 +215,7 @@ return view.extend({
 
 		function addProfile() {
 			var profiles = uci.sections('wloc-service', 'device');
-			if (profiles.length >= MAX_PROFILES) return notify(wlocI18n.t('Add failed'), 'at most ' + MAX_PROFILES + ' profiles are supported', 'error');
+			if (profiles.length >= MAX_PROFILES) return notify(wlocI18n.t('Add failed'), wlocI18n.t('at most %d profiles are supported').replace('%d', MAX_PROFILES), 'error');
 			var id = window.prompt(wlocI18n.t('New profile id'), 'device' + (profiles.length + 1));
 			if (!id || !/^[a-z0-9_]{1,32}$/.test(id) || uci.get('wloc-service', id))
 				return notify(wlocI18n.t('Add failed'), wlocI18n.t('Use a unique lowercase profile id.'), 'error');
@@ -236,7 +236,7 @@ return view.extend({
 		basic.enabled = E('input', { type: 'checkbox', checked: main.enabled !== '0' });
 		basic.interval = textInput(main.probe_interval || '300', '30-86400', 'number');
 		basic.provider = E('select', {});
-		setOption(basic.provider, [['http', 'HTTP provider'], ['stub', 'Stub provider']], main.geo_provider || 'http');
+		setOption(basic.provider, [['http', wlocI18n.t('HTTP provider')], ['stub', wlocI18n.t('Stub provider')]], main.geo_provider || 'http');
 		var applyButton = E('button', { class: 'cbi-button cbi-button-apply', click: applyAll }, wlocI18n.t('Apply & restart'));
 		renderRows();
 		refreshHealth(health);
@@ -253,7 +253,7 @@ return view.extend({
 			]),
 			E('div', { class: 'cbi-section', style: 'overflow:auto' }, [
 				E('h3', {}, wlocI18n.t('Device profiles')), E('p', {}, [E('button', { class: 'cbi-button cbi-button-add', click: addProfile }, wlocI18n.t('Add profile')), ' ', applyButton]),
-				E('table', { class: 'table' }, [E('tr', { class: 'tr table-titles' }, ['ID', wlocI18n.t('Label'), wlocI18n.t('Device'), wlocI18n.t('Node'), wlocI18n.t('Mode'), wlocI18n.t('Manual location'), wlocI18n.t('Enabled / state'), wlocI18n.t('Action')].map(function(title) { return E('th', { class: 'th' }, title); })), body])
+				E('table', { class: 'table' }, [E('tr', { class: 'tr table-titles' }, [wlocI18n.t('ID'), wlocI18n.t('Label'), wlocI18n.t('Device'), wlocI18n.t('Node'), wlocI18n.t('Mode'), wlocI18n.t('Manual location'), wlocI18n.t('Enabled / state'), wlocI18n.t('Action')].map(function(title) { return E('th', { class: 'th' }, title); })), body])
 			])
 		]);
 	}

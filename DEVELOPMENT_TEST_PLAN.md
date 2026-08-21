@@ -52,8 +52,9 @@
   服务保持安全失败/透传。
 - **更新页**：组件更新必须是独立 LuCI 页面，并在应用前检查设备架构、固件系列、
   包格式、所需内核能力和剩余空间；不检查也不依赖 Gateway 版本。
-- **语言**：所有 UI/RPC 英文为源文案，中文只通过正式 LuCI 语言包提供；现有
-  自定义翻译表和硬编码中文是待清理兼容层。
+- **语言**：所有 UI/RPC 英文为源文案，当前页面使用的中文均有正式 LuCI
+  `po/zh_Hans` 语言包条目；因 AX6S 上的 LuCI 26 构建环境不能生成 `.lmo`，前端
+  映射仅作为同一目录的轻量运行时兼容层，并由测试强制与正式 PO 保持覆盖和镜像一致。
 - **验收状态**：主机测试、静态包检查和交叉编译不能替代 AX6S 的 RSS、CPU、
   存储、启动、升级中断恢复和回滚证据；没有脱敏真机证据不得标记 V2 发布通过。
 
@@ -445,7 +446,12 @@ V2-08 将上述目标固化为包内的
 
 退出条件：停止脚本和重启都能恢复原始网络；不需要卸载 sing-box。
 
-### Phase 6：iPhone 真机验证（5–8 天）
+### Phase 6：历史 PoC iPhone 真机验证（历史记录）
+
+本节保留早期 Gateway/WLOC 合并 PoC 的验证步骤，不是当前 v2 发布门禁。
+当前独立 WLOC 的实机证据以
+[`docs/testing/AX6S_REAL_DEVICE_2026-08-22.md`](docs/testing/AX6S_REAL_DEVICE_2026-08-22.md)
+为准；真实 iPhone WLOC 流量仍是未完成的附加验证项。
 
 按顺序测试：
 
@@ -472,10 +478,11 @@ V2-08 将上述目标固化为包内的
 - 不显示地图，不显示虚假的“Wi-Fi Calling 已激活”；
 - 一个架构相关集成 IPK/APK，旧组件入口仅作为迁移兼容层。
 
-### Phase 8：V2 统一生命周期
+### Phase 8：V2 独立 WLOC 统一生命周期
 
-- Gateway/WLOC 由统一 supervisor 管理，旧 init 不得独立 respawn 或拥有 redirect；
-- feature flag 默认关闭；WLOC 故障不得阻止 Gateway 继续提供安全 passthrough；
+- 独立 WLOC 的统一 supervisor 管理服务、provider 检查和 redirect；旧 WLOC
+  入口不得独立 respawn 或拥有 redirect，外部 Gateway 不属于运行时；
+- feature flag 默认关闭；WLOC 故障必须回到安全 passthrough，不得扩大拦截范围；
 - 配置迁移保留 UCI/CA，空间不足、更新中断和回滚必须有明确失败路径；
 - 真机验收前不得发布，真实 AX6S 证据必须覆盖低内存、低存储、重启、升级和回滚。
 

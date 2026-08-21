@@ -18,8 +18,8 @@ the existing WLOC configuration or CA.
 - Command: `./tests/scripts/test-standalone-ax6s-package.sh`
 - Result: `standalone AX6S package tests passed`
 - Full command: `./scripts/ci/verify.sh`
-- Result: repository gates passed; 83 Python tests passed; Rust line coverage
-  80.11%; audit, deny, secret scan, release-size, shell and packaging gates passed.
+- Result: repository gates passed; 85 Python tests passed; Rust line coverage
+  80.40%; audit, deny, secret scan, release-size, shell and packaging gates passed.
 
 ## Guarantees
 
@@ -46,7 +46,6 @@ not committed.
 This document records package-construction evidence and links to the separate
 redacted AX6S installation/resource/rollback evidence. The real device was
 tested after removing the old WLOC package, while preserving the selected
-tiny/lite/PassWall provider. The release candidate package was built and
-verified after that run; device-update evidence is recorded by package family
-and exact tested versions rather than being conflated with the later release
-filename.
+tiny/lite/PassWall provider. The exact release candidate package was then
+installed and verified on AX6S; its SHA-256 is recorded in the release
+directory's `SHA256SUMS`.

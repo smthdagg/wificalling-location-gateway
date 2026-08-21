@@ -4,13 +4,14 @@ All notable changes are documented here. Versions follow Semantic Versioning.
 
 ## [2.0.0] - 2026-08-22
 
-Unified Gateway/WLOC lifecycle and multi-device profile release candidate.
+Standalone WLOC lifecycle and multi-device profile release candidate.
 
 ### Added
 
-- Unified Gateway/WLOC supervisor, shared provider selection, profile-aware
+- Unified standalone WLOC supervisor, shared provider selection, profile-aware
   LuCI settings/status/log/update management, bounded diagnostics, and
-  transactional update/recovery flows.
+  transactional update/recovery flows. The separate Wi-Fi Calling Gateway is
+  not a package, UCI, process, or runtime dependency.
 - Independent device profiles with fixed-node or follow-node selection,
   auto/manual location mode, enablement, status, and redacted monitoring.
 
@@ -21,9 +22,10 @@ Unified Gateway/WLOC lifecycle and multi-device profile release candidate.
 
 ### Release status
 
-AX6S staging migration, reboot, update, rollback, and resource evidence is
-recorded. Final iPhone/Wi-Fi Calling traffic verification and signed release
-feed publication remain acceptance gates.
+AX6S migration, reboot, update, rollback, resource, and final release-candidate
+installation evidence is recorded. Real iPhone WLOC traffic, hard power-loss/
+flash-full fault injection, and signed release-feed publication remain explicit
+gaps.
 
 ## [1.2.2] - 2026-08-19
 

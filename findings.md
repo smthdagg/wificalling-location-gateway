@@ -1,4 +1,8 @@
-# 调研发现
+# 历史调研发现
+
+> 本文件保留早期会话、Gateway 集成和 PoC 调研记录。它不定义当前 v2
+> 的产品边界或验收结论；当前独立 WLOC 结论以 `DEVELOPMENT_TEST_PLAN.md`
+> 和 `docs/adr/0003-standalone-wloc-product-boundary.md` 为准。
 
 ## 会话存档
 

@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import unittest
 from pathlib import Path
@@ -131,13 +132,34 @@ class V2UiContractTests(unittest.TestCase):
             mobileconfig_text = mobileconfig.read_text(encoding="utf-8")
             i18n_sources.append(i18n_text)
             mobileconfig_sources.append(mobileconfig_text)
-            for stale in ("Wi-Fi Calling Settings", "Wi-Fi Calling status", "wfc settings", "wfc monitor"):
+            for stale in ("Wi-Fi Calling Settings", "Wi-Fi Calling status", "wfc settings", "wfc monitor", "restart the gateway"):
                 self.assertNotIn(stale, i18n_text)
             self.assertIn("standalone WLOC location", mobileconfig_text)
             self.assertIn("CA_B64=$(mktemp /tmp/wloc-ca.XXXXXX)", mobileconfig_text)
             self.assertNotIn("/tmp/wloc-ca.b64", mobileconfig_text)
         self.assertEqual(i18n_sources[0], i18n_sources[1])
         self.assertEqual(mobileconfig_sources[0], mobileconfig_sources[1])
+
+    def test_current_ui_keys_have_a_mirrored_formal_luci_catalogue(self):
+        po_sources = []
+        i18n = (self.root / "openwrt/files/www/luci-static/resources/wificalling-location-gateway/i18n.js").read_text(encoding="utf-8")
+        used = set()
+        for page in (self.root / "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway").glob("*.js"):
+            used.update(re.findall(r"(?:i18n|wlocI18n)\.t\(['\"]([^'\"]+)['\"]\)", page.read_text(encoding="utf-8")))
+        map_keys = set(re.findall(r"^\s*'((?:\\.|[^'])*)'\s*:", i18n, re.MULTILINE))
+        self.assertTrue(used <= map_keys, sorted(used - map_keys))
+        for prefix in (
+            self.root / "openwrt/files",
+            self.root / "openwrt/luci-app-wificalling-location-gateway/files",
+        ):
+            po = prefix / "usr/lib/lua/luci/i18n/wificalling-location-gateway.zh-cn.po"
+            self.assertTrue(po.exists(), po)
+            po_sources.append(po.read_text(encoding="utf-8"))
+        self.assertEqual(po_sources[0].rstrip(), po_sources[1].rstrip())
+        formal = self.root / "openwrt/luci-app-wificalling-location-gateway/po/zh_Hans/wificalling-location-gateway.po"
+        self.assertEqual(po_sources[1].rstrip(), formal.read_text(encoding="utf-8").rstrip())
+        for key in used:
+            self.assertIn('msgid ' + json.dumps(key, ensure_ascii=False), po_sources[0])
 
 
 if __name__ == "__main__":
