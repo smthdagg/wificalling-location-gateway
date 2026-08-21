@@ -1273,14 +1273,14 @@ mod tests {
     }
 
     #[test]
-    fn mac_profile_is_not_enabled_until_runtime_resolution_exists() {
+    fn mac_profile_is_rejected_before_runtime_activation() {
         let config = WlocUciConfig::parse(
             "config device 'phone'\n\toption assigned_device 'aa:bb:cc:dd:ee:ff'\n",
-        )
-        .unwrap();
-        let profile = runtime_profile_from_uci(&config);
-        assert!(!profile.enabled);
-        assert!(!profile.runtime_supported);
+        );
+        assert!(matches!(
+            config,
+            Err(wificalling_location_gateway::config::UciError::Profile(_))
+        ));
     }
 
     #[test]
