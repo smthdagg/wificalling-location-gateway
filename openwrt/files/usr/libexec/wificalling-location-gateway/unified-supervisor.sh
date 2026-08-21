@@ -17,6 +17,10 @@ LOCKDIR=$RUNDIR/.lock
 WLOC_INIT=${WLOC_INIT:-/etc/init.d/wloc-service}
 GATEWAY_INIT=${GATEWAY_INIT:-/etc/init.d/wificalling-gateway}
 REDIRECT_HELPER=${WLOC_REDIRECT_HELPER:-/usr/sbin/wloc-redirect-sync.sh}
+PROFILE_REDIRECT_HELPER=${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.sh}
+PROFILE_PROXY_READY_FILE=${WLOC_PROFILE_PROXY_READY_FILE:-/var/run/wloc-service/profiles/.proxy-ready}
+PROFILE_ACTIVATE_FILE=${WLOC_PROFILE_ACTIVATE_FILE:-/var/run/wloc-service/profiles/.activate}
+PROFILE_READY_FILE=${WLOC_PROFILE_READY_FILE:-/var/run/wloc-service/profiles/.ready}
 CHECK_INTERVAL=${WLOC_SUPERVISOR_HEALTH_INTERVAL:-10}
 MAX_RUNTIME_SECONDS=${WLOC_SUPERVISOR_MAX_RUNTIME:-0}
 START_TIMEOUT=${WLOC_SUPERVISOR_START_TIMEOUT:-30}
@@ -69,11 +73,51 @@ withdraw_redirect() {
 	[ -x "$REDIRECT_HELPER" ] && "$REDIRECT_HELPER" stop >/dev/null 2>&1 || true
 }
 
+withdraw_profile_redirects() {
+	[ -x "$PROFILE_REDIRECT_HELPER" ] && \
+		"$PROFILE_REDIRECT_HELPER" stop-all >/dev/null 2>&1 || true
+	rm -f "$PROFILE_PROXY_READY_FILE" "$PROFILE_ACTIVATE_FILE" "$PROFILE_READY_FILE"
+}
+
+profile_mode() {
+	case "${WLOC_PROFILE_MODE:-auto}" in
+		1|yes|profile) return 0 ;;
+		0|no|legacy) return 1 ;;
+	esac
+	command -v uci >/dev/null 2>&1 || return 1
+	profiles=$(uci -q show wloc-service 2>/dev/null \
+		| sed -n 's/^wloc-service\.[a-z0-9_-]*=device$/x/p' \
+		| wc -l | tr -d ' ')
+	[ "${profiles:-0}" -gt 1 ] 2>/dev/null
+}
+
+install_redirect() {
+	if profile_mode; then
+		# In multi-profile mode wloc-service owns one verified redirect per
+		# profile. Installing the legacy all-device table here would bypass
+		# ProfilePatchRouter's disabled/fail-closed boundary. The shared
+		# policy route is still required by every profile-scoped TPROXY chain.
+		"$REDIRECT_HELPER" legacy-stop
+		[ -x "$PROFILE_REDIRECT_HELPER" ] || return 1
+		"$PROFILE_REDIRECT_HELPER" route-start
+		: > "$PROFILE_ACTIVATE_FILE"
+		deadline=$(( $(now) + START_TIMEOUT ))
+		while [ ! -f "$PROFILE_READY_FILE" ]; do
+			[ "$(now)" -lt "$deadline" ] || return 1
+			sleep 1
+		done
+		redirect_present=1
+		return 0
+	fi
+	"$REDIRECT_HELPER" start
+}
+
 cleanup_runtime() {
 	reason=$1
 	keep_gateway=${2:-1}
 	state_phase=${3:-degraded_passthrough}
 	withdraw_redirect
+	withdraw_profile_redirects
 	stop_child "$WLOC_INIT"
 	wloc_running=0
 	if [ "$keep_gateway" -eq 1 ]; then
@@ -111,6 +155,9 @@ health_ok() {
 		return 1
 	fi
 	[ -S "${WLOC_SOCKET:-/var/run/wloc-service/control.sock}" ] || return 1
+	if profile_mode; then
+		[ -f "$PROFILE_PROXY_READY_FILE" ] || return 1
+	fi
 }
 
 gateway_healthy() {
@@ -149,6 +196,12 @@ start_supervisor() {
 	[ -x "$WLOC_INIT" ] && "$WLOC_INIT" disable >/dev/null 2>&1 || true
 	[ -x "$GATEWAY_INIT" ] && "$GATEWAY_INIT" disable >/dev/null 2>&1 || true
 	stop_child "$WLOC_INIT"
+	if profile_mode; then
+		# Remove all profile and legacy tables before either child becomes
+		# ready; startup must never inherit interception from the previous mode.
+		withdraw_profile_redirects
+		"$REDIRECT_HELPER" legacy-stop >/dev/null 2>&1 || true
+	fi
 
 	if ! gateway_healthy; then
 		if ! WLOC_SUPERVISED=1 "$GATEWAY_INIT" start >/dev/null 2>&1; then
@@ -172,7 +225,7 @@ start_supervisor() {
 		cleanup_runtime child_health_failed 1
 		exit 1
 	fi
-	if ! "$REDIRECT_HELPER" start >/dev/null 2>&1; then
+	if ! install_redirect >/dev/null 2>&1; then
 		cleanup_runtime redirect_install_failed 1
 		exit 1
 	fi

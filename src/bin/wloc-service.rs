@@ -7,6 +7,7 @@
 //!
 //! Socket path: `WLOC_SOCKET` (default `/var/run/wloc-service/control.sock`).
 
+use std::collections::HashMap;
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
@@ -14,7 +15,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use wificalling_location_gateway::app::{WlocService, WlocServiceConfig};
 use wificalling_location_gateway::config::{
-    DeviceProfile, LocationMode, RuntimeProfile, WlocUciConfig,
+    DeviceProfile, LocationMode, ProfileModel, RuntimeProfile, WlocUciConfig,
 };
 use wificalling_location_gateway::exitprobe::runtime::{ExitProbeRuntime, ProbeFailure};
 use wificalling_location_gateway::exitprobe::{NodeRef, ProbeLimits};
@@ -25,9 +26,10 @@ use wificalling_location_gateway::mitm::proxy::MitmProxy;
 use wificalling_location_gateway::mitm::CaBundle;
 use wificalling_location_gateway::service::api::RequestParams;
 use wificalling_location_gateway::service::control::{RuntimeControl, RuntimeFailure};
-use wificalling_location_gateway::service::dispatch::ServiceDispatch;
+use wificalling_location_gateway::service::dispatch::{DispatchError, ServiceDispatch};
+use wificalling_location_gateway::service::profile_dispatch::ProfilePatchRouter;
 use wificalling_location_gateway::service::profile_runtime::{
-    ProfileRuntimeControl, ProfileRuntimeError,
+    ProfileRuntimeControl, ProfileRuntimeError, ProfileRuntimeManager,
 };
 use wificalling_location_gateway::service::server::ControlServer;
 use wificalling_location_gateway::service::GeoRecord;
@@ -48,6 +50,36 @@ fn now_unix() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+fn profile_marker_path(name: &str, default: &str) -> std::path::PathBuf {
+    std::env::var(name)
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from(default))
+}
+
+fn write_profile_marker(path: &std::path::Path) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, b"ready\n")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
+fn wait_for_profile_marker(path: &std::path::Path, timeout: Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    while !path.exists() {
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    true
 }
 
 fn disabled_runtime_profile() -> RuntimeProfile {
@@ -241,6 +273,214 @@ impl ProfileRuntimeControl for OpenWrtRuntime {
     }
 }
 
+/// Per-profile WlocService state does not own the shared Gateway process.
+/// The unified procd supervisor and `ProfileRuntimeManager` own that process
+/// and each profile's redirect; this adapter keeps the profile's probe/Geo
+/// state machine independent without spawning another engine.
+#[derive(Default)]
+struct ProfileServiceRuntime;
+
+impl RuntimeControl for ProfileServiceRuntime {
+    fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+
+    fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure> {
+        Ok(true)
+    }
+
+    fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+
+    fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+
+    fn remove_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+
+    fn redirect_present(&mut self) -> Result<bool, RuntimeFailure> {
+        Ok(false)
+    }
+
+    fn disarm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+
+    fn drain_engine(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+
+    fn stop_engine(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+}
+
+type BoxedProfileService = Box<dyn ServiceDispatch>;
+
+/// One control-plane facade over independent per-profile probe/Geo handlers
+/// and the shared profile redirect manager. V1 requests retain their legacy
+/// meaning and operate on the deterministic default profile; periodic work
+/// refreshes every enabled profile.
+struct ProfileServiceGroup {
+    default_profile_id: String,
+    handlers: HashMap<String, BoxedProfileService>,
+    runtime: ProfileRuntimeManager<OpenWrtRuntime>,
+    router: std::sync::Arc<ProfilePatchRouter>,
+}
+
+impl ProfileServiceGroup {
+    fn new(
+        model: ProfileModel,
+        router: std::sync::Arc<ProfilePatchRouter>,
+        handlers: HashMap<String, BoxedProfileService>,
+        runtime: OpenWrtRuntime,
+    ) -> Self {
+        let ready = profile_marker_path(
+            "WLOC_PROFILE_READY_FILE",
+            "/var/run/wloc-service/profiles/.ready",
+        );
+        let activate = profile_marker_path(
+            "WLOC_PROFILE_ACTIVATE_FILE",
+            "/var/run/wloc-service/profiles/.activate",
+        );
+        let _ = std::fs::remove_file(ready);
+        let _ = std::fs::remove_file(activate);
+        let default_profile_id = model
+            .profiles()
+            .first()
+            .map(|profile| profile.id.clone())
+            .unwrap_or_else(|| "default".to_owned());
+        Self {
+            default_profile_id,
+            handlers,
+            runtime: ProfileRuntimeManager::new(model, runtime),
+            router,
+        }
+    }
+
+    fn activate_enabled_profiles(&mut self) {
+        let ids: Vec<String> = self
+            .runtime
+            .model()
+            .profiles()
+            .iter()
+            .filter(|profile| profile.enabled)
+            .map(|profile| profile.id.clone())
+            .collect();
+        for profile_id in ids {
+            if self.enable_profile(&profile_id).is_err() {
+                let _ = self.router.set_enabled(&profile_id, false);
+            }
+        }
+        let ready = profile_marker_path(
+            "WLOC_PROFILE_READY_FILE",
+            "/var/run/wloc-service/profiles/.ready",
+        );
+        if let Err(error) = write_profile_marker(&ready) {
+            eprintln!("wloc-service: profile readiness marker failed: {error}");
+        }
+    }
+
+    fn enable_profile(&mut self, profile_id: &str) -> Result<(), DispatchError> {
+        self.runtime
+            .enable(profile_id)
+            .map_err(map_profile_runtime_error)?;
+        let handler = self
+            .handlers
+            .get_mut(profile_id)
+            .ok_or(DispatchError::InvalidConfig)?;
+        if let Err(error) = handler.enable() {
+            let _ = self.runtime.disable(profile_id);
+            let _ = self.router.set_enabled(profile_id, false);
+            return Err(error);
+        }
+        self.router
+            .set_enabled(profile_id, true)
+            .map_err(|_| DispatchError::RuntimeFailure)
+    }
+
+    fn disable_profile(&mut self, profile_id: &str) -> Result<(), DispatchError> {
+        let handler = self
+            .handlers
+            .get_mut(profile_id)
+            .ok_or(DispatchError::InvalidConfig)?;
+        let handler_result = handler.disable();
+        let runtime_result = self
+            .runtime
+            .disable(profile_id)
+            .map_err(map_profile_runtime_error);
+        let _ = self.router.set_enabled(profile_id, false);
+        handler_result.and(runtime_result)
+    }
+
+    fn default_handler(&mut self) -> Result<&mut BoxedProfileService, DispatchError> {
+        self.handlers
+            .get_mut(&self.default_profile_id)
+            .ok_or(DispatchError::InvalidConfig)
+    }
+}
+
+impl ServiceDispatch for ProfileServiceGroup {
+    fn activate_profiles(&mut self) {
+        self.activate_enabled_profiles();
+    }
+
+    fn status(&mut self) -> Result<serde_json::Value, DispatchError> {
+        self.default_handler()?.status()
+    }
+
+    fn enable(&mut self) -> Result<(), DispatchError> {
+        self.enable_profile(&self.default_profile_id.clone())
+    }
+
+    fn disable(&mut self) -> Result<(), DispatchError> {
+        self.disable_profile(&self.default_profile_id.clone())
+    }
+
+    fn reload(&mut self) -> Result<(), DispatchError> {
+        self.default_handler()?.reload()
+    }
+
+    fn set_manual_location(&mut self, params: &RequestParams) -> Result<(), DispatchError> {
+        self.default_handler()?.set_manual_location(params)
+    }
+
+    fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
+        self.default_handler()?.clear_manual_location()
+    }
+
+    fn search_location(&mut self, query: &str) -> Result<serde_json::Value, DispatchError> {
+        self.default_handler()?.search_location(query)
+    }
+
+    fn refresh_periodic(&mut self) {
+        for handler in self.handlers.values_mut() {
+            handler.refresh_periodic();
+        }
+    }
+
+    fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
+        self.default_handler()?.refresh_evidence()
+    }
+}
+
+fn map_profile_runtime_error(error: ProfileRuntimeError) -> DispatchError {
+    match error {
+        ProfileRuntimeError::EngineStart => DispatchError::RuntimeFailure,
+        ProfileRuntimeError::EngineUnhealthy => DispatchError::EngineUnhealthy,
+        ProfileRuntimeError::RedirectInstall => DispatchError::RuntimeFailure,
+        ProfileRuntimeError::RedirectStillPresent => DispatchError::RedirectPresent,
+        ProfileRuntimeError::CleanupUnsafe => DispatchError::CleanupUnsafe,
+        ProfileRuntimeError::UnsupportedDevice | ProfileRuntimeError::ProfileDisabled => {
+            DispatchError::InvalidConfig
+        }
+        ProfileRuntimeError::UnknownProfile => DispatchError::InvalidConfig,
+    }
+}
+
 /// Stub exit probe: reports the configured exit and WAN addresses.
 struct StubProbe {
     exit_ip: IpAddr,
@@ -317,6 +557,75 @@ impl GeoProviderRuntime for StubGeo {
             },
         )))
     }
+}
+
+fn build_geo_provider(geo_provider: &str) -> Box<dyn GeoProviderRuntime> {
+    if geo_provider == "stub" {
+        Box::new(StubGeo {
+            country_code: env_or("WLOC_STUB_COUNTRY", "US".to_owned()),
+            latitude: env_or("WLOC_STUB_LAT", 37.77_f64),
+            longitude: env_or("WLOC_STUB_LON", -122.41_f64),
+        })
+    } else {
+        Box::new(GeoHttpClient::ip_api_default())
+    }
+}
+
+fn build_profile_handler(
+    profile: &DeviceProfile,
+    uci: &WlocUciConfig,
+    config_valid: bool,
+    geo_provider: &str,
+    router: &std::sync::Arc<ProfilePatchRouter>,
+) -> Result<BoxedProfileService, String> {
+    let assigned_device = profile.assigned_device.clone().unwrap_or_default();
+    let assigned_ip = assigned_device
+        .parse::<IpAddr>()
+        .map_err(|_| "profile device is not an IP address".to_owned())?;
+    let sink = router
+        .profile_sink(&profile.id)
+        .map_err(|_| "profile patch sink is unavailable".to_owned())?;
+    let state_dir = std::env::var("WLOC_PROFILE_STATE_DIR")
+        .unwrap_or_else(|_| "/var/run/wloc-service/profiles".to_owned());
+    let profile_dir = Path::new(&state_dir).join(&profile.id);
+    let mut service = WlocService::new(
+        ProfileServiceRuntime,
+        build_probe(&assigned_device, uci.probe_port),
+        build_geo_provider(geo_provider),
+        WlocServiceConfig {
+            node_ref: NodeRef::new(&profile.node_ref)
+                .map_err(|_| "invalid profile node reference".to_owned())?,
+            providers: vec![ProviderRef::new("http").expect("static provider ref is valid")],
+            probe_limits: ProbeLimits {
+                max_observation_age: Duration::from_secs(uci.probe_interval_secs),
+            },
+            scope_valid: config_valid && matches!(assigned_ip, IpAddr::V4(_)),
+            ipv6_ready: true,
+            assigned_device_configured: true,
+            assigned_device: Some(assigned_device),
+            reverse_geo_lookup: Some(("nominatim.openstreetmap.org".to_owned(), 443)),
+        },
+    )
+    .with_patch_sink(sink)
+    .with_state_files(
+        profile_dir.join("status.json"),
+        profile_dir.join("events.jsonl"),
+    );
+
+    if profile.location_mode == LocationMode::Manual {
+        let (Some(latitude), Some(longitude)) = (profile.manual_latitude, profile.manual_longitude)
+        else {
+            return Err("manual profile is missing coordinates".to_owned());
+        };
+        service
+            .set_manual_location(&RequestParams {
+                query: None,
+                latitude: Some(latitude),
+                longitude: Some(longitude),
+            })
+            .map_err(|_| "manual profile coordinates were rejected".to_owned())?;
+    }
+    Ok(Box::new(service))
 }
 
 /// Short-lived proxy handshake health for the admin UI.
@@ -424,45 +733,82 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     );
 
+    let profile_model = uci.profile_model().ok();
+    let profile_router = match profile_model.as_ref() {
+        Some(model) if model.profiles().len() > 1 => Some(std::sync::Arc::new(
+            ProfilePatchRouter::new(model)
+                .map_err(|_| "multiple profiles require IPv4 device bindings")?,
+        )),
+        None => None,
+        Some(_) => None,
+    };
+    let patch_state = profile_router
+        .as_ref()
+        .and_then(|router| router.profile_sink(&runtime_profile.id).ok())
+        .unwrap_or_else(|| std::sync::Arc::new(std::sync::Mutex::new(None::<PatchTarget>)));
+
     // Default to the real Geo HTTP provider; geo_provider=stub (UCI or
     // WLOC_GEO_PROVIDER) forces the deterministic stub for offline work.
     let geo_provider: String =
         std::env::var("WLOC_GEO_PROVIDER").unwrap_or_else(|_| uci.geo_provider.clone());
-    let geo: Box<dyn GeoProviderRuntime> = if geo_provider == "stub" {
-        Box::new(StubGeo {
-            country_code: env_or("WLOC_STUB_COUNTRY", "US".to_owned()),
-            latitude: env_or("WLOC_STUB_LAT", 37.77_f64),
-            longitude: env_or("WLOC_STUB_LON", -122.41_f64),
-        })
+    let mut service: Box<dyn ServiceDispatch> = if let (Some(model), true) = (
+        profile_model.clone(),
+        profile_model
+            .as_ref()
+            .is_some_and(|m| m.profiles().len() > 1),
+    ) {
+        let router = profile_router
+            .as_ref()
+            .ok_or("profile router is unavailable")?;
+        let mut handlers = HashMap::with_capacity(model.profiles().len());
+        for profile in model.profiles() {
+            let handler =
+                build_profile_handler(profile, &uci, config_valid, &geo_provider, router)?;
+            handlers.insert(profile.id.clone(), handler);
+        }
+        let group = ProfileServiceGroup::new(
+            model,
+            std::sync::Arc::clone(router),
+            handlers,
+            OpenWrtRuntime::from_env(),
+        );
+        Box::new(group)
     } else {
-        Box::new(GeoHttpClient::ip_api_default())
+        let service = WlocService::new(
+            OpenWrtRuntime::from_env(),
+            build_probe(&assigned_device, uci.probe_port),
+            build_geo_provider(&geo_provider),
+            WlocServiceConfig {
+                node_ref: NodeRef::new(&runtime_profile.node_ref)
+                    .unwrap_or_else(|_| NodeRef::new("default").expect("static node ref is valid")),
+                providers: vec![ProviderRef::new("http").expect("static provider ref is valid")],
+                probe_limits: ProbeLimits {
+                    max_observation_age: Duration::from_secs(uci.probe_interval_secs),
+                },
+                scope_valid: runtime_scope_valid(config_valid, &runtime_profile),
+                ipv6_ready: true,
+                assigned_device_configured: !assigned_device.is_empty(),
+                assigned_device: if assigned_device.is_empty() {
+                    None
+                } else {
+                    Some(assigned_device)
+                },
+                reverse_geo_lookup: Some(("nominatim.openstreetmap.org".to_owned(), 443)),
+            },
+        )
+        .with_patch_sink(std::sync::Arc::clone(&patch_state))
+        .with_state_files(
+            std::path::PathBuf::from(
+                std::env::var("WLOC_STATUS_FILE")
+                    .unwrap_or_else(|_| "/var/run/wloc-service/status.json".into()),
+            ),
+            std::path::PathBuf::from(
+                std::env::var("WLOC_EVENTS_FILE")
+                    .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into()),
+            ),
+        );
+        Box::new(service)
     };
-
-    let service = WlocService::new(
-        OpenWrtRuntime::from_env(),
-        build_probe(&assigned_device, uci.probe_port),
-        geo,
-        WlocServiceConfig {
-            node_ref: NodeRef::new(&runtime_profile.node_ref)
-                .unwrap_or_else(|_| NodeRef::new("default").expect("static node ref is valid")),
-            providers: vec![ProviderRef::new("http").expect("static provider ref is valid")],
-            probe_limits: ProbeLimits {
-                max_observation_age: Duration::from_secs(uci.probe_interval_secs),
-            },
-            scope_valid: runtime_scope_valid(config_valid, &runtime_profile),
-            ipv6_ready: true,
-            assigned_device_configured: !assigned_device.is_empty(),
-            assigned_device: if assigned_device.is_empty() {
-                None
-            } else {
-                Some(assigned_device)
-            },
-            // Background manual place-info lookups use the public Nominatim
-            // TLS endpoint; a strict connect/read timeout keeps them off the
-            // control path.
-            reverse_geo_lookup: Some(("nominatim.openstreetmap.org".to_owned(), 443)),
-        },
-    );
 
     // MITM proxy: load the persisted root CA or generate one and persist it.
     // The private key stays in root-only on-device storage so iPhone trust
@@ -553,25 +899,15 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let proxy = std::sync::Arc::new(proxy);
     let proxy_port: u16 = env_or("WLOC_PROXY_PORT", 8443_u16);
 
-    let patch_state = std::sync::Arc::new(std::sync::Mutex::new(None::<PatchTarget>));
-    let mut service = service
-        .with_patch_sink(std::sync::Arc::clone(&patch_state))
-        .with_state_files(
-            std::path::PathBuf::from(
-                std::env::var("WLOC_STATUS_FILE")
-                    .unwrap_or_else(|_| "/var/run/wloc-service/status.json".into()),
-            ),
-            std::path::PathBuf::from(
-                std::env::var("WLOC_EVENTS_FILE")
-                    .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into()),
-            ),
-        );
-
     // Apply the persisted configuration to the control plane before serving:
     // manual location preset first (so a manual target is already fresh), then
     // the desired enabled state. Failures are logged, not fatal: the daemon
     // still serves status and can be steered through the control API.
-    if runtime_profile.location_mode == LocationMode::Manual {
+    if profile_model
+        .as_ref()
+        .is_none_or(|model| model.profiles().len() <= 1)
+        && runtime_profile.location_mode == LocationMode::Manual
+    {
         if let (Some(latitude), Some(longitude)) = (
             runtime_profile.manual_latitude,
             runtime_profile.manual_longitude,
@@ -590,9 +926,20 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             );
         }
     }
-    if runtime_profile.enabled {
-        if let Err(error) = service.enable() {
-            eprintln!("wloc-service: enable failed: {error:?}");
+    if profile_model
+        .as_ref()
+        .is_none_or(|model| model.profiles().len() <= 1)
+        && runtime_profile.enabled
+    {
+        match service.enable() {
+            Ok(()) => {
+                if let Some(router) = profile_router.as_ref() {
+                    if let Err(error) = router.set_enabled(&runtime_profile.id, true) {
+                        eprintln!("wloc-service: enabling profile route failed: {error:?}");
+                    }
+                }
+            }
+            Err(error) => eprintln!("wloc-service: enable failed: {error:?}"),
         }
     }
 
@@ -624,16 +971,54 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // REDIRECT, which rewrites the destination to this router and newer iOS
     // versions answer with RST.
     let proxy_listener = runtime.block_on(async { bind_tproxy_listener(proxy_port) })?;
+    let multi_profile_mode = profile_model
+        .as_ref()
+        .is_some_and(|model| model.profiles().len() > 1);
+    if multi_profile_mode {
+        let proxy_ready = profile_marker_path(
+            "WLOC_PROFILE_PROXY_READY_FILE",
+            "/var/run/wloc-service/profiles/.proxy-ready",
+        );
+        let _ = std::fs::remove_file(&proxy_ready);
+        write_profile_marker(&proxy_ready)?;
+        if std::env::var("WLOC_SUPERVISED").as_deref() == Ok("1") {
+            let activate = profile_marker_path(
+                "WLOC_PROFILE_ACTIVATE_FILE",
+                "/var/run/wloc-service/profiles/.activate",
+            );
+            let timeout = Duration::from_secs(env_or("WLOC_PROFILE_ACTIVATE_TIMEOUT", 30_u64));
+            if !wait_for_profile_marker(&activate, timeout) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "supervisor did not authorize profile activation",
+                )
+                .into());
+            }
+        }
+        // In supervised mode this runs only after the supervisor has passed
+        // its child health gate, installed the shared route, and published
+        // the activation marker. Standalone mode still activates only after
+        // the listener is bound, never during daemon construction.
+        service.activate_profiles();
+    }
     runtime.spawn(async move {
         loop {
             if let Ok((stream, _)) = proxy_listener.accept().await {
                 let proxy = proxy.clone();
                 let patch_state = std::sync::Arc::clone(&patch_state);
+                let profile_router = profile_router.clone();
                 let proxy_health = std::sync::Arc::clone(&proxy_health);
                 let health_path = health_path.clone();
                 tokio::spawn(async move {
-                    let patch = patch_state.lock().ok().and_then(|guard| *guard);
-                    match proxy.handle_connection(stream, patch.as_ref()).await {
+                    let result = if let Some(router) = profile_router.as_ref() {
+                        proxy
+                            .handle_connection_routed(stream, router.as_ref())
+                            .await
+                    } else {
+                        let patch = patch_state.lock().ok().and_then(|guard| *guard);
+                        proxy.handle_connection(stream, patch.as_ref()).await
+                    };
+                    match result {
                         Ok(()) => {
                             record_proxy_health(
                                 &proxy_health,
@@ -911,6 +1296,162 @@ mod tests {
             std::fs::read_to_string(&log).unwrap(),
             "start phone 192.168.1.100\nstop phone\n"
         );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    struct MockProfileDispatch;
+
+    impl ServiceDispatch for MockProfileDispatch {
+        fn status(&mut self) -> Result<serde_json::Value, DispatchError> {
+            Ok(serde_json::json!({"profile": "mock"}))
+        }
+
+        fn enable(&mut self) -> Result<(), DispatchError> {
+            Ok(())
+        }
+
+        fn disable(&mut self) -> Result<(), DispatchError> {
+            Ok(())
+        }
+
+        fn reload(&mut self) -> Result<(), DispatchError> {
+            Ok(())
+        }
+
+        fn set_manual_location(&mut self, _params: &RequestParams) -> Result<(), DispatchError> {
+            Ok(())
+        }
+
+        fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
+            Ok(())
+        }
+
+        fn search_location(&mut self, query: &str) -> Result<serde_json::Value, DispatchError> {
+            Ok(serde_json::json!({"query": query}))
+        }
+
+        fn refresh_periodic(&mut self) {}
+
+        fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
+            Ok(())
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn profile_service_group_coordinates_shared_runtime_and_handlers() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let model = ProfileModel::new(vec![
+            DeviceProfile {
+                id: "phone".to_owned(),
+                label: "Phone".to_owned(),
+                assigned_device: Some("192.168.1.100".to_owned()),
+                node_ref: "phone-node".to_owned(),
+                node_mode: wificalling_location_gateway::config::NodeSelectionMode::Fixed,
+                location_mode: LocationMode::Auto,
+                manual_latitude: None,
+                manual_longitude: None,
+                manual_location_ref: None,
+                enabled: true,
+            },
+            DeviceProfile {
+                id: "tablet".to_owned(),
+                label: "Tablet".to_owned(),
+                assigned_device: Some("192.168.1.101".to_owned()),
+                node_ref: "tablet-node".to_owned(),
+                node_mode: wificalling_location_gateway::config::NodeSelectionMode::Fixed,
+                location_mode: LocationMode::Auto,
+                manual_latitude: None,
+                manual_longitude: None,
+                manual_location_ref: None,
+                enabled: true,
+            },
+        ])
+        .unwrap();
+        let router = std::sync::Arc::new(ProfilePatchRouter::new(&model).unwrap());
+        let mut handlers = HashMap::new();
+        handlers.insert(
+            "phone".to_owned(),
+            Box::new(MockProfileDispatch) as BoxedProfileService,
+        );
+        handlers.insert(
+            "tablet".to_owned(),
+            Box::new(MockProfileDispatch) as BoxedProfileService,
+        );
+
+        let root = std::env::temp_dir().join(format!(
+            "wloc-profile-group-test-{}-{}",
+            std::process::id(),
+            now_unix()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let helper = root.join("profile-redirect-helper.sh");
+        let script = format!(
+            "#!/bin/sh\nmarker='{}'/$2\ncase \"$1\" in\nstart) touch \"$marker\";;\nstop) rm -f \"$marker\";;\nstatus) test -f \"$marker\";;\nesac\n",
+            root.display()
+        );
+        std::fs::write(&helper, script).unwrap();
+        std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+        let mut group = ProfileServiceGroup::new(
+            model,
+            std::sync::Arc::clone(&router),
+            handlers,
+            OpenWrtRuntime::new(&helper, &helper),
+        );
+        group.activate_enabled_profiles();
+        assert_eq!(group.runtime.statuses().len(), 2);
+        assert!(group
+            .runtime
+            .statuses()
+            .iter()
+            .all(|status| status.phase
+                == wificalling_location_gateway::service::profile_runtime::ProfileRuntimePhase::Intercepting));
+        router
+            .set_target("phone", Some(PatchTarget::new(1.0, 2.0)))
+            .unwrap();
+        assert_eq!(
+            router.resolve_source("192.168.1.100").unwrap(),
+            PatchTarget::new(1.0, 2.0)
+        );
+
+        assert_eq!(group.status().unwrap()["profile"], "mock");
+        group.reload().unwrap();
+        group
+            .set_manual_location(&RequestParams {
+                query: None,
+                latitude: Some(1.0),
+                longitude: Some(2.0),
+            })
+            .unwrap();
+        group.clear_manual_location().unwrap();
+        assert_eq!(
+            group.search_location("Singapore").unwrap()["query"],
+            "Singapore"
+        );
+        group.refresh_periodic();
+        group.refresh_evidence().unwrap();
+
+        group.disable().unwrap();
+        assert!(router.resolve_source("192.168.1.100").is_none());
+        group.enable().unwrap();
+        assert!(router.resolve_source("192.168.1.100").is_none());
+
+        for error in [
+            ProfileRuntimeError::EngineStart,
+            ProfileRuntimeError::EngineUnhealthy,
+            ProfileRuntimeError::RedirectInstall,
+            ProfileRuntimeError::RedirectStillPresent,
+            ProfileRuntimeError::CleanupUnsafe,
+            ProfileRuntimeError::UnsupportedDevice,
+            ProfileRuntimeError::ProfileDisabled,
+            ProfileRuntimeError::UnknownProfile,
+        ] {
+            let mapped = map_profile_runtime_error(error);
+            assert!(!mapped.wire_code().is_empty());
+        }
+
         let _ = std::fs::remove_dir_all(root);
     }
 }

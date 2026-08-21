@@ -214,6 +214,7 @@ call)
 	restart_service)
 		# Re-sync the redirect rules first (the followed device may have
 		# changed), then restart the daemon so it reads the new config.
+		/usr/sbin/wloc-profile-redirect.sh stop-all >/dev/null 2>&1 || true
 		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
 		/etc/init.d/wloc-service restart >/dev/null 2>&1
 		sleep 2
@@ -284,6 +285,7 @@ call)
 		# daemon (procd respawns and creates a fresh CA + info), then rewrite
 		# the iOS profile. The iPhone must reinstall and re-trust the CA.
 		rm -f /etc/wloc-service/ca.pem /etc/wloc-service/ca.key /etc/wloc-service/ca.info.json
+		/usr/sbin/wloc-profile-redirect.sh stop-all >/dev/null 2>&1 || true
 		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
 		/etc/init.d/wloc-service restart >/dev/null 2>&1
 		sleep 3
