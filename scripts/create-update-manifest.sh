@@ -6,7 +6,10 @@ set -eu
 
 package=${1:-}
 [ -n "$package" ] || { echo "usage: $0 PACKAGE.ipk" >&2; exit 2; }
-[ -f "$package" ] && [ ! -L "$package" ] || { echo 'package must be a regular file' >&2; exit 2; }
+if [ ! -f "$package" ] || [ -L "$package" ]; then
+	echo 'package must be a regular file' >&2
+	exit 2
+fi
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-update-manifest.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
