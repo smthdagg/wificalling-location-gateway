@@ -15,6 +15,9 @@ printf 'nft %s\n' "$*" >> "$WLOC_TEST_LOG"
 if [ "$*" = 'list tables inet' ]; then
   printf '%s\n' 'table inet wloc_profile_phone' 'table inet wloc_profile_tablet'
 fi
+if [ "$*" = 'list table inet wloc_service' ]; then
+  exit 1
+fi
 exit 0
 EOF
 cat > "$tmp/bin/uci" <<'EOF'

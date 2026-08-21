@@ -12,7 +12,6 @@ set -eu
 PROFILE_TABLE_PREFIX=wloc_profile_
 PROXY_PORT=${WLOC_PROFILE_PROXY_PORT:-${WLOC_PROXY_PORT:-8443}}
 FWMARK=1
-NAMES='gs-loc.apple.com gs-loc-cn.apple.com'
 
 fail() {
 	printf 'wloc-profile-redirect: %s\n' "$*" >&2
@@ -47,7 +46,8 @@ valid_private_ipv4() {
 		[ "$octet" -le 255 ] 2>/dev/null || return 1
 	done
 	case "$1" in
-		10|192) return 0 ;;
+		10) return 0 ;;
+		192) [ "$2" -eq 168 ] 2>/dev/null ;;
 		172) [ "$2" -ge 16 ] 2>/dev/null && [ "$2" -le 31 ] 2>/dev/null ;;
 		*) return 1 ;;
 	esac

@@ -52,9 +52,11 @@ ips=$(collect | grep -v "^$ROUTER_IP$" | sort -u | tr '
     exit 1
 }
 
-"$NFT_BINARY" flush set inet "$TABLE" "$SET" 2>/dev/null || \
-    "$NFT_BINARY" add set inet "$TABLE" "$SET" '{ type ipv4_addr; }'
-"$NFT_BINARY" add element inet "$TABLE" "$SET" "{ $ips }"
+if "$NFT_BINARY" list table inet "$TABLE" >/dev/null 2>&1; then
+	"$NFT_BINARY" flush set inet "$TABLE" "$SET" 2>/dev/null || \
+		"$NFT_BINARY" add set inet "$TABLE" "$SET" '{ type ipv4_addr; }'
+	"$NFT_BINARY" add element inet "$TABLE" "$SET" "{ $ips }"
+fi
 
 # V2 profiles each have an isolated nft table and set. Refresh the same
 # approved Apple answers into every live profile table without touching the

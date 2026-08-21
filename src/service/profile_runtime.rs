@@ -134,16 +134,19 @@ impl<R: ProfileRuntimeControl> ProfileRuntimeManager<R> {
                 );
                 return Err(ProfileRuntimeError::EngineStart);
             }
-            match self.runtime.shared_engine_healthy() {
-                Ok(true) => self.shared_engine_ready = true,
-                Ok(false) | Err(_) => {
-                    self.set_status(
-                        index,
-                        ProfileRuntimePhase::DegradedPassthrough,
-                        "engine_unhealthy",
-                    );
-                    return Err(ProfileRuntimeError::EngineUnhealthy);
-                }
+        }
+        // Health is sampled for every new profile admission. The shared
+        // process may have degraded after an earlier profile was enabled.
+        match self.runtime.shared_engine_healthy() {
+            Ok(true) => self.shared_engine_ready = true,
+            Ok(false) | Err(_) => {
+                self.shared_engine_ready = false;
+                self.set_status(
+                    index,
+                    ProfileRuntimePhase::DegradedPassthrough,
+                    "engine_unhealthy",
+                );
+                return Err(ProfileRuntimeError::EngineUnhealthy);
             }
         }
 
