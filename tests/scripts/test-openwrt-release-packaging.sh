@@ -47,6 +47,11 @@ if grep -F 'shasum -a 256 ./wificalling-location-gateway' "$builder" >/dev/null;
 fi
 grep -F 'luci-app-wificalling-gateway.json' "$builder" >/dev/null ||
 	fail 'integrated release builder must remove the standalone Gateway LuCI menu'
+grep -F 'verify-package-budget.sh' "$builder" >/dev/null ||
+	fail 'integrated release builder must enforce the package budget'
+if grep -F 'find "$out_dir" -maxdepth 1 -type f' "$builder" | grep -F 'verify-package-budget.sh' >/dev/null; then
+	fail 'package budget failure must propagate without find -exec'
+fi
 
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"

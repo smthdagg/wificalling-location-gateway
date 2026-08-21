@@ -33,3 +33,13 @@ the source repository remains isolated and does not vendor the Gateway source.
   Apple hosts, and TCP 443. UDP 500/4500 and the Gateway nftables table are
   outside the WLOC data plane.
 - The socket is root-only (0600); no TCP management listener exists.
+
+## Small-gateway resource contract
+
+The package installs a machine-readable V2 budget at
+`/usr/share/wificalling-location-gateway/resource-budget.conf`. CI enforces
+the combined release-binary ceiling and supplied package/runtime reports;
+release packaging invokes the package check for each output artifact. AX6S
+idle RSS, peak RSS, CPU/startup, and update/rollback measurements must be
+recorded with the redacted evidence template before persistent deployment is
+accepted.
