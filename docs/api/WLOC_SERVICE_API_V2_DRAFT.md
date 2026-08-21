@@ -1,8 +1,9 @@
 # Unified Gateway/WLOC control API v2 draft
 
 Status: proposed contract; profile request decoding and bounded local runtime
-primitives are implemented, but the v2 dispatcher and production multi-profile
-Geo/patch routing are not complete. It does not change the frozen
+primitives are implemented, and production source-device multi-profile
+Geo/patch routing is now integrated. Live v2 profile mutation dispatch remains
+a subsequent control-plane slice. It does not change the frozen
 `wloc.service/v1` contract.
 
 ## Purpose
