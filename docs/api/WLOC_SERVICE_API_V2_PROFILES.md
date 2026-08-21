@@ -27,6 +27,7 @@ The model is deliberately bounded for small OpenWrt gateways:
 - manual location references up to 64 bytes;
 - serialized profile configuration up to 8 KiB;
 - redacted status output up to 4 KiB.
+- complete UCI input up to 32 KiB before section accumulation.
 
 Validation is performed before a model replacement. A failed replacement
 leaves the previous model unchanged.
@@ -41,6 +42,14 @@ coordinates. Repeating the projection is idempotent.
 When explicit device sections exist, they take precedence over the legacy
 singleton fields. Invalid IDs, addresses, node modes, location pairs, or
 duplicate IDs reject the UCI parse before any runtime operation.
+
+The current daemon consumes exactly one explicit profile. If more than one
+profile is configured before the unified multi-device runtime lands, it stays
+disabled rather than selecting a profile implicitly. Explicit addresses must
+be usable unicast LAN bindings: unspecified, loopback, multicast, broadcast,
+IPv4 link-local, IPv6 link-local, zero MAC, and multicast MAC values are
+rejected. The legacy singleton projection may still have no address so an
+existing installation can continue its current Gateway-policy discovery path.
 
 ## v2 request envelope
 
@@ -60,7 +69,9 @@ The V2-01 decoder accepts `profile.list`, `profile.get`, `profile.create`,
 `profile.update`, and `profile.delete`. Unknown top-level or parameter fields,
 invalid profile IDs, invalid modes, invalid addresses, and out-of-range
 coordinates fail before dispatch. `get`, `update`, and `delete` require a
-profile ID.
+profile ID. `create` requires the complete profile identity, label, assigned
+device, node, node mode, location source, and enabled fields; manual creates
+also require both coordinates.
 
 Profile status is redacted: it reports whether an assigned device or manual
 location is configured, but never returns the device address, node reference,

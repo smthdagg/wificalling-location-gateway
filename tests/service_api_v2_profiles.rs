@@ -12,8 +12,13 @@ fn profile_methods_decode_only_on_the_v2_contract() {
         ("profile.update", ProfileApiMethod::Update),
         ("profile.delete", ProfileApiMethod::Delete),
     ] {
+        let params = if method == "profile.create" {
+            r#"{"profile_id":"phone","label":"Phone","assigned_device":"192.168.1.10","node_ref":"node-a","node_mode":"fixed","geo_source":"auto","enabled":true}"#
+        } else {
+            r#"{"profile_id":"phone"}"#
+        };
         let payload = format!(
-            r#"{{"api_version":"{SERVICE_API_V2_ID}","request_id":"req-1","method":"{method}","params":{{"profile_id":"phone"}}}}"#
+            r#"{{"api_version":"{SERVICE_API_V2_ID}","request_id":"req-1","method":"{method}","params":{params}}}"#
         );
         assert_eq!(
             decode_v2_profile_request(payload.as_bytes())
@@ -74,6 +79,12 @@ fn unsupported_params_and_invalid_profile_ids_fail_before_dispatch() {
     let list_with_mutation = br#"{"api_version":"wloc.service/v2","request_id":"req-1","method":"profile.list","params":{"label":"unexpected"}}"#;
     assert_eq!(
         decode_v2_profile_request(list_with_mutation).unwrap_err(),
+        ApiV2ErrorCode::InvalidParams
+    );
+
+    let incomplete_create = br#"{"api_version":"wloc.service/v2","request_id":"req-1","method":"profile.create","params":{}}"#;
+    assert_eq!(
+        decode_v2_profile_request(incomplete_create).unwrap_err(),
         ApiV2ErrorCode::InvalidParams
     );
 }

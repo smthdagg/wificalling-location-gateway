@@ -186,6 +186,23 @@ pub fn decode_v2_profile_request(frame: &[u8]) -> Result<ApiV2ProfileRequest, Ap
     {
         return Err(ApiV2ErrorCode::InvalidParams);
     }
+    if method == ProfileApiMethod::Create {
+        if wire.params.profile_id.is_none()
+            || wire.params.label.is_none()
+            || wire.params.assigned_device.is_none()
+            || wire.params.node_ref.is_none()
+            || wire.params.node_mode.is_none()
+            || wire.params.geo_source.is_none()
+            || wire.params.enabled.is_none()
+        {
+            return Err(ApiV2ErrorCode::InvalidParams);
+        }
+        if wire.params.geo_source.as_deref() == Some("manual")
+            && (wire.params.manual_lat.is_none() || wire.params.manual_lon.is_none())
+        {
+            return Err(ApiV2ErrorCode::InvalidParams);
+        }
+    }
     validate_v2_profile_params(&wire.params)?;
     Ok(ApiV2ProfileRequest {
         api_version: wire.api_version,

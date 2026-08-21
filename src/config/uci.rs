@@ -81,6 +81,8 @@ pub enum UciError {
     Coordinate { option: String, value: String },
     /// A device profile section failed v2 validation.
     Profile(String),
+    /// The complete UCI input exceeds the small-gateway parser bound.
+    ConfigTooLarge,
 }
 
 impl fmt::Display for UciError {
@@ -94,6 +96,7 @@ impl fmt::Display for UciError {
                 write!(f, "invalid {option} coordinate: {value}")
             }
             UciError::Profile(message) => write!(f, "invalid device profile: {message}"),
+            UciError::ConfigTooLarge => write!(f, "UCI configuration exceeds the size limit"),
         }
     }
 }
@@ -123,6 +126,11 @@ impl PresetBuilder {
 impl WlocUciConfig {
     /// Read and parse the daemon configuration file.
     pub fn load(path: &Path) -> Result<Self, UciError> {
+        let metadata =
+            std::fs::metadata(path).map_err(|_| UciError::Io(path.display().to_string()))?;
+        if metadata.len() > super::profile::MAX_UCI_TEXT_BYTES as u64 {
+            return Err(UciError::ConfigTooLarge);
+        }
         let text =
             std::fs::read_to_string(path).map_err(|_| UciError::Io(path.display().to_string()))?;
         Self::parse(&text)
@@ -142,6 +150,9 @@ impl WlocUciConfig {
 
     /// Parse UCI text. A missing `main` section yields the defaults.
     pub fn parse(text: &str) -> Result<Self, UciError> {
+        if text.len() > super::profile::MAX_UCI_TEXT_BYTES {
+            return Err(UciError::ConfigTooLarge);
+        }
         let mut config = Self::default();
         let mut section_type: Option<String> = None;
         let mut section_name: Option<String> = None;

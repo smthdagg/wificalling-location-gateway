@@ -19,6 +19,7 @@ pub const MAX_NODE_REF_BYTES: usize = 96;
 pub const MAX_LOCATION_REF_BYTES: usize = 64;
 pub const MAX_SERIALIZED_PROFILES_BYTES: usize = 8 * 1024;
 pub const MAX_REDACTED_STATUS_BYTES: usize = 4 * 1024;
+pub const MAX_UCI_TEXT_BYTES: usize = 32 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -46,6 +47,7 @@ pub enum ProfileError {
     TooManyProfiles,
     DuplicateId(String),
     MissingAssignedDevice,
+    MultipleProfilesRequireUnifiedRuntime,
     EmptyField(&'static str),
     FieldTooLong { field: &'static str, max: usize },
     InvalidProfileId(String),
@@ -63,6 +65,9 @@ impl fmt::Display for ProfileError {
             Self::DuplicateId(id) => write!(formatter, "duplicate device profile id: {id}"),
             Self::MissingAssignedDevice => {
                 formatter.write_str("assigned device address is required")
+            }
+            Self::MultipleProfilesRequireUnifiedRuntime => {
+                formatter.write_str("multiple profiles require the unified runtime")
             }
             Self::EmptyField(field) => write!(formatter, "profile field is empty: {field}"),
             Self::FieldTooLong { field, max } => {
@@ -88,6 +93,17 @@ impl std::error::Error for ProfileError {}
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProfileModel {
     profiles: Vec<DeviceProfile>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuntimeProfile {
+    pub id: String,
+    pub enabled: bool,
+    pub assigned_device: Option<String>,
+    pub node_ref: String,
+    pub location_mode: LocationMode,
+    pub manual_latitude: Option<f64>,
+    pub manual_longitude: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -130,6 +146,26 @@ impl ProfileModel {
 
     pub fn profiles(&self) -> &[DeviceProfile] {
         &self.profiles
+    }
+
+    /// The current daemon is still a single-runtime process. It may consume
+    /// exactly one profile, but must refuse to guess when multiple profiles
+    /// are configured before unified multi-device routing lands.
+    pub fn single_runtime_profile(&self) -> Result<RuntimeProfile, ProfileError> {
+        let profile = self
+            .profiles
+            .first()
+            .filter(|_| self.profiles.len() == 1)
+            .ok_or(ProfileError::MultipleProfilesRequireUnifiedRuntime)?;
+        Ok(RuntimeProfile {
+            id: profile.id.clone(),
+            enabled: profile.enabled,
+            assigned_device: profile.assigned_device.clone(),
+            node_ref: profile.node_ref.clone(),
+            location_mode: profile.location_mode,
+            manual_latitude: profile.manual_latitude,
+            manual_longitude: profile.manual_longitude,
+        })
     }
 
     /// Validate a candidate before replacing the current model. The existing
@@ -269,14 +305,40 @@ fn validate_bounded_text(field: &'static str, value: &str, max: usize) -> Result
 }
 
 fn is_valid_device_address(value: &str) -> bool {
-    value.parse::<IpAddr>().is_ok() || is_valid_mac(value)
+    if let Ok(address) = value.parse::<IpAddr>() {
+        return match address {
+            IpAddr::V4(ip) => {
+                let octets = ip.octets();
+                !ip.is_unspecified()
+                    && !ip.is_loopback()
+                    && !ip.is_multicast()
+                    && ip != std::net::Ipv4Addr::BROADCAST
+                    && !(octets[0] == 169 && octets[1] == 254)
+            }
+            IpAddr::V6(ip) => {
+                let first = ip.segments()[0];
+                !ip.is_unspecified()
+                    && !ip.is_loopback()
+                    && !ip.is_multicast()
+                    && (first & 0xffc0) != 0xfe80
+            }
+        };
+    }
+    is_valid_mac(value)
 }
 
 fn is_valid_mac(value: &str) -> bool {
     let separator = if value.contains(':') { ':' } else { '-' };
     let parts: Vec<_> = value.split(separator).collect();
+    let first = parts
+        .first()
+        .and_then(|part| u8::from_str_radix(part, 16).ok());
     parts.len() == 6
         && parts
             .iter()
             .all(|part| part.len() == 2 && part.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        && parts
+            .iter()
+            .any(|part| part.bytes().any(|byte| byte != b'0'))
+        && first.is_some_and(|byte| byte & 1 == 0)
 }

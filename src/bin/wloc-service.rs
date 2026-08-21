@@ -13,7 +13,7 @@ use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use wificalling_location_gateway::app::{WlocService, WlocServiceConfig};
-use wificalling_location_gateway::config::{LocationMode, WlocUciConfig};
+use wificalling_location_gateway::config::{LocationMode, RuntimeProfile, WlocUciConfig};
 use wificalling_location_gateway::exitprobe::runtime::{ExitProbeRuntime, ProbeFailure};
 use wificalling_location_gateway::exitprobe::{NodeRef, ProbeLimits};
 use wificalling_location_gateway::georesolver::http::GeoHttpClient;
@@ -43,6 +43,31 @@ fn now_unix() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+fn disabled_runtime_profile() -> RuntimeProfile {
+    RuntimeProfile {
+        id: "invalid".to_owned(),
+        enabled: false,
+        assigned_device: None,
+        node_ref: "default".to_owned(),
+        location_mode: LocationMode::Auto,
+        manual_latitude: None,
+        manual_longitude: None,
+    }
+}
+
+fn runtime_profile_from_uci(uci: &WlocUciConfig) -> RuntimeProfile {
+    match uci
+        .profile_model()
+        .and_then(|model| model.single_runtime_profile())
+    {
+        Ok(profile) => profile,
+        Err(error) => {
+            eprintln!("wloc-service: profile is not runnable yet: {error}; staying disabled");
+            disabled_runtime_profile()
+        }
+    }
 }
 
 /// No-op runtime control: every adapter step succeeds and the engine is
@@ -213,24 +238,35 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let uci = match WlocUciConfig::load(Path::new(&uci_path)) {
         Ok(config) => config,
         Err(error) => {
-            eprintln!("wloc-service: {error}; using defaults");
-            WlocUciConfig::default()
+            eprintln!("wloc-service: {error}; using disabled defaults");
+            WlocUciConfig {
+                enabled: false,
+                ..WlocUciConfig::default()
+            }
         }
     };
+    let runtime_profile = runtime_profile_from_uci(&uci);
     // The device whose node binding the location follows. It is normally
     // chosen from LuCI; when unset, fall back to the first device policy of
     // the Gateway config so a fresh install follows something on any subnet
     // instead of a fixed example address.
-    let assigned_device = if uci.assigned_device.trim().is_empty() {
+    let assigned_device = if runtime_profile
+        .assigned_device
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .is_empty()
+    {
         gateway_first_device_ip().unwrap_or_default()
     } else {
-        uci.assigned_device.clone()
+        runtime_profile.assigned_device.clone().unwrap_or_default()
     };
     eprintln!(
-        "wloc-service: uci enabled={} geo_source={:?} node={} device={}",
-        uci.enabled,
-        uci.location_mode,
-        uci.node_ref,
+        "wloc-service: profile={} enabled={} geo_source={:?} node={} device={}",
+        runtime_profile.id,
+        runtime_profile.enabled,
+        runtime_profile.location_mode,
+        runtime_profile.node_ref,
         if assigned_device.is_empty() {
             "(none)".to_owned()
         } else {
@@ -257,7 +293,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         build_probe(&assigned_device, uci.probe_port),
         geo,
         WlocServiceConfig {
-            node_ref: NodeRef::new(&uci.node_ref)
+            node_ref: NodeRef::new(&runtime_profile.node_ref)
                 .unwrap_or_else(|_| NodeRef::new("default").expect("static node ref is valid")),
             providers: vec![ProviderRef::new("http").expect("static provider ref is valid")],
             probe_limits: ProbeLimits {
@@ -385,8 +421,11 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // manual location preset first (so a manual target is already fresh), then
     // the desired enabled state. Failures are logged, not fatal: the daemon
     // still serves status and can be steered through the control API.
-    if uci.location_mode == LocationMode::Manual {
-        if let (Some(latitude), Some(longitude)) = (uci.manual_latitude, uci.manual_longitude) {
+    if runtime_profile.location_mode == LocationMode::Manual {
+        if let (Some(latitude), Some(longitude)) = (
+            runtime_profile.manual_latitude,
+            runtime_profile.manual_longitude,
+        ) {
             let params = RequestParams {
                 query: None,
                 latitude: Some(latitude),
@@ -401,7 +440,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             );
         }
     }
-    if uci.enabled {
+    if runtime_profile.enabled {
         if let Err(error) = service.enable() {
             eprintln!("wloc-service: enable failed: {error:?}");
         }
@@ -607,5 +646,29 @@ mod tests {
     fn ignores_non_ip_tokens() {
         let output = "elements = { 59.82.17.33, hostname, 10.0.0.1/8 }\n";
         assert_eq!(parse_apple_ips(output), vec!["59.82.17.33"]);
+    }
+
+    #[test]
+    fn explicit_profile_is_the_single_runtime_source() {
+        let config = WlocUciConfig::parse(
+            "config wloc-service 'main'\n\toption enabled '0'\n\toption node_ref 'legacy'\n\toption assigned_device '192.168.1.200'\nconfig device 'phone'\n\toption label 'Phone'\n\toption assigned_device '192.168.1.100'\n\toption node_ref 'profile-node'\n\toption geo_source 'auto'\n",
+        )
+        .unwrap();
+        let profile = runtime_profile_from_uci(&config);
+        assert_eq!(profile.id, "phone");
+        assert!(profile.enabled);
+        assert_eq!(profile.assigned_device.as_deref(), Some("192.168.1.100"));
+        assert_eq!(profile.node_ref, "profile-node");
+    }
+
+    #[test]
+    fn multiple_profiles_never_select_one_implicitly() {
+        let config = WlocUciConfig::parse(
+            "config device 'phone'\n\toption assigned_device '192.168.1.100'\nconfig device 'tablet'\n\toption assigned_device '192.168.1.101'\n",
+        )
+        .unwrap();
+        let profile = runtime_profile_from_uci(&config);
+        assert!(!profile.enabled);
+        assert_eq!(profile.id, "invalid");
     }
 }

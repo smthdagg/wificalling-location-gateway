@@ -74,6 +74,27 @@ fn validation_accepts_ip_and_mac_device_addresses() {
 }
 
 #[test]
+fn unusable_ip_and_mac_addresses_are_rejected() {
+    for address in [
+        "0.0.0.0",
+        "127.0.0.1",
+        "169.254.1.2",
+        "224.0.0.1",
+        "::",
+        "::1",
+        "ff02::1",
+        "00:00:00:00:00:00",
+        "01:00:00:00:00:01",
+    ] {
+        let rejected = matches!(
+            ProfileModel::new(vec![profile("phone", address)]),
+            Err(ProfileError::InvalidDeviceAddress(_))
+        );
+        assert!(rejected, "address should not be accepted: {address}");
+    }
+}
+
+#[test]
 fn manual_location_requires_a_complete_finite_in_range_pair() {
     let mut value = profile("phone", "192.168.1.10");
     value.location_mode = LocationMode::Manual;
@@ -104,6 +125,19 @@ fn transactional_update_does_not_partially_replace_model() {
     let result = model.replace(vec![profile("phone", "bad")]);
     assert!(result.is_err());
     assert_eq!(model, original);
+}
+
+#[test]
+fn multiple_profiles_cannot_be_selected_by_the_single_runtime() {
+    let model = ProfileModel::new(vec![
+        profile("phone", "192.168.1.10"),
+        profile("tablet", "192.168.1.11"),
+    ])
+    .unwrap();
+    assert!(matches!(
+        model.single_runtime_profile(),
+        Err(ProfileError::MultipleProfilesRequireUnifiedRuntime)
+    ));
 }
 
 #[test]
@@ -182,6 +216,18 @@ fn explicit_device_section_requires_an_assigned_address() {
     assert!(matches!(
         WlocUciConfig::parse(text),
         Err(wificalling_location_gateway::config::UciError::Profile(_))
+    ));
+}
+
+#[test]
+fn oversized_uci_text_is_rejected_before_profile_accumulation() {
+    let text = format!(
+        "config device 'phone'\n\toption label '{}'\n",
+        "x".repeat(33_000)
+    );
+    assert!(matches!(
+        WlocUciConfig::parse(&text),
+        Err(wificalling_location_gateway::config::UciError::ConfigTooLarge)
     ));
 }
 
