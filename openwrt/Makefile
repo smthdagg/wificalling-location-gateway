@@ -49,6 +49,7 @@ define Package/wloc-service/install
 	$(INSTALL_BIN) ./files/usr/sbin/wloc-redirect-sync.sh $(1)/usr/sbin/
 	$(INSTALL_BIN) ./files/usr/sbin/wloc-refresh-set.sh $(1)/usr/sbin/
 	$(INSTALL_BIN) ./files/usr/sbin/wloc-profile-redirect.sh $(1)/usr/sbin/
+	$(INSTALL_BIN) ./files/usr/sbin/wloc-profile-status.sh $(1)/usr/sbin/
 	$(INSTALL_BIN) ./files/usr/sbin/wloc-health.sh $(1)/usr/sbin/
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/etc/init.d/wloc-service $(1)/etc/init.d/

@@ -141,7 +141,7 @@ mkdir -p "$package_dir/files/usr/libexec/wificalling-location-gateway"
 cp "$repo_root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \
 	"$package_dir/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
 cp "$repo_root/openwrt/files/etc/config/wloc-service" "$package_dir/files/etc/config/wloc-service"
-for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh wloc-profile-redirect.sh wloc-health.sh; do
+for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh wloc-profile-redirect.sh wloc-profile-status.sh wloc-health.sh; do
 	cp "$repo_root/openwrt/files/usr/sbin/$helper" "$package_dir/files/usr/sbin/$helper"
 done
 chmod 0755 "$package_dir/files/usr/sbin/"* "$package_dir/files/etc/init.d/"* \
