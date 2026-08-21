@@ -73,6 +73,10 @@ pub enum SupervisorPhase {
     Intercepting,
     DegradedPassthrough,
     Draining,
+    /// Cleanup could not prove that the component-owned redirect is absent.
+    /// The state is deliberately conservative so callers never mistake an
+    /// uncertain firewall state for a cleanly stopped service.
+    CleanupUnsafe,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -356,7 +360,11 @@ impl<R: RuntimeControl> UnifiedSupervisor<R> {
         .map_err(SupervisorError::Transition)?;
 
         if let Err(error) = control::enable(&mut self.runtime, scope_valid, ipv6_ready) {
-            self.fail_and_stop();
+            if matches!(error, ControlError::CleanupUnsafe) {
+                self.enter_cleanup_unsafe();
+            } else {
+                self.state = SupervisorState::stopped();
+            }
             return Err(SupervisorError::Control(error));
         }
         self.state = reduce(&self.state, SupervisorEvent::ChildrenReady, self.limits)
@@ -372,7 +380,7 @@ impl<R: RuntimeControl> UnifiedSupervisor<R> {
         self.state = reduce(&self.state, SupervisorEvent::StopRequested, self.limits)
             .map_err(SupervisorError::Transition)?;
         if let Err(error) = control::disable(&mut self.runtime) {
-            self.state = SupervisorState::stopped();
+            self.enter_cleanup_unsafe();
             return Err(SupervisorError::Control(error));
         }
         self.state = reduce(&self.state, SupervisorEvent::ChildrenStopped, self.limits)
@@ -381,8 +389,9 @@ impl<R: RuntimeControl> UnifiedSupervisor<R> {
     }
 
     pub fn record_crash(&mut self, now_unix: u64) -> RestartDecision {
-        self.state = reduce(&self.state, SupervisorEvent::HealthFailed, self.limits)
-            .unwrap_or_else(|_| SupervisorState::stopped());
+        if let Ok(next) = reduce(&self.state, SupervisorEvent::HealthFailed, self.limits) {
+            self.state = next;
+        }
         let decision = self.restart_budget.decide(now_unix, self.limits);
         if matches!(decision, RestartDecision::Allowed { .. }) {
             self.restart_budget.record_attempt(now_unix, self.limits);
@@ -390,8 +399,16 @@ impl<R: RuntimeControl> UnifiedSupervisor<R> {
         decision
     }
 
-    fn fail_and_stop(&mut self) {
-        self.state = SupervisorState::stopped();
+    fn enter_cleanup_unsafe(&mut self) {
+        self.state = SupervisorState {
+            phase: SupervisorPhase::CleanupUnsafe,
+            child_count: self.state.child_count.max(MANAGED_CHILDREN),
+            // A failed cleanup must be treated as possibly still installed.
+            redirect_present: true,
+            watchdog_armed: true,
+            scope_valid: self.state.scope_valid,
+            ipv6_ready: self.state.ipv6_ready,
+        };
     }
 }
 
