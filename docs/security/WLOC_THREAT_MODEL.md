@@ -1,7 +1,9 @@
 # WLOC PoC 威胁模型
 
-- Status: Accepted for offline scaffolding only; parser, CA, MITM, and real-device access remain prohibited.  
-状态：**已接受为离线骨架安全边界；未批准 parser、CA、MITM 或真机接入**  
+- Status: Historical Phase 0 baseline; the V2 implementation is covered by
+  the current Rust/OpenWrt tests and the V2 release gates. Real-device
+  acceptance remains pending.
+状态：**Phase 0 历史基线；V2 实现已有当前 Rust/OpenWrt 测试覆盖，真机验收仍待完成**
 评审记录：[Phase 0 review](../reviews/PHASE0_OFFLINE_SCAFFOLD_REVIEW.md)  
 适用范围：单台明确授权的测试 iPhone、Redmi AX6S/OpenWrt、独立 `wificalling_location` 数据面，以及两个精确目标 `gs-loc.apple.com` 和 `gs-loc-cn.apple.com`。  
 不适用范围：生产部署、多设备、全局 HTTPS 代理、运营商激活判断、GPS 替代、紧急呼叫位置保证。

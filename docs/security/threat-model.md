@@ -1,6 +1,10 @@
 # WLOC router PoC threat model
 
-Status: Phase 0 canonical security specification. This approval is for offline documentation and tests only. It does not authorize protocol patching, certificate generation, router rules, production traffic, or real-device testing.
+Status: Historical Phase 0 canonical security specification. Its threat
+invariants remain applicable, while the V2 implementation and release status
+are governed by `DEVELOPMENT_TEST_PLAN.md`, the current OpenWrt/Rust tests, and
+the redacted AX6S evidence template. This document does not itself prove live
+device acceptance.
 
 This model covers one explicitly authorized test device and LAN, the isolated WLOC component, its future router integration boundary, and its upstream dependencies. It intentionally does not describe Apple private protocol fields.
 
@@ -51,7 +55,9 @@ Root compromise is outside the PoC's confidentiality guarantee, but even a root-
 
 ## Critical and High threat register
 
-Each row names the mandatory control and the future executable or operational evidence required before its implementation phase may exit. This document records requirements, not a claim that those future tests already pass.
+Each row names the mandatory control and the executable or operational evidence
+required before its release gate may exit. Repository tests cover the current
+implementation; this document does not itself prove AX6S live acceptance.
 
 | ID | Severity and abuse case | Mandatory control | Required evidence owner |
 |---|---|---|---|
@@ -91,11 +97,21 @@ Before any real-device test, a reviewed deployment ADR must choose either a comp
 
 ## Kernel expiry lease for watchdog loss
 
-The future OpenWrt implementation requires a safety mechanism independent of the continued life of any userspace engine or watchdog. Redirect can match only when the assigned device key is present in dedicated short-TTL nft set elements. The nftables redirect expression must require both the normal device/destination/TCP scope and membership in this live lease set; creating a rule without that match is prohibited.
+The V2 OpenWrt implementation uses a safety mechanism independent of the
+continued life of any userspace engine or watchdog. Redirect can match only
+when the assigned device key is present in dedicated short-TTL nft set
+elements. The nftables redirect expression must require both the normal
+device/destination/TCP scope and membership in this live lease set; creating a
+rule without that match is prohibited.
 
 The external supervisor renews the lease only while engine, scope, and IPv6 health pass. If the supervisor is killed, OOM-terminated, wedged, or unable to check health, renewal stops and the kernel automatically expires the lease. A rule may remain present but cannot redirect without a matching live lease. Startup and reboot begin with no lease, so neither stale userspace state nor a surviving rule enables interception.
 
-This is a required design and test gate, not a claim that a lease mechanism is implemented in Phase 0. The owning implementation Issue must freeze the short TTL and maximum blackhole bound, account for timer/scheduling behavior, and measure the bound on the AX6S by killing or OOM-terminating both engine and supervisor. Active stop still deletes the redirect and verifies absence before stopping the engine; lease expiry is an independent last-resort safety net, not a replacement for cleanup.
+V2 implements this lease mechanism and covers its safety contract in the
+supervisor/redirect tests. The release evidence must still freeze and measure
+the short TTL and maximum blackhole bound on AX6S by killing or
+OOM-terminating both engine and supervisor. Active stop still deletes the
+redirect and verifies absence before stopping the engine; lease expiry is an
+independent last-resort safety net, not a replacement for cleanup.
 
 ## Resource exhaustion controls
 

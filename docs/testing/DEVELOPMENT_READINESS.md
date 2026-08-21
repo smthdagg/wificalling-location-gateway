@@ -2,6 +2,14 @@
 
 Date: 2026-08-11
 
+> Historical Phase 0 snapshot. This report predates the V2 Rust/OpenWrt
+> implementation and is retained for audit history only. Current status is in
+> [`V2.0_TASK_BREAKDOWN.md`](../releases/V2.0_TASK_BREAKDOWN.md),
+> [`OPENWRT_PACKAGE_DOCKER_MATRIX.md`](OPENWRT_PACKAGE_DOCKER_MATRIX.md), and
+> [`AX6S_RESOURCE_EVIDENCE.template.md`](AX6S_RESOURCE_EVIDENCE.template.md).
+> Do not use the old `implementation=BLOCKED` result as the current release
+> decision; real AX6S migration/resource/rollback evidence is still pending.
+
 ## Result
 
 | Layer | Result | Meaning |

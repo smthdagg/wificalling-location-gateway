@@ -1,6 +1,11 @@
 # WLOC fail-open and recovery invariants
 
-Status: Phase 0 executable documentation contract. It authorizes offline documentation and tests only, not a live redirect, CA, MITM, production traffic, or real-device test.
+Status: Historical Phase 0 contract. The implementation status is governed by
+the V2 addendum in `DEVELOPMENT_TEST_PLAN.md`, the executable supervisor and
+redirect tests, and the AX6S acceptance evidence. This file remains the
+security-invariant source for fail-open behavior; its Phase 0-only wording
+must not be read as evidence that the V2 implementation is absent or that
+real-device acceptance has passed.
 
 Fail-open means that a failure removes the dedicated interception path for subsequent connections or returns an already authenticated response without modification. It never means weakening TLS verification, inventing a location, accepting untrusted bytes, or promising that an in-flight connection survives.
 
@@ -20,7 +25,12 @@ There is never a default or fallback coordinate. Invalid, missing, conflicting, 
 
 Every redirect is gated by membership of the assigned-device key in short-TTL nft set elements. The supervisor renews the lease only while engine, scope, and IPv6 health pass. On supervisor death or loss of scheduling, renewal ceases and the kernel automatically expires the lease without help from a userspace process. A rule may remain present but cannot redirect without a matching live lease; startup and reboot begin with no lease.
 
-The lease is defense in depth, not a substitute for deterministic cleanup: active stop still deletes the redirect and verifies absence before engine shutdown. Phase 0 specifies this behavior but does not implement it or assign an invented TTL. A future implementation Issue must freeze the TTL and maximum blackhole time, then measure both on AX6S under engine `kill -9`, supervisor `kill -9`, OOM, scheduler delay, and crash-loop conditions.
+The lease is defense in depth, not a substitute for deterministic cleanup:
+active stop still deletes the redirect and verifies absence before engine
+shutdown. V2 implements the bounded lease in the OpenWrt helpers and covers
+its expiry/cleanup contract in repository tests; AX6S timing under engine
+`kill -9`, supervisor `kill -9`, OOM, scheduler delay, and crash-loop
+conditions remains a real-device release gate.
 
 <!-- SECURITY_INVARIANT id="FAILOPEN-GEO" -->
 
@@ -75,7 +85,12 @@ If redirect absence cannot be verified, the operation reports a hard degraded st
 
 ## Recovery service-level gate
 
-The implementation Issue must set a numeric lease TTL and maximum blackhole time and test them under engine `kill -9`, supervisor `kill -9`, OOM, startup failure, watchdog loss, scheduler delay, crash loop, stop, rollback, dnsmasq reload, and reboot. The measurement must show that matching lease elements expire in the AX6S kernel and that any residual redirect rule is inert. Phase 0 deliberately does not invent either value. No real-device gate may pass with an unmeasured or aspirational recovery bound.
+The V2 implementation uses a bounded lease and repository failure-path tests;
+the AX6S release evidence must still record the numeric expiry and maximum
+blackhole observation under engine `kill -9`, supervisor `kill -9`, OOM,
+startup failure, watchdog loss, scheduler delay, crash loop, stop, rollback,
+dnsmasq reload, and reboot. No real-device gate may pass with an unmeasured
+or aspirational recovery bound.
 
 Audit records may contain only bounded categories, generations, coarse time, exact approved hostname, and byte counts. They never include response/request bodies, precise coordinates, device addresses, CA/leaf keys, node credentials, or provider tokens.
 
