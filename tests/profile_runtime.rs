@@ -160,6 +160,24 @@ fn unhealthy_shared_engine_never_installs_any_profile_redirect() {
 }
 
 #[test]
+fn every_new_profile_enable_rechecks_shared_engine_health() {
+    let mut manager = manager(FakeRuntime {
+        healthy: true,
+        ..FakeRuntime::default()
+    });
+    manager.enable("phone").unwrap();
+    manager.runtime_mut().healthy = false;
+
+    assert_eq!(
+        manager.enable("tablet"),
+        Err(ProfileRuntimeError::EngineUnhealthy)
+    );
+    assert_eq!(manager.status("phone").unwrap().phase, ProfileRuntimePhase::Intercepting);
+    assert_eq!(manager.status("tablet").unwrap().phase, ProfileRuntimePhase::DegradedPassthrough);
+    assert_eq!(manager.runtime().redirects, vec!["phone".to_owned()]);
+}
+
+#[test]
 fn unsupported_mac_profile_is_rejected_without_runtime_operation() {
     let model = ProfileModel::new(vec![profile("phone", "aa:bb:cc:dd:ee:ff")]).unwrap();
     let mut manager = ProfileRuntimeManager::new(
