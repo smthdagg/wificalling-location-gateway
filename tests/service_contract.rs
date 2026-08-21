@@ -5,6 +5,15 @@ use wificalling_location_gateway::service::{
     current_response_mode, decide_ingress, GeoRecord, IngressDisposition, ResponseMode,
     RuntimeHealth, ServiceConfig, ServiceConfigError, TrafficMeta, Transport, SERVICE_API_VERSION,
 };
+use wificalling_location_gateway::APPROVED_WLOC_HOSTS;
+
+#[test]
+fn approved_wloc_hosts_are_exactly_the_two_apple_names() {
+    assert_eq!(
+        APPROVED_WLOC_HOSTS,
+        ["gs-loc.apple.com", "gs-loc-cn.apple.com"]
+    );
+}
 
 fn assigned_device() -> IpAddr {
     IpAddr::V4(Ipv4Addr::new(192, 0, 2, 10))
