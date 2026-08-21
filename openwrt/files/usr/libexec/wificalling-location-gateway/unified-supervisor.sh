@@ -18,6 +18,11 @@ WLOC_INIT=${WLOC_INIT:-/etc/init.d/wloc-service}
 GATEWAY_INIT=${GATEWAY_INIT:-/etc/init.d/wificalling-gateway}
 REDIRECT_HELPER=${WLOC_REDIRECT_HELPER:-/usr/sbin/wloc-redirect-sync.sh}
 PROFILE_REDIRECT_HELPER=${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.sh}
+WLOC_SOCKET=${WLOC_SOCKET:-/var/run/wloc-service/control.sock}
+WLOC_SERVICE_PIDFILE=${WLOC_SERVICE_PIDFILE:-/var/run/wloc-service/service.pid}
+WLOC_SERVICE_BIN=${WLOC_SERVICE_BIN:-/usr/sbin/wloc-service}
+GATEWAY_CONFIG=${GATEWAY_CONFIG:-/var/run/wificalling-gateway/sing-box.json}
+GATEWAY_NFT_BINARY=${GATEWAY_NFT_BINARY:-nft}
 PROFILE_PROXY_READY_FILE=${WLOC_PROFILE_PROXY_READY_FILE:-/var/run/wloc-service/profiles/.proxy-ready}
 PROFILE_ACTIVATE_FILE=${WLOC_PROFILE_ACTIVATE_FILE:-/var/run/wloc-service/profiles/.activate}
 PROFILE_READY_FILE=${WLOC_PROFILE_READY_FILE:-/var/run/wloc-service/profiles/.ready}
@@ -119,6 +124,7 @@ cleanup_runtime() {
 	withdraw_redirect
 	withdraw_profile_redirects
 	stop_child "$WLOC_INIT"
+	rm -f "$WLOC_SERVICE_PIDFILE" "$WLOC_SOCKET"
 	wloc_running=0
 	if [ "$keep_gateway" -eq 1 ]; then
 		# The stable Gateway is deliberately never stopped here. WLOC failure
@@ -145,24 +151,33 @@ stop_supervisor() {
 }
 
 health_ok() {
-	# The supervisor only considers a child healthy when its init action
-	# succeeded, the process is observable, and WLOC's root-only socket exists.
-	# No network probe or unbounded command output is used in this loop.
-	if command -v pgrep >/dev/null 2>&1; then
-		pgrep -f '/usr/bin/sing-box run' >/dev/null 2>&1 || return 1
-		pgrep -f '/usr/sbin/wloc-service' >/dev/null 2>&1 || return 1
-	else
-		return 1
-	fi
-	[ -S "${WLOC_SOCKET:-/var/run/wloc-service/control.sock}" ] || return 1
+	# Health is based on component-owned evidence, never a global process-name
+	# search that can match an unrelated sing-box or wloc-service.
+	gateway_healthy || return 1
+	service_pid_matches || return 1
+	[ -S "$WLOC_SOCKET" ] || return 1
 	if profile_mode; then
 		[ -f "$PROFILE_PROXY_READY_FILE" ] || return 1
 	fi
 }
 
 gateway_healthy() {
-	command -v pgrep >/dev/null 2>&1 || return 1
-	pgrep -f '/usr/bin/sing-box run' >/dev/null 2>&1
+	[ -f "$GATEWAY_CONFIG" ] || return 1
+	case "$GATEWAY_NFT_BINARY" in
+		/*) [ -x "$GATEWAY_NFT_BINARY" ] || return 1 ;;
+		*) command -v "$GATEWAY_NFT_BINARY" >/dev/null 2>&1 || return 1 ;;
+	esac
+	"$GATEWAY_NFT_BINARY" list table inet wificalling_gateway >/dev/null 2>&1
+}
+
+service_pid_matches() {
+	[ -s "$WLOC_SERVICE_PIDFILE" ] || return 1
+	service_pid=$(sed -n '1p' "$WLOC_SERVICE_PIDFILE")
+	case "$service_pid" in ''|*[!0-9]*) return 1;; esac
+	pid_alive "$service_pid" || return 1
+	[ -r "/proc/$service_pid/cmdline" ] || return 1
+	service_command=$(tr '\000' '\n' < "/proc/$service_pid/cmdline" 2>/dev/null | sed -n '1p')
+	[ "$service_command" = "$WLOC_SERVICE_BIN" ]
 }
 
 wait_for_health() {
@@ -196,6 +211,7 @@ start_supervisor() {
 	[ -x "$WLOC_INIT" ] && "$WLOC_INIT" disable >/dev/null 2>&1 || true
 	[ -x "$GATEWAY_INIT" ] && "$GATEWAY_INIT" disable >/dev/null 2>&1 || true
 	stop_child "$WLOC_INIT"
+	rm -f "$WLOC_SERVICE_PIDFILE" "$WLOC_SOCKET"
 	if profile_mode; then
 		# Remove all profile and legacy tables before either child becomes
 		# ready; startup must never inherit interception from the previous mode.
@@ -253,6 +269,7 @@ main() {
 		start) start_supervisor ;;
 		stop) stop_supervisor ;;
 		reload) stop_supervisor; start_supervisor ;;
+		health) health_ok ;;
 		status) [ -s "$STATE" ] && cat "$STATE" || printf '%s\n' '{"version":1,"phase":"stopped","reason":"not_running"}' ;;
 		*) echo "usage: $0 {start|stop|reload|status}" >&2; exit 2 ;;
 	esac

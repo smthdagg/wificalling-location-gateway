@@ -27,6 +27,37 @@ grep -F 'multiple_profiles_configured' "$redirect" >/dev/null
 grep -F 'PROFILE_PROXY_READY_FILE' "$supervisor" >/dev/null
 grep -F 'PROFILE_ACTIVATE_FILE' "$supervisor" >/dev/null
 grep -F 'PROFILE_READY_FILE' "$supervisor" >/dev/null
+if grep -E 'pgrep[[:space:]]+-f' "$supervisor" >/dev/null; then
+	printf '%s\n' 'supervisor must not use global pgrep -f process matching' >&2
+	exit 1
+fi
+grep -F 'WLOC_SERVICE_PIDFILE' "$supervisor" >/dev/null
+grep -F 'service_pid_matches' "$supervisor" >/dev/null
+grep -F 'health)' "$supervisor" >/dev/null
+
+mkdir -p "$tmp/health-bin" "$tmp/gateway"
+cat > "$tmp/health-bin/nft" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod 0755 "$tmp/health-bin/nft"
+: > "$tmp/gateway/sing-box.json"
+sleep 60 & stale_pid=$!
+printf '%s\n' "$stale_pid" > "$tmp/stale-wloc.pid"
+if WLOC_UNIFIED_RUNDIR="$tmp/run" \
+	WLOC_SERVICE_PIDFILE="$tmp/stale-wloc.pid" \
+	WLOC_SERVICE_BIN=/usr/sbin/wloc-service \
+	WLOC_SOCKET="$tmp/control.sock" \
+	GATEWAY_CONFIG="$tmp/gateway/sing-box.json" \
+	GATEWAY_NFT_BINARY="$tmp/health-bin/nft" \
+		"$supervisor" health; then
+	health_rc=0
+else
+	health_rc=$?
+fi
+kill "$stale_pid" 2>/dev/null || true
+wait "$stale_pid" 2>/dev/null || true
+[ "$health_rc" -eq 1 ]
 grep -F 'WLOC_PROFILE_ACTIVATE_FILE' "$repo_root/src/bin/wloc-service.rs" >/dev/null
 grep -F 'service.activate_profiles()' "$repo_root/src/bin/wloc-service.rs" >/dev/null
 grep -F 'WLOC_SKIP_REDIRECT' "$wloc_init" >/dev/null
@@ -47,7 +78,7 @@ if grep -F 'stop_child "$GATEWAY_INIT"' "$supervisor" >/dev/null; then
 fi
 grep -F 'START_TIMEOUT' "$supervisor" >/dev/null
 
-if grep -E 'udp[[:space:]]+500|udp[[:space:]]+4500|wificalling_gateway' "$supervisor" "$redirect" >/dev/null; then
+if grep -E 'udp[[:space:]]+500|udp[[:space:]]+4500|nft[[:space:]]+(add|delete|flush|insert|replace).*wificalling_gateway' "$supervisor" "$redirect" >/dev/null; then
 	printf '%s\n' 'unified supervisor must not own Gateway nftables or UDP 500/4500' >&2
 	exit 1
 fi
