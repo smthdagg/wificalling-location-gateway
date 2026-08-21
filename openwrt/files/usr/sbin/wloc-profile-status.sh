@@ -43,7 +43,7 @@ profile_phase() {
 }
 
 sections=$(uci -q show wloc-service 2>/dev/null \
-	| sed -n 's/^wloc-service\.\([a-z0-9_-]*\)=device$/\1/p' \
+	| sed -n 's/^wloc-service\.\([a-z0-9_]*\)=device$/\1/p' \
 	| head -n "$MAX_PROFILES" || true)
 if [ -z "$sections" ]; then
 	# Keep the v1 singleton visible during migration without returning its

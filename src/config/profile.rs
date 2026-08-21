@@ -274,9 +274,9 @@ pub fn validate_profile_id(value: &str) -> Result<(), ProfileError> {
         return Err(ProfileError::EmptyField("id"));
     }
     if value.len() > MAX_PROFILE_ID_BYTES
-        || !value.bytes().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')
-        })
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
     {
         return Err(ProfileError::InvalidProfileId(value.to_owned()));
     }

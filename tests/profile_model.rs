@@ -168,7 +168,7 @@ fn profile_count_and_serialized_size_are_bounded() {
     let too_many = (0..=8)
         .map(|index| {
             profile(
-                &format!("phone-{index}"),
+                &format!("phone_{index}"),
                 &format!("192.168.1.{}", index + 10),
             )
         })
@@ -241,6 +241,15 @@ fn oversized_uci_text_is_rejected_before_profile_accumulation() {
         WlocUciConfig::parse(&text),
         Err(wificalling_location_gateway::config::UciError::ConfigTooLarge)
     ));
+}
+
+#[test]
+fn profile_ids_are_compatible_with_uci_named_sections() {
+    let accepted = ProfileModel::new(vec![profile("phone_2", "192.168.1.10")]);
+    assert!(accepted.is_ok());
+
+    let rejected = ProfileModel::new(vec![profile("phone-2", "192.168.1.10")]);
+    assert!(matches!(rejected, Err(ProfileError::InvalidProfileId(_))));
 }
 
 #[test]

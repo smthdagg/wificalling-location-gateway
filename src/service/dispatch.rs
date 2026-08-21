@@ -248,6 +248,31 @@ impl UciProfileStore {
             .ok_or(DispatchError::RuntimeFailure)
     }
 
+    /// UCI returns an error when deleting an option that is not present.
+    /// Profile persistence emits bounded cleanup deletes for optional fields,
+    /// so a missing field is an idempotent success while a failed delete of an
+    /// existing target remains fatal.
+    fn run_uci_delete(&self, args: &[String]) -> Result<(), DispatchError> {
+        match self.run_uci(args) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                let target = args.get(1).ok_or(error)?;
+                let exists = Command::new(&self.uci_binary)
+                    .arg("-q")
+                    .arg("show")
+                    .arg(target)
+                    .status()
+                    .map(|status| status.success())
+                    .unwrap_or(true);
+                if exists {
+                    Err(error)
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
+
     fn persist(&mut self, profiles: &[DeviceProfile]) -> Result<(), DispatchError> {
         let mut args = Vec::new();
         for id in &self.persisted_ids {
@@ -279,7 +304,12 @@ impl UciProfileStore {
             }
         }
         for command in &args {
-            if let Err(error) = self.run_uci(command) {
+            let result = if command.first().map(String::as_str) == Some("delete") {
+                self.run_uci_delete(command)
+            } else {
+                self.run_uci(command)
+            };
+            if let Err(error) = result {
                 let _ = self.run_uci(&["revert".to_owned(), "wloc-service".to_owned()]);
                 return Err(error);
             }
@@ -752,6 +782,29 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn fake_uci_with_missing_deletes() -> (std::path::PathBuf, std::path::PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!(
+            "wloc-uci-delete-test-{}-{}",
+            std::process::id(),
+            now_for_test()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let log = root.join("commands.log");
+        let script = root.join("uci");
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nshift\nprintf '%s\\n' \"$*\" >> '{}'\n[ \"$1\" = delete ] && exit 1\n[ \"$1\" = show ] && exit 1\nexit 0\n",
+                log.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        (script, root)
+    }
+
+    #[cfg(unix)]
     fn now_for_test() -> u128 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -777,6 +830,28 @@ mod tests {
         assert!(log.contains("set wloc-service.phone.enabled=0"));
         assert!(log.contains("commit wloc-service"));
         assert!(!store.inner.model.profiles()[0].enabled);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn uci_profile_store_treats_missing_optional_deletes_as_idempotent() {
+        let (script, root) = fake_uci_with_missing_deletes();
+        let config = WlocUciConfig {
+            profiles: vec![profile("phone")],
+            ..WlocUciConfig::default()
+        };
+        let mut store = UciProfileStore::from_config(&config, script).unwrap();
+        let params = ProfileRequestParams {
+            enabled: Some(false),
+            ..ProfileRequestParams::default()
+        };
+        store
+            .update_profile("phone", &params)
+            .expect("missing optional fields are safe to delete");
+        let log = std::fs::read_to_string(root.join("commands.log")).unwrap();
+        assert!(log.contains("delete wloc-service.phone.manual_lat"));
+        assert!(log.contains("show wloc-service.phone.manual_lat"));
         let _ = std::fs::remove_dir_all(root);
     }
 

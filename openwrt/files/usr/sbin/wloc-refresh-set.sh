@@ -60,7 +60,7 @@ timed_ips=$(printf '%s' "$ips" | sed 's/,/, timeout 30s, /g; s/$/ timeout 30s/')
 multiple_profiles_configured() {
 	command -v uci >/dev/null 2>&1 || return 1
 	profiles=$(uci -q show wloc-service 2>/dev/null \
-		| sed -n 's/^wloc-service\.[a-z0-9_-]*=device$/x/p' \
+		| sed -n 's/^wloc-service\.[a-z0-9_]*=device$/x/p' \
 		| wc -l | tr -d ' ')
 	[ "${profiles:-0}" -gt 1 ] 2>/dev/null
 }
@@ -81,7 +81,7 @@ fi
 # nft arguments even though they originate from the local kernel listing.
 profile_tables=$(
     "$NFT_BINARY" list tables inet 2>/dev/null \
-        | sed -n 's/^table inet \(wloc_profile_[a-z0-9_-]*\)$/\1/p' \
+        | sed -n 's/^table inet \(wloc_profile_[a-z0-9_]*\)$/\1/p' \
 		|| true
 )
 profile_is_live() {

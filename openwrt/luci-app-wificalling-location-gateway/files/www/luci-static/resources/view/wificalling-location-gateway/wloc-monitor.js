@@ -14,7 +14,7 @@
 var STATUS_FILE = '/var/run/wloc-service/status.json';
 var EVENTS_FILE = '/var/run/wloc-service/events.jsonl';
 var PROFILE_STATUS_ROOT = '/var/run/wloc-service/profiles/';
-var PROFILE_ID_RE = /^[a-z0-9_-]{1,32}$/;
+var PROFILE_ID_RE = /^[a-z0-9_]{1,32}$/;
 
 function profileFile(profileId, filename) {
 	if (profileId === 'default') return filename === 'status.json' ? STATUS_FILE : EVENTS_FILE;

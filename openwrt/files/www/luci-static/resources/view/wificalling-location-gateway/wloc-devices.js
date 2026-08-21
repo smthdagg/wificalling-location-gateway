@@ -53,7 +53,7 @@ function profileFromFields(section, fields) {
 }
 
 function validateProfile(profile) {
-	if (!/^[a-z0-9_-]{1,32}$/.test(profile['.name'])) return 'invalid profile id';
+	if (!/^[a-z0-9_]{1,32}$/.test(profile['.name'])) return 'invalid profile id';
 	if (!profile.label || profile.label.length > 48) return 'label must be 1-48 characters';
 	if (!profile.assigned_device || profile.assigned_device.length > 64 ||
 		profile.assigned_device !== profile.assigned_device.trim() ||
@@ -218,7 +218,7 @@ return view.extend({
 			var profiles = uci.sections('wloc-service', 'device');
 			if (profiles.length >= MAX_PROFILES) return notify(wlocI18n.t('Add failed'), 'at most ' + MAX_PROFILES + ' profiles are supported', 'error');
 			var id = window.prompt(wlocI18n.t('New profile id'), 'device' + (profiles.length + 1));
-			if (!id || !/^[a-z0-9_-]{1,32}$/.test(id) || uci.get('wloc-service', id))
+			if (!id || !/^[a-z0-9_]{1,32}$/.test(id) || uci.get('wloc-service', id))
 				return notify(wlocI18n.t('Add failed'), wlocI18n.t('Use a unique lowercase profile id.'), 'error');
 			uci.add('wloc-service', 'device', id);
 			[['label', id], ['node_ref', 'default'], ['node_mode', 'fixed'], ['geo_source', 'auto'], ['enabled', '0']].forEach(function(pair) {

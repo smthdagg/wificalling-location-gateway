@@ -92,7 +92,7 @@ profile_mode() {
 	esac
 	command -v uci >/dev/null 2>&1 || return 1
 	profiles=$(uci -q show wloc-service 2>/dev/null \
-		| sed -n 's/^wloc-service\.[a-z0-9_-]*=device$/x/p' \
+		| sed -n 's/^wloc-service\.[a-z0-9_]*=device$/x/p' \
 		| wc -l | tr -d ' ')
 	[ "${profiles:-0}" -gt 1 ] 2>/dev/null
 }

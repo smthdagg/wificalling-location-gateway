@@ -64,7 +64,7 @@ or unbounded command output.
 | `profile.wloc.set_location` | Set validated manual coordinates/preset | runtime/config |
 | `profile.wloc.clear_location` | Return profile to auto mode | runtime/config |
 
-`profile_id` is a bounded local identifier (`[a-z0-9_-]{1,32}`) validated at
+`profile_id` is a bounded local identifier (`[a-z0-9_]{1,32}`) validated at
 the API boundary. A profile may expose its
 administrator-visible IP/MAC through the authenticated local LuCI facade, but
 the default wire status must not leak device material to arbitrary callers.

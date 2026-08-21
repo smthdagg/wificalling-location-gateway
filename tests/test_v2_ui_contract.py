@@ -77,7 +77,7 @@ class V2UiContractTests(unittest.TestCase):
             self.assertIn("selectedProfile", monitor)
             self.assertIn("wloc-service', 'device", monitor)
             self.assertIn("/var/run/wloc-service/profiles/", monitor)
-            self.assertIn("[a-z0-9_-]", monitor)
+            self.assertIn("[a-z0-9_]", monitor)
             files = acl["read"]["file"]
             self.assertIn("/var/run/wloc-service/profiles/*/status.json", files)
             self.assertIn("/var/run/wloc-service/profiles/*/events.jsonl", files)
