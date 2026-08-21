@@ -97,6 +97,9 @@ measurement template. Do not claim real-device measurements from the host.
   and bounds all paths with a timeout.
 - Python fallback initially inherited a shell temporary file before `exec`;
   the temporary file is now created only for GNU time mode.
+- The standalone builder initially exposed the package gate's success text on
+  stdout, breaking callers that consume only the generated IPK path; the gate
+  output is now suppressed at that compatibility boundary.
 - The local commit hook reports `lefthook` unavailable in PATH; repository
   verification itself passed.
 

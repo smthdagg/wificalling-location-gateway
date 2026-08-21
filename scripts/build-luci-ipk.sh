@@ -261,7 +261,7 @@ make_archive "$stage/control" "$stage/control.tar.gz" .
 make_archive "$stage/data" "$stage/data.tar.gz" .
 rm -f "$out"
 make_archive "$stage" "$out" debian-binary data.tar.gz control.tar.gz
-"$root/scripts/ci/verify-package-budget.sh" "$out"
+"$root/scripts/ci/verify-package-budget.sh" "$out" >/dev/null
 "$root/scripts/create-update-manifest.sh" "$out" >/dev/null
 
 echo "$out"
