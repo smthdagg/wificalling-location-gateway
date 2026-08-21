@@ -6,7 +6,7 @@
 - Capabilities used: integration,security,test,openwrt,ui
 - Branch: codex/issue-41-v2-release-codex-v2-lead-20260821133002-404596fe
 - Checkpoint parent: 501dea9
-- Updated at (UTC): 2026-08-21T19:58:44Z
+- Updated at (UTC): 2026-08-21T20:41:13Z
 - Credentials included: no
 
 ## Objective
@@ -48,14 +48,17 @@ that have not been observed.
   Gateway-only UI text.
 - The final rebuilt package was installed again on AX6S after removing the old
   package. Its final hash is
-  `58cc90e5ac5e05af26760984ac3b3a82a84cb32d93f554f37c067e01fc8f05cd`; API,
-  UI/PO files, mobileconfig export, service health, RSS, storage and memory
-  checks passed.
-- The independent feed repository was cloned read-only for a V2 preflight:
-  all three release packages indexed correctly and `Packages`/
-  `Packages.gz` were signed and verified with the protected key. The remote
-  feed was not changed because real-client and fault-injection gates remain
-  open.
+  `90762e2453ffae11341fef6caa42bef379ba52a9599d5aeb73bcc0a2952f231f`; the
+  exact `mediatek/mt7622` target, API, UI/PO files, mobileconfig export,
+  service health, RSS, storage and memory checks passed.
+- The component updater now rejects a package whose `X-WLOC-Target` differs
+  from the router's `DISTRIB_TARGET`; RED/GREEN commits are `1172a03` and
+  `b68ff9d`.
+- The independent feed repository was refreshed locally with the current three
+  release packages, SHA256SUMS, and signed/verified `Packages`/
+  `Packages.gz`. Its standalone V2 README was pushed to the feed `main`
+  branch (`a264a25`); gh-pages package publication remains after the main PR
+  merge and the explicitly open real-client/physical-fault gates.
 
 ## Files changed
 
@@ -80,6 +83,8 @@ that have not been observed.
 | `tests/scripts/test-standalone-ax6s-package.sh` | Passed | architecture-specific package layout and provider warning |
 | `python3 -m unittest discover -s tests -p 'test_v2_ui_contract.py'` | Passed | 9 UI/catalogue contract tests |
 | `./scripts/openwrt/verify-docker-matrix.sh --dist-dir dist/openwrt-release` | Passed | 4 OpenWrt/iStoreOS package installs and status checks |
+| `gh pr checks 60 --repo smthdagg/wificalling-location-gateway` | Passed | openwrt-cross-build, verify, and pull-request-contract |
+| feed SHA256/signature preflight | Passed | three package hashes and both usign signatures verified locally |
 | `./tests/scripts/test-structured-logs.sh` | Passed | GNU tar-compatible support-bundle member lookup |
 | `git diff --check` | Passed | no whitespace errors |
 
