@@ -16,6 +16,7 @@ pub mod dispatch;
 pub mod server;
 pub mod state;
 pub mod status;
+pub mod supervisor;
 
 pub const SERVICE_API_VERSION: u16 = 1;
 const MAX_CONNECTIONS: u16 = 32;

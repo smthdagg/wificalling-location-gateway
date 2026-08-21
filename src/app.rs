@@ -18,14 +18,13 @@ use crate::exitprobe::{NodeRef, ProbeLimits};
 use crate::georesolver::runtime::{resolve_geo, GeoProviderRuntime};
 use crate::georesolver::{GeoResolution, ProviderRef};
 use crate::service::api::RequestParams;
-use crate::service::control::{
-    disable as control_disable, enable as control_enable, ControlError, RuntimeControl,
-};
+use crate::service::control::{ControlError, RuntimeControl};
 use crate::service::dispatch::{DispatchError, ServiceDispatch};
 use crate::service::state::{reduce, ServiceEvent, ServicePhase, ServiceState};
 use crate::service::status::{
     encode_status, DesiredState, EngineHealth, ExitState, GeoState, StatusInputs,
 };
+use crate::service::supervisor::{SupervisorError, UnifiedSupervisor};
 use crate::wloc::PatchTarget;
 
 fn current_unix() -> u64 {
@@ -42,6 +41,13 @@ fn map_control_error(error: ControlError) -> DispatchError {
         ControlError::RedirectStillPresent => DispatchError::RedirectPresent,
         ControlError::CleanupUnsafe => DispatchError::CleanupUnsafe,
         ControlError::RuntimeFailure(_) => DispatchError::RuntimeFailure,
+    }
+}
+
+fn map_supervisor_error(error: SupervisorError) -> DispatchError {
+    match error {
+        SupervisorError::Control(control_error) => map_control_error(control_error),
+        SupervisorError::Transition(_) => DispatchError::InvalidConfig,
     }
 }
 
@@ -84,7 +90,7 @@ struct ManualGeoLookup {
 /// and Geo resolver.
 pub struct WlocService<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> {
     state: ServiceState,
-    runtime: R,
+    supervisor: UnifiedSupervisor<R>,
     probe: P,
     geo: G,
     node_ref: NodeRef,
@@ -144,7 +150,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     pub fn new(runtime: R, probe: P, geo: G, config: WlocServiceConfig) -> Self {
         Self {
             state: ServiceState::disabled(),
-            runtime,
+            supervisor: UnifiedSupervisor::new(runtime),
             probe,
             geo,
             node_ref: config.node_ref,
@@ -639,8 +645,9 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
         if self.state.phase() != ServicePhase::Disabled {
             return Err(DispatchError::InvalidConfig);
         }
-        control_enable(&mut self.runtime, self.scope_valid, self.ipv6_ready)
-            .map_err(map_control_error)?;
+        self.supervisor
+            .enable(self.scope_valid, self.ipv6_ready)
+            .map_err(map_supervisor_error)?;
         self.apply_enable_events();
         self.desired_state = DesiredState::Enabled;
         Ok(())
@@ -650,7 +657,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
         if self.state.phase() == ServicePhase::Disabled {
             return Ok(());
         }
-        control_disable(&mut self.runtime).map_err(map_control_error)?;
+        self.supervisor.disable().map_err(map_supervisor_error)?;
         for event in [ServiceEvent::BeginDisable, ServiceEvent::EngineStopped] {
             match reduce(&self.state, event) {
                 Ok(next) => self.state = next,

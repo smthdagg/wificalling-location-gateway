@@ -15,15 +15,11 @@ pub mod service;
 pub mod tls_h2;
 pub mod wloc;
 
-/// Approved WLOC hostnames whose traffic may be intercepted. The Apple names
-/// CNAME to the autonavi bluedot service, so a real request can arrive with
-/// either the Apple or the bluedot hostname as its SNI/Host.
-pub const APPROVED_WLOC_HOSTS: [&str; 4] = [
-    "gs-loc.apple.com",
-    "gs-loc-cn.apple.com",
-    "bluedot.is.autonavi.com",
-    "bluedot.is.autonavi.com.gds.alibabadns.com",
-];
+/// Approved WLOC hostnames whose traffic may be intercepted. The scope is
+/// deliberately limited to the two exact Apple names required by the
+/// OpenWrt traffic-isolation contract; DNS CNAME targets are not interception
+/// hostnames.
+pub const APPROVED_WLOC_HOSTS: [&str; 2] = ["gs-loc.apple.com", "gs-loc-cn.apple.com"];
 pub const MAX_WLOC_BODY_BYTES: u64 = 512 * 1024;
 const MIN_H2_FRAME_SIZE: u32 = 16 * 1024;
 

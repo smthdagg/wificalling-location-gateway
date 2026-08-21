@@ -22,6 +22,7 @@ done
 ./tests/scripts/test-openwrt-release-packaging.sh
 ./tests/scripts/test-standalone-ax6s-package.sh
 ./tests/scripts/test-release-version.sh
+./tests/scripts/test-unified-supervisor.sh
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 ./scripts/scan_secrets.py
 
