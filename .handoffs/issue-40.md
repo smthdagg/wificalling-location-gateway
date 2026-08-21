@@ -4,7 +4,7 @@
 
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test
-- Branch: codex/issue-40-ax6s-resource-gates-ci-fix-codex-v2-lead-20260821121438-72d38e2f
+- Branch: codex/issue-40-ax6s-resource-gates-ci-fix2-codex-v2-lead-20260821122614-862fa284
 - Final local checkpoint before handoff: pending independent review, CI, and AX6S hardware evidence
 - Credentials included: no
 
