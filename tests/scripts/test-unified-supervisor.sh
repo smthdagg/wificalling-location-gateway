@@ -5,17 +5,19 @@ repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 supervisor="$repo_root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
 init="$repo_root/openwrt/files/etc/init.d/wificalling-location-gateway"
 redirect="$repo_root/openwrt/files/usr/sbin/wloc-redirect-sync.sh"
+wloc_refresh="$repo_root/openwrt/files/usr/sbin/wloc-refresh-set.sh"
 wloc_init="$repo_root/openwrt/files/etc/init.d/wloc-service"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-unified-supervisor.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
 sh -n "$supervisor" "$init" "$redirect"
+sh -n "$wloc_refresh"
 sh -n "$wloc_init"
 grep -F 'procd_set_param command "$SUPERVISOR" start' "$init" >/dev/null
 grep -F 'procd_set_param respawn 3600 5 3' "$init" >/dev/null
 grep -F 'procd_add_reload_trigger wificalling-gateway' "$init" >/dev/null
 grep -F 'procd_add_reload_trigger wloc-service' "$init" >/dev/null
-grep -F 'WLOC_SUPERVISED=1 WLOC_SKIP_REDIRECT=1 "$WLOC_INIT" start' "$supervisor" >/dev/null
+grep -F 'WLOC_SUPERVISED=1 WLOC_DEFER_REDIRECT=1 WLOC_SKIP_REDIRECT=1 "$WLOC_INIT" start' "$supervisor" >/dev/null
 grep -F 'WLOC_SUPERVISED=1 "$GATEWAY_INIT" start' "$supervisor" >/dev/null
 grep -F 'WLOC_DEFER_REDIRECT=1' "$supervisor" >/dev/null
 grep -F 'WLOC_SKIP_REDIRECT' "$wloc_init" >/dev/null
@@ -38,6 +40,10 @@ grep -F 'START_TIMEOUT' "$supervisor" >/dev/null
 
 if grep -E 'udp[[:space:]]+500|udp[[:space:]]+4500|wificalling_gateway' "$supervisor" "$redirect" >/dev/null; then
 	printf '%s\n' 'unified supervisor must not own Gateway nftables or UDP 500/4500' >&2
+	exit 1
+fi
+if grep -E 'gs-loc-corpa|apple\.com\.cn|bluedot' "$redirect" "$wloc_refresh" >/dev/null; then
+	printf '%s\n' 'WLOC scope must remain limited to the two exact Apple hostnames' >&2
 	exit 1
 fi
 
