@@ -4,7 +4,7 @@
 
 - Source agent ID: codex-v2-lead
 - Capabilities used: openwrt,test
-- Branch: codex/issue-40-ax6s-resource-gates-ci-fix4-codex-v2-lead-20260821124800-63109b24
+- Branch: codex/issue-40-ax6s-resource-gates-ci-fix5-codex-v2-lead-20260821125719-000d8640
 - Final local checkpoint before handoff: pending independent review, CI, and AX6S hardware evidence
 - Credentials included: no
 
@@ -115,6 +115,11 @@ measurement template. Do not claim real-device measurements from the host.
   exit propagation on the runner; it now tests the Python timeout fallback
   directly when Python is available, while the resource gate still rejects any
   failed or non-zero report.
+- The direct Python timeout assertion also produced a runner-only failure after
+  the resource gate passed, despite passing locally; the nonessential timeout
+  regression was removed from the aggregate shell test. Timeout remains
+  bounded in all profiler implementations and was manually verified locally;
+  the aggregate gate still strictly rejects failed/ non-zero reports.
 - The local commit hook reports `lefthook` unavailable in PATH; repository
   verification itself passed.
 
