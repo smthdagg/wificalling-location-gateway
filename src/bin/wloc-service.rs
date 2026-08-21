@@ -64,8 +64,7 @@ impl OpenWrtRuntime {
                 .unwrap_or_else(|_| "/usr/sbin/wloc-redirect-sync.sh".to_owned()),
             std::env::var("WLOC_NFT_BINARY").unwrap_or_else(|_| "nft".to_owned()),
         );
-        runtime.defer_first_redirect =
-            std::env::var("WLOC_DEFER_REDIRECT").as_deref() == Ok("1");
+        runtime.defer_first_redirect = std::env::var("WLOC_DEFER_REDIRECT").as_deref() == Ok("1");
         runtime
     }
 
