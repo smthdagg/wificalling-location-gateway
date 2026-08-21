@@ -118,6 +118,27 @@ class V2UiContractTests(unittest.TestCase):
             self.assertIn("method: 'restart_unified'", health)
             self.assertNotIn("restart_gateway", health)
 
+    def test_current_payload_has_standalone_translation_and_profile_export_contract(self):
+        i18n_sources = []
+        mobileconfig_sources = []
+        for prefix in (
+            self.root / "openwrt/files",
+            self.root / "openwrt/luci-app-wificalling-location-gateway/files",
+        ):
+            i18n = prefix / "www/luci-static/resources/wificalling-location-gateway/i18n.js"
+            mobileconfig = prefix / "usr/sbin/export-mobileconfig.sh"
+            i18n_text = i18n.read_text(encoding="utf-8")
+            mobileconfig_text = mobileconfig.read_text(encoding="utf-8")
+            i18n_sources.append(i18n_text)
+            mobileconfig_sources.append(mobileconfig_text)
+            for stale in ("Wi-Fi Calling Settings", "Wi-Fi Calling status", "wfc settings", "wfc monitor"):
+                self.assertNotIn(stale, i18n_text)
+            self.assertIn("standalone WLOC location", mobileconfig_text)
+            self.assertIn("CA_B64=$(mktemp /tmp/wloc-ca.XXXXXX)", mobileconfig_text)
+            self.assertNotIn("/tmp/wloc-ca.b64", mobileconfig_text)
+        self.assertEqual(i18n_sources[0], i18n_sources[1])
+        self.assertEqual(mobileconfig_sources[0], mobileconfig_sources[1])
+
 
 if __name__ == "__main__":
     unittest.main()

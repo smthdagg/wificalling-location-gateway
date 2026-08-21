@@ -2,7 +2,9 @@
 
 # Historical Wi‑Fi Calling & WLOC Guide
 
-This guide applies to an OpenWrt or ImmortalWrt gateway combining Wi‑Fi Calling Gateway 1.7 with the router-side WLOC service. It follows the built-in FAQ order: **complete Wi‑Fi Calling Gateway first, then configure WLOC**.
+> Historical document: this tutorial describes the former combined Gateway/WLOC experiment and is retained only as a record. It is not the v2 product guide. The current project is a standalone WLOC service and must not be installed, configured, or validated against the separate Wi‑Fi Calling Gateway project. Use [`docs/WLOC_TUTORIAL_EN.md`](WLOC_TUTORIAL_EN.md) for the current workflow.
+
+This guide applies to the former combined Wi‑Fi Calling Gateway 1.7 and router-side WLOC experiment.
 
 [中文教程](WIFICALLING_WLOC_TUTORIAL_ZH.md)
 

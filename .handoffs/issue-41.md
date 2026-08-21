@@ -6,7 +6,7 @@
 - Capabilities used: integration,security,test,openwrt,ui
 - Branch: codex/issue-41-v2-release-codex-v2-lead-20260821133002-404596fe
 - Checkpoint parent: 501dea9
-- Updated at (UTC): 2026-08-22T02:00:00Z
+- Updated at (UTC): 2026-08-21T19:17:19Z
 - Credentials included: no
 
 ## Objective
@@ -34,9 +34,11 @@ that have not been observed.
 - Added package and migration contract tests and integrated them into CI.
 - Final AX6S evidence is recorded in
   `docs/testing/AX6S_REAL_DEVICE_2026-08-22.md`, including successful
-  2.0.0-17 -> 2.0.0-18 update and health-failure rollback 2.0.0-19 ->
-  2.0.0-18; publication and independent review remain external release
-  actions.
+  2.0.0-17 -> 2.0.0-18 update, health-failure rollback 2.0.0-19 ->
+  2.0.0-18, and the final remove/install/restart test of release candidate
+  2.0.0-1. The actual mobileconfig export also passed with no temporary CA
+  file left behind; publication and independent review remain external
+  release actions.
 - Release packaging now emits and verifies three assets: AX6S AArch64 IPK,
   OpenWrt 24.x x86_64 IPK, and OpenWrt 25.x APK. The four-case Docker matrix
   passed with socket/status checks.
@@ -84,12 +86,18 @@ that have not been observed.
 - The release builder was corrected to include the AX6S package in the
   three-package checksum/matrix set and to avoid sending APK v3 through the
   IPK manifest parser.
+- The shared LuCI translation map no longer carries the old Wi-Fi Calling-only
+  settings/monitor strings; the historical combined tutorials now point users
+  to the standalone WLOC v2 guide.
+- Mobileconfig export now uses a unique mode-0600 temporary file under `/tmp`
+  with cleanup traps instead of the fixed `/tmp/wloc-ca.b64` path.
 
 ## Final acceptance status
 
 - AX6S standalone runtime, migration, provider reuse, resource, fail-open,
   profile CRUD, manual/auto location persistence, stop/start, reboot, signed
-  update, and transactional health-rollback gates:
+  update, transactional health-rollback, final release-candidate install, and
+  mobileconfig export gates:
   **pass**.
 - Real iPhone WLOC traffic was not run because no client fixture was supplied.
 - Hard power-cut during opkg, flash-full injection, and real iPhone WLOC

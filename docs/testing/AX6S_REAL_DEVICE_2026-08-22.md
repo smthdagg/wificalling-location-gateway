@@ -9,31 +9,31 @@ package, UCI file, init script, or runtime dependency was installed.
 
 - Firmware family: ImmortalWrt 24.10.x, kernel 6.6.x, MediaTek MT7622,
   AArch64/cortex-a53.
-- Old WLOC package: `2.0.0-10`, stopped/disabled and removed before the final
-  package was installed, as required for the small overlay.
+- Old WLOC package: `2.0.0-18`, stopped/disabled and removed before the final
+  release candidate was installed, as required for the small overlay.
 - Provider packages: system sing-box and PassWall were retained; no second
   full-size sing-box binary was installed.
 - Tested standalone package family: `wificalling-location-gateway`,
   `aarch64_cortex-a53`. The real-device baseline was 2.0.0-14; transactional
   update evidence used 2.0.0-17 -> 2.0.0-18 and an injected health-failure
-  target 2.0.0-19 -> automatic rollback to 2.0.0-18. The release candidate
-  package 2.0.0-1 was built and verified after the device run; it is not being
-  misrepresented as installed on the device.
+  target 2.0.0-19 -> automatic rollback to 2.0.0-18. The final release
+  candidate `2.0.0-1` was then installed after removing 2.0.0-18 and passed
+  the service, API, provider, restart, and mobileconfig checks.
 - The WLOC UCI profile and CA backups were taken before removal. The final
   provider path uses PassWall's persistent generated configuration under
   `/var/etc/passwall`; the provider process itself remains PassWall-owned.
 
 ## Resource observations
 
-- Persistent storage: 87,620 KiB total; 15,868 KiB free after the final
-  package was installed.
+- Persistent storage: 87,620 KiB total; 15,412 KiB free after the final
+  package and configuration backup were present.
 - Temporary storage: 121,128 KiB total; 45,664 KiB free after installation.
-- Memory: 242,260 KiB total; 36,156 KiB available in the final steady-state
+- Memory: 242,260 KiB total; 19,088 KiB available in the final steady-state
   snapshot; no swap configured.
-- WLOC RSS: 1,948 KiB, three threads.
+- WLOC RSS: 1,952 KiB, three threads.
 - Reused PassWall sing-box RSS: 30,176 KiB, eight threads; no duplicate WLOC
   provider process was launched.
-- The final package itself is 1,444,108 bytes and the AArch64 WLOC service
+- The final AX6S package itself is 1,437,440 bytes and the AArch64 WLOC service
   binary is 2,035,872 bytes; the OpenWrt cross-build gate also
   reported static AArch64 ELF with no dynamic dependency.
 
@@ -58,6 +58,8 @@ package, UCI file, init script, or runtime dependency was installed.
 | Health-gate failure rolls back 2.0.0-19 -> 2.0.0-18 | pass |
 | Rollback removes the transaction directory and restores `current.version` | pass |
 | Independent LuCI basic/devices/monitor/update assets present | pass |
+| Final release candidate remove/install/restart on AX6S | pass |
+| Mobileconfig generation with unique private intermediate and cleanup | pass |
 | Real iPhone WLOC traffic and packet capture | not run; no device fixture supplied |
 
 ## Findings fixed during the run
@@ -109,13 +111,16 @@ The three-package release build and Docker matrix passed on 2026-08-22. The
 matrix installed and started all four cases: AX6S/OpenWrt 24.10.5,
 OpenWrt 24.10.8 x86_64, OpenWrt 25.12.3 x86_64, and iStoreOS 24.10.5 x86_64.
 The exact host-side package hashes are recorded in the release staging
-directory's `SHA256SUMS`; publication still requires the release signing key
-and explicit external release approval.
+directory's `SHA256SUMS`; the final AX6S package hash is
+`28b56a27bc393a5fb94bd73220470c5b2755e1f28511b94d14694e0e71fd744f`.
+Publication still requires the release signing key and explicit external
+release approval.
 
 ## Acceptance status
 
-AX6S standalone runtime, migration, resource, provider, reboot, fail-open, and
-transactional health-rollback gates: **pass**.
+AX6S standalone runtime, migration, resource, provider, reboot, fail-open,
+mobileconfig, release-candidate installation, and transactional health-rollback
+gates: **pass**.
 
 The real-device WLOC client traffic path was not exercised because no test
 device/fixture was supplied during this run. That is a separate functional
