@@ -144,46 +144,61 @@ struct FakeRuntime {
     operations: Vec<RuntimeStep>,
     healthy: bool,
     redirect_present: bool,
+    fail_step: Option<RuntimeStep>,
+}
+
+impl FakeRuntime {
+    fn should_fail(&self, step: RuntimeStep) -> Result<(), RuntimeFailure> {
+        if self.fail_step == Some(step) {
+            Err(RuntimeFailure)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl RuntimeControl for FakeRuntime {
     fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure> {
         self.operations.push(RuntimeStep::StartEngine);
-        Ok(())
+        self.should_fail(RuntimeStep::StartEngine)
     }
     fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure> {
         self.operations.push(RuntimeStep::CheckHealth);
+        self.should_fail(RuntimeStep::CheckHealth)?;
         Ok(self.healthy)
     }
     fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
         self.operations.push(RuntimeStep::ArmWatchdog);
-        Ok(())
+        self.should_fail(RuntimeStep::ArmWatchdog)
     }
     fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure> {
         self.operations.push(RuntimeStep::InstallRedirect);
+        self.should_fail(RuntimeStep::InstallRedirect)?;
         self.redirect_present = true;
         Ok(())
     }
     fn remove_redirect(&mut self) -> Result<(), RuntimeFailure> {
         self.operations.push(RuntimeStep::RemoveRedirect);
+        self.should_fail(RuntimeStep::RemoveRedirect)?;
         self.redirect_present = false;
         Ok(())
     }
     fn redirect_present(&mut self) -> Result<bool, RuntimeFailure> {
         self.operations.push(RuntimeStep::VerifyRedirectAbsent);
+        self.should_fail(RuntimeStep::VerifyRedirectAbsent)?;
         Ok(self.redirect_present)
     }
     fn disarm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
         self.operations.push(RuntimeStep::DisarmWatchdog);
-        Ok(())
+        self.should_fail(RuntimeStep::DisarmWatchdog)
     }
     fn drain_engine(&mut self) -> Result<(), RuntimeFailure> {
         self.operations.push(RuntimeStep::DrainEngine);
-        Ok(())
+        self.should_fail(RuntimeStep::DrainEngine)
     }
     fn stop_engine(&mut self) -> Result<(), RuntimeFailure> {
         self.operations.push(RuntimeStep::StopEngine);
-        Ok(())
+        self.should_fail(RuntimeStep::StopEngine)
     }
 }
 
@@ -208,4 +223,20 @@ fn supervisor_maps_invalid_control_to_a_safe_stopped_state() {
         wificalling_location_gateway::service::supervisor::UnifiedSupervisor::new(runtime);
     assert!(supervisor.enable(false, true).is_err());
     assert_eq!(supervisor.state(), SupervisorState::stopped());
+}
+
+#[test]
+fn cleanup_failure_is_not_reported_as_stopped() {
+    let runtime = FakeRuntime {
+        healthy: true,
+        fail_step: Some(RuntimeStep::RemoveRedirect),
+        ..FakeRuntime::default()
+    };
+    let mut supervisor =
+        wificalling_location_gateway::service::supervisor::UnifiedSupervisor::new(runtime);
+    supervisor.enable(true, true).unwrap();
+
+    assert!(supervisor.disable().is_err());
+    assert_eq!(supervisor.state().phase(), SupervisorPhase::CleanupUnsafe);
+    assert!(supervisor.state().redirect_present());
 }
