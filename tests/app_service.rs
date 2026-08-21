@@ -438,6 +438,44 @@ fn status_reports_unavailable_when_probe_fails() {
 }
 
 #[test]
+fn invalid_scope_never_runs_an_unbound_probe_or_publishes_target() {
+    // An unsupported/malformed profile must fail closed in status and
+    // periodic refresh too, not only in control_enable. An empty probe
+    // sequence makes any accidental fallback probe panic this test.
+    let sink = Arc::new(Mutex::new(None));
+    let mut service = WlocService::new(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        SequenceProbe {
+            results: vec![],
+            index: 0,
+        },
+        SequenceGeo {
+            results: vec![],
+            index: 0,
+        },
+        WlocServiceConfig {
+            node_ref: NodeRef::new("node-1").unwrap(),
+            providers: vec![ProviderRef::new("geo-a").unwrap()],
+            probe_limits: limits(),
+            scope_valid: false,
+            ipv6_ready: true,
+            assigned_device_configured: false,
+            assigned_device: None,
+            reverse_geo_lookup: None,
+        },
+    )
+    .with_patch_sink(Arc::clone(&sink));
+
+    let status = service.status_at(1_000_000).unwrap();
+    assert_eq!(status["exit"]["state"], "unavailable");
+    assert_eq!(status["geo"]["state"], "unavailable");
+    assert!(sink.lock().unwrap().is_none());
+}
+
+#[test]
 fn status_reports_uncertain_when_geo_conflicts() {
     let now = 1_000_000;
     let mut service = WlocService::new(
