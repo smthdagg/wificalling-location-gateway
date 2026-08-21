@@ -179,6 +179,13 @@ pub fn decode_v2_profile_request(frame: &[u8]) -> Result<ApiV2ProfileRequest, Ap
     {
         return Err(ApiV2ErrorCode::InvalidParams);
     }
+    if matches!(
+        method,
+        ProfileApiMethod::List | ProfileApiMethod::Get | ProfileApiMethod::Delete
+    ) && has_non_identity_profile_params(&wire.params)
+    {
+        return Err(ApiV2ErrorCode::InvalidParams);
+    }
     validate_v2_profile_params(&wire.params)?;
     Ok(ApiV2ProfileRequest {
         api_version: wire.api_version,
@@ -186,6 +193,18 @@ pub fn decode_v2_profile_request(frame: &[u8]) -> Result<ApiV2ProfileRequest, Ap
         method,
         params: wire.params.into(),
     })
+}
+
+fn has_non_identity_profile_params(params: &WireV2ProfileParams) -> bool {
+    params.label.is_some()
+        || params.assigned_device.is_some()
+        || params.node_ref.is_some()
+        || params.node_mode.is_some()
+        || params.geo_source.is_some()
+        || params.manual_lat.is_some()
+        || params.manual_lon.is_some()
+        || params.manual_location_ref.is_some()
+        || params.enabled.is_some()
 }
 
 fn validate_v2_profile_params(params: &WireV2ProfileParams) -> Result<(), ApiV2ErrorCode> {

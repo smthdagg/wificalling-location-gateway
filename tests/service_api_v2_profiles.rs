@@ -70,6 +70,12 @@ fn unsupported_params_and_invalid_profile_ids_fail_before_dispatch() {
         decode_v2_profile_request(bad_address).unwrap_err(),
         ApiV2ErrorCode::InvalidParams
     );
+
+    let list_with_mutation = br#"{"api_version":"wloc.service/v2","request_id":"req-1","method":"profile.list","params":{"label":"unexpected"}}"#;
+    assert_eq!(
+        decode_v2_profile_request(list_with_mutation).unwrap_err(),
+        ApiV2ErrorCode::InvalidParams
+    );
 }
 
 #[test]
