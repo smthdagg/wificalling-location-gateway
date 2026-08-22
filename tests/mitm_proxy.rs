@@ -288,3 +288,57 @@ async fn non_wloc_path_passes_through_unchanged() {
         "non-WLOC responses must pass through unchanged"
     );
 }
+
+#[tokio::test]
+async fn upstream_connect_failure_is_reported_to_proxy_health() {
+    // Reserve a local port and close it so the proxy gets a deterministic
+    // connection-refused error instead of depending on an external network.
+    let unavailable = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let unavailable_port = unavailable.local_addr().unwrap().port();
+    drop(unavailable);
+
+    let mitm_ca = CaBundle::generate().unwrap();
+    let proxy = MitmProxy::new(&mitm_ca, rustls::RootCertStore::empty())
+        .unwrap()
+        .with_upstream_override("127.0.0.1", unavailable_port);
+    let proxy_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_port = proxy_listener.local_addr().unwrap().port();
+    let target = PatchTarget::new(LONDON_LAT, LONDON_LON);
+    let handler = tokio::spawn(async move {
+        let (stream, _) = proxy_listener.accept().await.unwrap();
+        proxy.handle_connection(stream, Some(&target)).await
+    });
+
+    let client_tcp = TcpStream::connect(("127.0.0.1", proxy_port))
+        .await
+        .unwrap();
+    let connector = TlsConnector::from(Arc::new(client_config(&mitm_ca)));
+    let server_name = rustls::pki_types::ServerName::try_from("gs-loc.apple.com").unwrap();
+    let client_tls = connector.connect(server_name, client_tcp).await.unwrap();
+    let (mut send_request, connection) = h2::client::Builder::new()
+        .handshake::<_, Bytes>(client_tls)
+        .await
+        .unwrap();
+    tokio::spawn(async move {
+        let _ = connection.await;
+    });
+
+    // Use a non-WLOC path so this test remains about upstream error
+    // propagation even when local WLOC synthesis is enabled in production.
+    let request = Request::builder()
+        .method("GET")
+        .uri("https://gs-loc.apple.com/health-check")
+        .body(())
+        .unwrap();
+    let (response_future, _send) = send_request.send_request(request, true).unwrap();
+    assert!(response_future.await.is_err(), "the client connection must close");
+
+    let result = tokio::time::timeout(std::time::Duration::from_secs(2), handler)
+        .await
+        .expect("proxy handler should finish")
+        .expect("proxy task should not panic");
+    assert!(
+        result.is_err(),
+        "an upstream failure must reach the caller so proxy health records a failure"
+    );
+}
