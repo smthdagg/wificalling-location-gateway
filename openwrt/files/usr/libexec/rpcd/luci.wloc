@@ -86,10 +86,15 @@ call)
 		json_get_var query query
 		json_get_var lat lat
 		json_get_var lon lon
+		json_get_var profile_id profile_id
 
 		case "$method" in
 		status|disable|reload|geo-clear|refresh)
-			out="$("$CTL" "$method" 2>&1)"
+			if [ -n "$profile_id" ] && [ "$profile_id" != "null" ]; then
+				out="$("$CTL" "$method" --profile "$profile_id" 2>&1)"
+			else
+				out="$("$CTL" "$method" 2>&1)"
+			fi
 			;;
 		enable)
 			ctl_live enable

@@ -25,6 +25,7 @@ struct FakeRuntime {
     operations: Vec<String>,
     healthy: bool,
     fail_install_for: Option<String>,
+    retain_failed_redirect: bool,
     redirects: Vec<String>,
 }
 
@@ -45,6 +46,9 @@ impl ProfileRuntimeControl for FakeRuntime {
     ) -> Result<(), ProfileRuntimeError> {
         self.operations.push(format!("redirect.add:{}", profile.id));
         if self.fail_install_for.as_deref() == Some(profile.id.as_str()) {
+            if self.retain_failed_redirect {
+                self.redirects.push(profile.id.clone());
+            }
             return Err(ProfileRuntimeError::RedirectInstall);
         }
         self.redirects.push(profile.id.clone());
@@ -54,7 +58,9 @@ impl ProfileRuntimeControl for FakeRuntime {
     fn remove_profile_redirect(&mut self, profile_id: &str) -> Result<(), ProfileRuntimeError> {
         self.operations
             .push(format!("redirect.remove:{profile_id}"));
-        self.redirects.retain(|id| id != profile_id);
+        if !self.retain_failed_redirect {
+            self.redirects.retain(|id| id != profile_id);
+        }
         Ok(())
     }
 
@@ -161,6 +167,25 @@ fn failed_profile_install_degrades_only_that_profile() {
         .runtime()
         .operations
         .contains(&"redirect.remove:tablet".to_owned()));
+}
+
+#[test]
+fn failed_profile_install_with_stuck_redirect_is_cleanup_unsafe() {
+    let mut manager = manager(FakeRuntime {
+        healthy: true,
+        fail_install_for: Some("tablet".to_owned()),
+        retain_failed_redirect: true,
+        ..FakeRuntime::default()
+    });
+    manager.enable("phone").unwrap();
+    assert_eq!(
+        manager.enable("tablet"),
+        Err(ProfileRuntimeError::CleanupUnsafe)
+    );
+    assert_eq!(
+        manager.status("tablet").unwrap().reason_code,
+        "cleanup_unsafe"
+    );
 }
 
 #[test]

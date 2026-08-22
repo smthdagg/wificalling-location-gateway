@@ -339,6 +339,9 @@ impl ApiRequest {
 /// Parameters for a control-API request. Only `geo.set` consumes them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RequestParams {
+    /// Optional device profile selector for the unified runtime. Omitted
+    /// requests retain the compatibility default profile.
+    pub profile_id: Option<String>,
     /// A place query to geocode (e.g. `London, UK`).
     pub query: Option<String>,
     /// Explicit WGS84 coordinates for a manual preset.
@@ -360,6 +363,8 @@ struct WireRequest {
 #[serde(deny_unknown_fields)]
 struct WireParams {
     #[serde(default)]
+    profile_id: Option<String>,
+    #[serde(default)]
     query: Option<String>,
     #[serde(default)]
     latitude: Option<f64>,
@@ -370,6 +375,7 @@ struct WireParams {
 impl From<WireParams> for RequestParams {
     fn from(wire: WireParams) -> Self {
         Self {
+            profile_id: wire.profile_id,
             query: wire.query,
             latitude: wire.latitude,
             longitude: wire.longitude,
@@ -404,6 +410,9 @@ pub fn decode_request(frame: &[u8]) -> Result<ApiRequest, ApiErrorCode> {
         "control.refresh" => ApiMethod::Refresh,
         _ => return Err(ApiErrorCode::UnknownMethod),
     };
+    if let Some(profile_id) = wire.params.profile_id.as_deref() {
+        validate_profile_id(profile_id).map_err(|_| ApiErrorCode::MalformedRequest)?;
+    }
 
     Ok(ApiRequest {
         api_version: wire.api_version,

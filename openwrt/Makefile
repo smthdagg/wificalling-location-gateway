@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=wloc-service
-PKG_VERSION:=1.2.0
+PKG_VERSION:=2.0.0-rc1
 PKG_RELEASE:=1
 
 PKG_MAINTAINER:=wificalling-location-gateway maintainers

@@ -5,7 +5,7 @@ OPENWRT_24_SDK='ghcr.io/openwrt/sdk:x86_64-24.10.8@sha256:b28d5e4087dbd3f815a8bf
 OPENWRT_25_SDK='ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35bebb77b3f6d9523fd68873fab78a1bd19cc123cd0f'
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
-version=1.2.0
+version=2.0.0-rc1
 release=1
 arch=x86_64
 service_bin=
@@ -25,7 +25,7 @@ usage() {
 Usage: build-release-packages.sh [--plan] [options]
 
 Options:
-  --version VERSION          Package version (default: 1.2.0)
+  --version VERSION          Package version (default: 2.0.0-rc1)
   --release RELEASE          Package release number (default: 1)
   --arch ARCH                OpenWrt runtime architecture (default: x86_64)
   --service-bin PATH         Static wloc-service binary (required)
@@ -98,7 +98,7 @@ tar -xf "$gateway_ipk" -C "$stage/gateway"
 gateway_control=$(tar -xOf "$stage/gateway/control.tar.gz" ./control)
 printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null ||
 	fail 'Gateway IPK has an unexpected package identity'
-printf '%s\n' "$gateway_control" | grep -E '^Version: (1\.7|1\.2)\.[0-9]+-[0-9]+$' >/dev/null ||
+printf '%s\n' "$gateway_control" | grep -E '^Version: (1\.7|1\.2)\.[0-9]+-(r)?[0-9]+$' >/dev/null ||
 	fail 'Gateway IPK must be a validated 1.7.x or 1.2.x release'
 tar -tzf "$stage/gateway/data.tar.gz" | while IFS= read -r member; do
 	case "$member" in /*|../*|*/../*|*/..) fail 'Gateway IPK contains an unsafe path' ;; esac

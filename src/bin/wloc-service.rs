@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 use std::error::Error;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -69,6 +69,39 @@ fn write_profile_marker(path: &std::path::Path) -> std::io::Result<()> {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
     }
     Ok(())
+}
+
+struct ServicePidMarker {
+    path: std::path::PathBuf,
+    pid: u32,
+}
+
+impl Drop for ServicePidMarker {
+    fn drop(&mut self) {
+        let current = std::fs::read_to_string(&self.path).ok();
+        if current.as_deref().map(str::trim) == Some(&self.pid.to_string()) {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
+fn write_service_pid_marker(path: &Path) -> std::io::Result<ServicePidMarker> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let pid = std::process::id();
+    let temporary = path.with_extension("tmp");
+    std::fs::write(&temporary, format!("{pid}\n"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&temporary, std::fs::Permissions::from_mode(0o600))?;
+    }
+    std::fs::rename(&temporary, path)?;
+    Ok(ServicePidMarker {
+        path: path.to_owned(),
+        pid,
+    })
 }
 
 fn wait_for_profile_marker(path: &std::path::Path, timeout: Duration) -> bool {
@@ -131,6 +164,8 @@ struct OpenWrtRuntime {
     redirect_helper: std::path::PathBuf,
     profile_redirect_helper: std::path::PathBuf,
     nft_binary: std::path::PathBuf,
+    control_socket: std::path::PathBuf,
+    proxy_port: u16,
     defer_first_redirect: bool,
 }
 
@@ -144,6 +179,9 @@ impl OpenWrtRuntime {
         runtime.profile_redirect_helper = std::env::var("WLOC_PROFILE_REDIRECT_HELPER")
             .unwrap_or_else(|_| "/usr/sbin/wloc-profile-redirect.sh".to_owned())
             .into();
+        runtime.control_socket =
+            profile_marker_path("WLOC_SOCKET", "/var/run/wloc-service/control.sock");
+        runtime.proxy_port = env_or("WLOC_PROXY_PORT", 8443_u16);
         runtime.defer_first_redirect = std::env::var("WLOC_DEFER_REDIRECT").as_deref() == Ok("1");
         runtime
     }
@@ -157,8 +195,21 @@ impl OpenWrtRuntime {
             profile_redirect_helper: redirect_helper.clone(),
             redirect_helper,
             nft_binary: nft_binary.into(),
+            control_socket: "/var/run/wloc-service/control.sock".into(),
+            proxy_port: 8443,
             defer_first_redirect: false,
         }
+    }
+
+    #[cfg(test)]
+    fn with_health_paths(
+        mut self,
+        control_socket: impl Into<std::path::PathBuf>,
+        proxy_port: u16,
+    ) -> Self {
+        self.control_socket = control_socket.into();
+        self.proxy_port = proxy_port;
+        self
     }
 
     #[cfg(test)]
@@ -195,6 +246,24 @@ impl OpenWrtRuntime {
                     .ok_or(ProfileRuntimeError::RedirectInstall)
             })
     }
+
+    fn service_evidence_present(&self) -> bool {
+        #[cfg(unix)]
+        let socket_ready = std::fs::metadata(&self.control_socket)
+            .map(|metadata| {
+                use std::os::unix::fs::FileTypeExt;
+                metadata.file_type().is_socket()
+            })
+            .unwrap_or(false);
+        #[cfg(not(unix))]
+        let socket_ready = false;
+        if !socket_ready {
+            return false;
+        }
+
+        let proxy_address = SocketAddr::from(([127, 0, 0, 1], self.proxy_port));
+        TcpStream::connect_timeout(&proxy_address, Duration::from_millis(250)).is_ok()
+    }
 }
 
 impl RuntimeControl for OpenWrtRuntime {
@@ -202,7 +271,7 @@ impl RuntimeControl for OpenWrtRuntime {
         Ok(())
     }
     fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure> {
-        Ok(true)
+        Ok(self.service_evidence_present())
     }
     fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
@@ -242,10 +311,7 @@ impl ProfileRuntimeControl for OpenWrtRuntime {
     }
 
     fn shared_engine_healthy(&mut self) -> Result<bool, ProfileRuntimeError> {
-        // The supervisor has already admitted the service before profile
-        // redirects are installed. A future health adapter can tighten this
-        // gate without changing the profile state machine.
-        Ok(true)
+        Ok(self.service_evidence_present())
     }
 
     fn install_profile_redirect(
@@ -417,8 +483,16 @@ impl ProfileServiceGroup {
     }
 
     fn default_handler(&mut self) -> Result<&mut BoxedProfileService, DispatchError> {
+        self.handler_for(None)
+    }
+
+    fn handler_for(
+        &mut self,
+        profile_id: Option<&str>,
+    ) -> Result<&mut BoxedProfileService, DispatchError> {
+        let selected = profile_id.unwrap_or(&self.default_profile_id).to_owned();
         self.handlers
-            .get_mut(&self.default_profile_id)
+            .get_mut(&selected)
             .ok_or(DispatchError::InvalidConfig)
     }
 }
@@ -432,28 +506,63 @@ impl ServiceDispatch for ProfileServiceGroup {
         self.default_handler()?.status()
     }
 
+    fn status_for(&mut self, profile_id: Option<&str>) -> Result<serde_json::Value, DispatchError> {
+        self.handler_for(profile_id)?.status()
+    }
+
     fn enable(&mut self) -> Result<(), DispatchError> {
         self.enable_profile(&self.default_profile_id.clone())
+    }
+
+    fn enable_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        let selected = profile_id
+            .map(str::to_owned)
+            .unwrap_or_else(|| self.default_profile_id.clone());
+        self.enable_profile(&selected)
     }
 
     fn disable(&mut self) -> Result<(), DispatchError> {
         self.disable_profile(&self.default_profile_id.clone())
     }
 
+    fn disable_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        let selected = profile_id
+            .map(str::to_owned)
+            .unwrap_or_else(|| self.default_profile_id.clone());
+        self.disable_profile(&selected)
+    }
+
     fn reload(&mut self) -> Result<(), DispatchError> {
         self.default_handler()?.reload()
     }
 
+    fn reload_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        self.handler_for(profile_id)?.reload()
+    }
+
     fn set_manual_location(&mut self, params: &RequestParams) -> Result<(), DispatchError> {
-        self.default_handler()?.set_manual_location(params)
+        self.handler_for(params.profile_id.as_deref())?
+            .set_manual_location(params)
     }
 
     fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
         self.default_handler()?.clear_manual_location()
     }
 
+    fn clear_manual_location_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        self.handler_for(profile_id)?.clear_manual_location()
+    }
+
     fn search_location(&mut self, query: &str) -> Result<serde_json::Value, DispatchError> {
         self.default_handler()?.search_location(query)
+    }
+
+    fn search_location_for(
+        &mut self,
+        query: &str,
+        profile_id: Option<&str>,
+    ) -> Result<serde_json::Value, DispatchError> {
+        self.handler_for(profile_id)?.search_location(query)
     }
 
     fn refresh_periodic(&mut self) {
@@ -464,6 +573,10 @@ impl ServiceDispatch for ProfileServiceGroup {
 
     fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
         self.default_handler()?.refresh_evidence()
+    }
+
+    fn refresh_evidence_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        self.handler_for(profile_id)?.refresh_evidence()
     }
 }
 
@@ -619,6 +732,7 @@ fn build_profile_handler(
         };
         service
             .set_manual_location(&RequestParams {
+                profile_id: None,
                 query: None,
                 latitude: Some(latitude),
                 longitude: Some(longitude),
@@ -885,24 +999,15 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             std::env::var("WLOC_EVENTS_FILE")
                 .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into()),
         ));
-    // The upstream connection must use the real Apple IP (the DNS hijack
-    // would otherwise point it back at this router). Prefer the first
-    // nft-set address; fall back to DNS-only resolution when the set is
-    // empty (e.g. rules not yet installed).
-    let proxy = match upstream_apple_ips().into_iter().next() {
-        Some(apple_ip) => {
-            eprintln!("wloc-service: upstream apple ip override {apple_ip}:443");
-            proxy.with_upstream_override(apple_ip, 443)
-        }
-        None => proxy,
-    };
+    let upstream_ip_file = std::env::var("WLOC_UPSTREAM_IP_FILE")
+        .unwrap_or_else(|_| "/var/run/wloc-service/apple-upstream-ip".to_owned());
+    let proxy = proxy.with_upstream_ip_file(std::path::PathBuf::from(upstream_ip_file));
     let proxy = std::sync::Arc::new(proxy);
     let proxy_port: u16 = env_or("WLOC_PROXY_PORT", 8443_u16);
 
-    // Apply the persisted configuration to the control plane before serving:
-    // manual location preset first (so a manual target is already fresh), then
-    // the desired enabled state. Failures are logged, not fatal: the daemon
-    // still serves status and can be steered through the control API.
+    // Apply the persisted manual location before serving. Enabling is deferred
+    // until both the control socket and proxy listener are bound, so the
+    // runtime health gate never has to assume a listener that does not exist.
     if profile_model
         .as_ref()
         .is_none_or(|model| model.profiles().len() <= 1)
@@ -913,6 +1018,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             runtime_profile.manual_longitude,
         ) {
             let params = RequestParams {
+                profile_id: None,
                 query: None,
                 latitude: Some(latitude),
                 longitude: Some(longitude),
@@ -926,23 +1032,6 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             );
         }
     }
-    if profile_model
-        .as_ref()
-        .is_none_or(|model| model.profiles().len() <= 1)
-        && runtime_profile.enabled
-    {
-        match service.enable() {
-            Ok(()) => {
-                if let Some(router) = profile_router.as_ref() {
-                    if let Err(error) = router.set_enabled(&runtime_profile.id, true) {
-                        eprintln!("wloc-service: enabling profile route failed: {error:?}");
-                    }
-                }
-            }
-            Err(error) => eprintln!("wloc-service: enable failed: {error:?}"),
-        }
-    }
-
     if let Some(parent) = Path::new(&socket_path).parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -971,6 +1060,25 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // REDIRECT, which rewrites the destination to this router and newer iOS
     // versions answer with RST.
     let proxy_listener = runtime.block_on(async { bind_tproxy_listener(proxy_port) })?;
+    let service_pid_path =
+        profile_marker_path("WLOC_SERVICE_PIDFILE", "/var/run/wloc-service/service.pid");
+    let _service_pid_marker = write_service_pid_marker(&service_pid_path)?;
+    if profile_model
+        .as_ref()
+        .is_none_or(|model| model.profiles().len() <= 1)
+        && runtime_profile.enabled
+    {
+        match service.enable() {
+            Ok(()) => {
+                if let Some(router) = profile_router.as_ref() {
+                    if let Err(error) = router.set_enabled(&runtime_profile.id, true) {
+                        eprintln!("wloc-service: enabling profile route failed: {error:?}");
+                    }
+                }
+            }
+            Err(error) => eprintln!("wloc-service: enable failed: {error:?}"),
+        }
+    }
     let multi_profile_mode = profile_model
         .as_ref()
         .is_some_and(|model| model.profiles().len() > 1);
@@ -1052,39 +1160,6 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-/// Read the real Apple WLOC IPs from the nft apple_hosts set. The DNS
-/// hijack forces the devices to connect locally, but the proxy's own
-/// upstream connection must reach the real Apple server - resolving the
-/// hostname through dnsmasq would loop back to this router.
-fn upstream_apple_ips() -> Vec<String> {
-    let output = std::process::Command::new("nft")
-        .args(["list", "set", "inet", "wloc_service", "apple_hosts"])
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-        .unwrap_or_default();
-    let router_ip = lan_router_ip();
-    parse_apple_ips(&output)
-        .into_iter()
-        .filter(|ip| Some(ip.as_str()) != router_ip.as_deref())
-        .collect()
-}
-
-/// The router's own LAN IPv4 (`uci network.lan.ipaddr`), used to filter the
-/// hijacked address out of the upstream Apple IP set on any subnet.
-fn lan_router_ip() -> Option<String> {
-    let output = std::process::Command::new("uci")
-        .args(["-q", "get", "network.lan.ipaddr"])
-        .output()
-        .ok()?;
-    let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if ip.is_empty() {
-        None
-    } else {
-        Some(ip)
-    }
-}
-
 /// The first source IP of the Gateway device policy - the natural follow
 /// target when wloc-service has no assigned device configured.
 fn gateway_first_device_ip() -> Option<String> {
@@ -1101,6 +1176,7 @@ fn gateway_first_device_ip() -> Option<String> {
 }
 
 /// Extract IPv4 addresses from the `nft list set` output (elements line).
+#[cfg(test)]
 fn parse_apple_ips(output: &str) -> Vec<String> {
     output
         .lines()
@@ -1224,6 +1300,14 @@ mod tests {
         assert!(!runtime_scope_valid(false, &profile));
     }
 
+    #[test]
+    fn openwrt_runtime_health_does_not_assume_the_engine_is_alive() {
+        let mut runtime = OpenWrtRuntime::new("/bin/false", "/bin/false");
+
+        assert!(!RuntimeControl::engine_healthy(&mut runtime).unwrap());
+        assert!(!ProfileRuntimeControl::shared_engine_healthy(&mut runtime).unwrap());
+    }
+
     #[cfg(unix)]
     #[test]
     fn openwrt_runtime_delegates_only_component_redirect_actions() {
@@ -1248,6 +1332,35 @@ mod tests {
         runtime.install_exact_redirect().unwrap();
 
         assert_eq!(std::fs::read_to_string(&log).unwrap(), "stop\nstart\n");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn openwrt_runtime_health_accepts_its_socket_and_proxy_listener() {
+        use std::net::TcpListener;
+        use std::os::unix::net::UnixListener;
+
+        let root = std::env::temp_dir().join(format!(
+            "wloc-health-runtime-test-{}-{}",
+            std::process::id(),
+            now_unix()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let control_socket = root.join("control.sock");
+        let _control_listener = UnixListener::bind(&control_socket).unwrap();
+        let proxy_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_port = proxy_listener.local_addr().unwrap().port();
+        let mut runtime = OpenWrtRuntime::new("/bin/false", "/bin/false")
+            .with_health_paths(&control_socket, proxy_port);
+
+        assert!(RuntimeControl::engine_healthy(&mut runtime).unwrap());
+        assert!(ProfileRuntimeControl::shared_engine_healthy(&mut runtime).unwrap());
+
+        drop(proxy_listener);
+        drop(_control_listener);
+        let _ = std::fs::remove_file(&control_socket);
+        assert!(!RuntimeControl::engine_healthy(&mut runtime).unwrap());
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -1340,7 +1453,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn profile_service_group_coordinates_shared_runtime_and_handlers() {
+        use std::net::TcpListener;
         use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::net::UnixListener;
 
         let model = ProfileModel::new(vec![
             DeviceProfile {
@@ -1393,12 +1508,16 @@ mod tests {
         );
         std::fs::write(&helper, script).unwrap();
         std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let control_socket = root.join("control.sock");
+        let _control_listener = UnixListener::bind(&control_socket).unwrap();
+        let proxy_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_port = proxy_listener.local_addr().unwrap().port();
 
         let mut group = ProfileServiceGroup::new(
             model,
             std::sync::Arc::clone(&router),
             handlers,
-            OpenWrtRuntime::new(&helper, &helper),
+            OpenWrtRuntime::new(&helper, &helper).with_health_paths(&control_socket, proxy_port),
         );
         group.activate_enabled_profiles();
         assert_eq!(group.runtime.statuses().len(), 2);
@@ -1417,21 +1536,41 @@ mod tests {
         );
 
         assert_eq!(group.status().unwrap()["profile"], "mock");
+        assert_eq!(group.status_for(Some("tablet")).unwrap()["profile"], "mock");
+        group.enable_for(Some("tablet")).unwrap();
+        group.disable_for(Some("tablet")).unwrap();
+        group.enable_for(Some("tablet")).unwrap();
+        group.reload_for(Some("tablet")).unwrap();
         group.reload().unwrap();
         group
             .set_manual_location(&RequestParams {
+                profile_id: None,
                 query: None,
                 latitude: Some(1.0),
                 longitude: Some(2.0),
             })
             .unwrap();
+        group
+            .set_manual_location(&RequestParams {
+                profile_id: Some("tablet".to_owned()),
+                query: None,
+                latitude: Some(3.0),
+                longitude: Some(4.0),
+            })
+            .unwrap();
         group.clear_manual_location().unwrap();
+        group.clear_manual_location_for(Some("tablet")).unwrap();
         assert_eq!(
             group.search_location("Singapore").unwrap()["query"],
             "Singapore"
         );
+        assert_eq!(
+            group.search_location_for("Tokyo", Some("tablet")).unwrap()["query"],
+            "Tokyo"
+        );
         group.refresh_periodic();
         group.refresh_evidence().unwrap();
+        group.refresh_evidence_for(Some("tablet")).unwrap();
 
         group.disable().unwrap();
         assert!(router.resolve_source("192.168.1.100").is_none());

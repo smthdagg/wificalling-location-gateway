@@ -21,6 +21,19 @@ NFT_BINARY=${WLOC_NFT_BINARY:-nft}
 IP_BINARY=${WLOC_IP_BINARY:-ip}
 PROFILE_HELPER=${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.sh}
 
+remove_policy_route() {
+	attempt=0
+	while [ "$attempt" -lt 8 ]; do
+		"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || break
+		attempt=$((attempt + 1))
+	done
+	attempt=0
+	while [ "$attempt" -lt 8 ]; do
+		"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || break
+		attempt=$((attempt + 1))
+	done
+}
+
 multiple_profiles_configured() {
 	command -v uci >/dev/null 2>&1 || return 1
 	profiles=$(uci -q show wloc-service 2>/dev/null \
@@ -34,9 +47,8 @@ withdraw_legacy_redirect() {
 	# stable Gateway 1.7 nftables table (and UDP 500/4500 handling) is never
 	# touched by this cleanup path.
 	"$NFT_BINARY" delete table inet "$TABLE" 2>/dev/null || true
-	"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
-	"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
-	for hosts_file in ${WLOC_HOSTS_FILES:-/etc/hosts\ /tmp/hosts/wloc-hosts}; do
+	remove_policy_route
+	for hosts_file in ${WLOC_HOSTS_FILES:-/etc/hosts /tmp/hosts/wloc-hosts}; do
 		sed -i '/# wloc-service DNS hijack (do not edit)/,/^# wloc-service end/d' "$hosts_file" 2>/dev/null || true
 	done
 	}
@@ -96,7 +108,7 @@ HOSTS_MARKER='# wloc-service DNS hijack (do not edit)'
 # dnsmasq reads addn-hosts from the /tmp/hosts directory on this build;
 # /etc/hosts is kept as a fallback.
 mkdir -p /tmp/hosts
-for hosts_file in ${WLOC_HOSTS_FILES:-/etc/hosts\ /tmp/hosts/wloc-hosts}; do
+for hosts_file in ${WLOC_HOSTS_FILES:-/etc/hosts /tmp/hosts/wloc-hosts}; do
     sed -i "/$HOSTS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
     cat >> "$hosts_file" <<EOF
 $HOSTS_MARKER
@@ -106,8 +118,7 @@ EOF
 done
 
 # TPROXY plumbing: marked packets are routed back to the local stack.
-"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
-"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+remove_policy_route
 "$IP_BINARY" rule add fwmark "$FWMARK" lookup "$ROUTE_TABLE"
 "$IP_BINARY" route add local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"
 

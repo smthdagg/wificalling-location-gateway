@@ -68,20 +68,28 @@ stop_all_profiles() {
 			*) continue ;;
 		esac
 		"$nft_binary" delete table inet "$table" 2>/dev/null || true
+		"$nft_binary" list table inet "$table" >/dev/null 2>&1 && return 1 || true
 	done
 	remove_policy_route
 }
 
 install_policy_route() {
-	"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
-	"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+	remove_policy_route
 	"$IP_BINARY" rule add fwmark "$FWMARK" lookup "$ROUTE_TABLE"
 	"$IP_BINARY" route add local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"
 }
 
 remove_policy_route() {
-	"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
-	"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+	attempt=0
+	while [ "$attempt" -lt 8 ]; do
+		"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || break
+		attempt=$((attempt + 1))
+	done
+	attempt=0
+	while [ "$attempt" -lt 8 ]; do
+		"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || break
+		attempt=$((attempt + 1))
+	done
 }
 
 action=${1:-}
@@ -121,6 +129,7 @@ case "$action" in
 		[ "$#" -eq 2 ] || fail 'usage: stop PROFILE_ID'
 		valid_profile_id "$profile_id" || fail 'invalid profile id'
 		"$nft_binary" delete table inet "${PROFILE_TABLE_PREFIX}${profile_id}" 2>/dev/null || true
+		"$nft_binary" list table inet "${PROFILE_TABLE_PREFIX}${profile_id}" >/dev/null 2>&1 && fail 'profile redirect table remains after stop' || true
 		remaining=$("$nft_binary" list tables inet 2>/dev/null \
 			| sed -n 's/^table inet \(wloc_profile_[a-z0-9_-]*\)$/\1/p')
 		[ -n "$remaining" ] || remove_policy_route

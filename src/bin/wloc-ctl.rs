@@ -36,7 +36,7 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
             return 2;
         }
     };
-    let params = match method {
+    let mut params = match method {
         "status" | "enable" | "disable" | "geo-clear" | "reload" | "refresh" => {
             serde_json::json!({})
         }
@@ -56,6 +56,16 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
         },
         _ => unreachable!("unknown method returned earlier"),
     };
+    let profile_id = match parse_profile_arg(&args[1..]) {
+        Ok(profile_id) => profile_id,
+        Err(message) => {
+            eprintln!("wloc-ctl: {message}");
+            return 2;
+        }
+    };
+    if let Some(profile_id) = profile_id {
+        params["profile_id"] = serde_json::Value::String(profile_id);
+    }
 
     let request = serde_json::json!({
         "api_version": "wloc.service/v1",
@@ -155,6 +165,33 @@ fn parse_geo_set(args: &[String]) -> Result<serde_json::Value, String> {
     }
 }
 
+fn parse_profile_arg(args: &[String]) -> Result<Option<String>, String> {
+    let mut profile_id = None;
+    let mut index = 0;
+    while index < args.len() {
+        if args[index] == "--profile" {
+            index += 1;
+            let value = args
+                .get(index)
+                .ok_or_else(|| "--profile requires a profile id".to_owned())?;
+            if value.is_empty()
+                || value.len() > 32
+                || !value.bytes().all(|byte| {
+                    byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || byte == b'_'
+                        || byte == b'-'
+                })
+            {
+                return Err("invalid profile id".to_owned());
+            }
+            profile_id = Some(value.clone());
+        }
+        index += 1;
+    }
+    Ok(profile_id)
+}
+
 /// Map a CLI method name to its wire method.
 fn map_wire_method(method: &str) -> Option<&'static str> {
     match method {
@@ -224,6 +261,16 @@ mod tests {
             ),
             2
         );
+    }
+
+    #[test]
+    fn profile_arg_is_validated() {
+        assert_eq!(
+            parse_profile_arg(&["--profile".to_owned(), "phone_1".to_owned()]).unwrap(),
+            Some("phone_1".to_owned())
+        );
+        assert!(parse_profile_arg(&["--profile".to_owned()]).is_err());
+        assert!(parse_profile_arg(&["--profile".to_owned(), "../phone".to_owned()]).is_err());
     }
 
     #[test]

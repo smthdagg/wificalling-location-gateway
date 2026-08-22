@@ -1,6 +1,6 @@
 [package]
 name = "wificalling-location-gateway"
-version = "1.2.0"
+version = "2.0.0-rc1"
 edition = "2021"
 rust-version = "1.90"
 license = "MIT"
@@ -36,7 +36,7 @@ serde = { version = "=1.0.228", default-features = false, features = ["derive", 
 socket2 = { version = "0.5", features = ["all"] }
 serde_json = { version = "=1.0.145", default-features = false, features = ["std"] }
 time = { version = "0.3", features = ["std"] }
-tokio = { version = "=1.48.0", default-features = false, features = ["io-util", "macros", "net", "rt", "rt-multi-thread", "time"] }
+tokio = { version = "=1.48.0", default-features = false, features = ["io-util", "macros", "net", "rt", "rt-multi-thread", "sync", "time"] }
 tokio-rustls = { version = "=0.26.4", default-features = false, features = ["ring", "tls12"] }
 webpki-roots = "=1.0.9"
 

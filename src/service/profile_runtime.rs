@@ -169,7 +169,12 @@ impl<R: ProfileRuntimeControl> ProfileRuntimeManager<R> {
         if self.statuses[index].phase == ProfileRuntimePhase::Disabled {
             return Ok(());
         }
-        if self.runtime.remove_profile_redirect(profile_id).is_err() {
+        if self.runtime.remove_profile_redirect(profile_id).is_err()
+            || self
+                .runtime
+                .profile_redirect_present(profile_id)
+                .unwrap_or(true)
+        {
             self.set_status(
                 index,
                 ProfileRuntimePhase::DegradedPassthrough,
@@ -230,6 +235,17 @@ impl<R: ProfileRuntimeControl> ProfileRuntimeManager<R> {
                 "cleanup_unsafe",
             );
             return Err(ProfileRuntimeError::CleanupUnsafe);
+        }
+        match self.runtime.profile_redirect_present(profile_id) {
+            Ok(true) | Err(_) => {
+                self.set_status(
+                    index,
+                    ProfileRuntimePhase::DegradedPassthrough,
+                    "cleanup_unsafe",
+                );
+                return Err(ProfileRuntimeError::CleanupUnsafe);
+            }
+            Ok(false) => {}
         }
         self.set_status(
             index,

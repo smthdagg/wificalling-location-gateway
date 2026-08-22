@@ -59,12 +59,12 @@ plan=$(
 		--ctl-bin "$tmp/wloc-ctl"
 )
 
-printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway_1.2.0-r1_x86_64.ipk' >/dev/null ||
+printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway_2.0.0-rc1-r1_x86_64.ipk' >/dev/null ||
 	fail '24.10 must produce one architecture-specific integrated IPK'
-printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway-1.2.0-r1.apk (arch: x86_64)' >/dev/null ||
+printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway-2.0.0-rc1-r1.apk (arch: x86_64)' >/dev/null ||
 	fail '25.12 must produce one architecture-specific integrated APK'
 if printf '%s\n' "$plan" | grep -E 'wloc-service[_-]|luci-app-wificalling-location-gateway[_-]' >/dev/null; then
-	fail 'formal 1.2.0 plan must not expose split component packages'
+	fail 'formal 2.0.0-rc1 plan must not expose split component packages'
 fi
 printf '%s\n' "$plan" | grep -F 'ghcr.io/openwrt/sdk:x86_64-24.10.8@sha256:b28d5e4087dbd3f815a8bf5440a11e54e6bbd3d7400c3729d872e7940a4a77c1' >/dev/null ||
 	fail '24.10 SDK image must be immutable'
