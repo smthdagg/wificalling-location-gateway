@@ -2,8 +2,10 @@
 
 ## Event contract
 
-Standalone WLOC lifecycle, device-profile, provider, and interception events
-use one JSONL envelope:
+The integrated WiFi Calling Gateway + WLOC lifecycle, device-profile, provider,
+and interception events use one JSONL envelope. Gateway activity remains in
+its bounded Gateway log while the shared supervisor and monitor correlate the
+two services:
 
 ```json
 {

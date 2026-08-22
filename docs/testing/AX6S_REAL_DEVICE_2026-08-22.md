@@ -40,6 +40,33 @@ The remaining sections retain the earlier WLOC-only baseline and regression
 evidence where useful; their historical package hashes are not the current
 integrated release acceptance hash.
 
+## UI alignment acceptance run (2.0.0-35)
+
+The previous integrated package was backed up and removed before installing
+the UI-aligned AX6S package, preserving the modified Gateway and WLOC UCI
+conffiles. The PassWall provider was retained.
+
+- Package: `wificalling-location-gateway_2.0.0-35_aarch64_cortex-a53.ipk`
+- SHA-256:
+
+  ```text
+  6835f5bad94213e23ae1f6d2a9039dc7f228fc6f8035dd29abeb72d5c5d42024
+  ```
+- LuCI menu: all eight entries present in the requested order; the versioned
+  `WCG Status & Logs` and `WLOC Setting` assets were present after install.
+- WLOC Setting: `cert_info` returned the CA fingerprint and issued/expiry
+  timestamps; the installed page contains profile version, Safari install
+  steps, profile regeneration, CA regeneration, and iPhone fingerprint
+  verification.
+- Component Update: the installed page contains the transactional SSH
+  `preflight/apply/status` fallback, the health command, and the last-resort
+  `opkg` guidance. It explicitly rejects WLOC-only packages.
+- Runtime after clean install and restart: Gateway, WLOC, provider, and
+  redirect all healthy; both WCG and WLOC nftables tables present.
+- Resource snapshot after the UI-aligned install: 242,260 KiB total memory,
+  10,964 KiB available, 15,280 KiB free on `/overlay`, and 10,916 KiB free in
+  `/tmp`.
+
 ## Platform and migration
 
 - Firmware family: ImmortalWrt 24.10.6, kernel 6.6.x, MediaTek MT7622,
@@ -197,7 +224,7 @@ directory. Both detached signatures returned exit code 0 with the published
 AX6S integrated Gateway + WLOC runtime, remove-first migration, resource,
 provider reuse, fail-open stop, unified restart, package target, UI/PO asset,
 scoped nftables, and legacy-rollback rejection gates: **pass** for package
-`2.0.0-34`.
+`2.0.0-35` (the earlier runtime baseline was `2.0.0-34`).
 
 The component update/rollback flow remains covered by the host and historical
 AX6S transaction evidence below; it was not repeated during this package-only

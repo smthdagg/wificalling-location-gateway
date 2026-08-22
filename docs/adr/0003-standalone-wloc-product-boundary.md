@@ -1,13 +1,14 @@
 # ADR 0003: standalone WLOC product boundary
 
-Status: Accepted for V2 redesign (2026-08-22)
+Status: Historical; superseded by ADR 0004 (2026-08-22)
 
 ## Decision
 
-`wificalling-location-gateway` is an independent router-side WLOC product. The
-name is retained for compatibility with the repository and package feed, but
-the product does not implement, install, configure, monitor, or depend on a
-separate Wi-Fi Calling Gateway.
+This ADR records the earlier standalone-WLOC interpretation. It is retained to
+explain the design transition, but it is not the current product boundary.
+ADR 0004 defines `wificalling-location-gateway` as one independent project that
+contains both WiFi Calling Gateway and WLOC and explicitly replaces this
+decision.
 
 The product owns one lifecycle, one configuration model, one LuCI application,
 one status/monitoring model, one bounded log model, and one transactional update
