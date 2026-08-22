@@ -16,5 +16,5 @@ class SecretScannerTests(unittest.TestCase):
         self.assertIsNone(scan_secrets.PATTERNS["assigned secret"].search(source))
 
     def test_literal_password_is_still_detected(self):
-        source = b"password = 'not-a-real-but-long-secret-value';"
+        source = b"password = '" + b"not-a-real-but-long-secret-value" + b"';"
         self.assertIsNotNone(scan_secrets.PATTERNS["assigned secret"].search(source))
