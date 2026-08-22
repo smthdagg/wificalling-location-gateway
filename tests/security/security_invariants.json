@@ -1,14 +1,16 @@
 {
-  "schema": "wloc.security-invariants/v1",
+  "schema": "wloc.security-invariants/v2",
   "scope": {
-    "assigned_devices": 1,
+    "max_profiles": 8,
+    "assigned_device_binding": "one private IPv4 address per profile",
     "hostnames": [
       "gs-loc.apple.com",
       "gs-loc-cn.apple.com"
     ],
     "transport": "TCP 443",
-    "dedicated_table": "wificalling_location",
-    "protected_table": "wificalling_gateway",
+    "shared_table": "wloc_service",
+    "profile_table_prefix": "wloc_profile_",
+    "protected_external_table": "wificalling_gateway",
     "forbidden_udp_ports": [500, 4500]
   },
   "failure_dispositions": {

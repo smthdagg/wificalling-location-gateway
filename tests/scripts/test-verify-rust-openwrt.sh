@@ -53,7 +53,11 @@ cat >"$tmpdir/bin/docker" <<'EOF'
 set -eu
 printf 'docker %s\n' "$*" | tr '\n\t' '  ' | tr -s ' ' >>"$OPENWRT_CROSS_TEST_LOG"
 if [ "$1" = image ] && [ "$2" = inspect ]; then
-    exit "${OPENWRT_CROSS_TEST_IMAGE_STATUS:-0}"
+    printf '%s\n' 'rust@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9'
+    case " $* " in
+        *" rust@sha256:"*) exit "${OPENWRT_CROSS_TEST_DIGEST_STATUS:-${OPENWRT_CROSS_TEST_IMAGE_STATUS:-0}}" ;;
+        *) exit "${OPENWRT_CROSS_TEST_TAG_STATUS:-${OPENWRT_CROSS_TEST_IMAGE_STATUS:-0}}" ;;
+    esac
 fi
 if [ "$1" = run ]; then
     case " $* " in
@@ -106,11 +110,15 @@ if [ -s "$tmpdir/dangerous-cache.calls" ]; then
     fail "dangerous cache validation must happen before curl or Docker"
 fi
 
-run_case happy env
+if ! run_case happy env; then
+    cat "$tmpdir/happy.out" >&2
+    cat "$tmpdir/happy.calls" >&2
+    exit 1
+fi
 assert_contains "$tmpdir/happy.calls" "curl -fL --retry 3"
 assert_contains "$tmpdir/happy.calls" "openwrt-toolchain-24.10.8-mediatek-mt7622_gcc-13.3.0_musl.Linux-x86_64.tar.zst"
 assert_contains "$tmpdir/happy.calls" "shasum -a 256 -c -"
-assert_contains "$tmpdir/happy.calls" "docker image inspect rust:1.90.0-slim-bookworm@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9"
+assert_contains "$tmpdir/happy.calls" "docker image inspect rust:1.90.0-slim-bookworm"
 assert_contains "$tmpdir/happy.calls" "rustup target add --toolchain 1.90.0 aarch64-unknown-linux-musl"
 assert_contains "$tmpdir/happy.calls" "cargo fetch --locked --target aarch64-unknown-linux-musl"
 assert_contains "$tmpdir/happy.calls" "--network none"
@@ -135,10 +143,14 @@ fi
 if run_case missing-image env OPENWRT_CROSS_TEST_IMAGE_STATUS=1; then
     fail "missing pinned image must stop without an implicit pull"
 fi
-assert_contains "$tmpdir/missing-image.out" "docker pull --platform linux/amd64 rust:1.90.0-slim-bookworm@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9"
+assert_contains "$tmpdir/missing-image.out" "docker pull --platform linux/amd64 rust@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9"
 if grep -F 'docker run' "$tmpdir/missing-image.calls" >/dev/null; then
     fail "Docker must not run when the pinned image is missing"
 fi
+
+run_case digest-only env OPENWRT_CROSS_TEST_TAG_STATUS=1
+assert_contains "$tmpdir/digest-only.calls" "docker run --rm --pull never --platform linux/amd64 -v"
+assert_contains "$tmpdir/digest-only.calls" "rust@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9"
 
 if run_case oversize env OPENWRT_CROSS_TEST_OVERSIZE=1; then
     fail "an artifact larger than 8 MiB must fail"

@@ -5,7 +5,10 @@ OPENWRT_VERSION=24.10.8
 OPENWRT_TARGET=mediatek/mt7622
 OPENWRT_TOOLCHAIN_ARCHIVE=openwrt-toolchain-24.10.8-mediatek-mt7622_gcc-13.3.0_musl.Linux-x86_64.tar.zst
 OPENWRT_TOOLCHAIN_SHA256=fc045488375d0ff6fe6bbd0d40db44b5faced186b3e8919a400d92867171a9ad
-RUST_IMAGE=rust:1.90.0-slim-bookworm@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9
+# Docker accepts this registry digest when the repository is not combined with
+# a tag. Keeping the digest pin avoids silently switching the build image.
+RUST_IMAGE=rust:1.90.0-slim-bookworm
+RUST_IMAGE_DIGEST=rust@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9
 RUST_TOOLCHAIN=1.90.0
 RUST_TARGET=aarch64-unknown-linux-musl
 SIZE_LIMIT_BYTES=$((8 * 1024 * 1024))
@@ -63,8 +66,17 @@ done
 
 mkdir -p "$download_dir" "$output_dir"
 
-if ! docker image inspect "$RUST_IMAGE" >/dev/null 2>&1; then
-    fail "pinned build image is missing; fetch it explicitly with: docker pull --platform linux/amd64 $RUST_IMAGE"
+RUST_RUNTIME_IMAGE=
+if docker image inspect "$RUST_IMAGE" >/dev/null 2>&1 && \
+   docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$RUST_IMAGE" \
+       | grep -Fx "$RUST_IMAGE_DIGEST" >/dev/null 2>&1; then
+	RUST_RUNTIME_IMAGE=$RUST_IMAGE
+elif docker image inspect "$RUST_IMAGE_DIGEST" >/dev/null 2>&1; then
+	# CI pulls by digest, which need not create the human-readable tag in the
+	# local Docker image store. The digest reference is already content-pinned.
+	RUST_RUNTIME_IMAGE=$RUST_IMAGE_DIGEST
+else
+    fail "pinned build image is missing or has the wrong digest; fetch it explicitly with: docker pull --platform linux/amd64 $RUST_IMAGE_DIGEST"
 fi
 
 if [ ! -f "$archive" ]; then
@@ -92,7 +104,7 @@ docker run --rm --pull never --platform linux/amd64 \
     -v "$repo_root:/src:ro" \
     -v "$cache_dir:/state" \
     -w /src \
-    "$RUST_IMAGE" \
+    "$RUST_RUNTIME_IMAGE" \
     sh -ec '
         apt-get update
         apt-get install -y --no-install-recommends zstd
@@ -121,7 +133,7 @@ docker run --rm --pull never --platform linux/amd64 --network none \
     -v "$repo_root:/src:ro" \
     -v "$cache_dir:/state" \
     -w /src \
-    "$RUST_IMAGE" \
+    "$RUST_RUNTIME_IMAGE" \
     sh -ec '
         rustlib=/usr/local/rustup/toolchains/'"$RUST_TOOLCHAIN"'-x86_64-unknown-linux-gnu/lib/rustlib/'"$RUST_TARGET"'
         cp -a /state/rust-target/. "$rustlib/"

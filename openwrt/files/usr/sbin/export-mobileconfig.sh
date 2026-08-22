@@ -8,6 +8,7 @@
 # not trust MITM leaf certificates signed by it.
 
 set -eu
+umask 077
 
 CA_PEM=/etc/wloc-service/ca.pem
 OUT=/www/wloc-ca.mobileconfig
@@ -41,9 +42,14 @@ CERT_URL="http://$ROUTER_IP/wloc-ca.mobileconfig"
     exit 1
 }
 
+# Keep the intermediate certificate body private and unique. A fixed /tmp path
+# would permit concurrent exports to overwrite one another or follow a symlink.
+CA_B64=$(mktemp /tmp/wloc-ca.XXXXXX)
+trap 'rm -f "$OUT.unsigned" "$CA_B64"' EXIT HUP INT TERM
+
 # The PEM body is the DER certificate base64-encoded; strip the armor.
 sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' "$CA_PEM" \
-    | grep -v 'CERTIFICATE' | tr -d '\r\n' >/tmp/wloc-ca.b64
+    | grep -v 'CERTIFICATE' | tr -d '\r\n' >"$CA_B64"
 
 uuid1=$(cat /proc/sys/kernel/random/uuid)
 uuid2=$(cat /proc/sys/kernel/random/uuid)
@@ -60,7 +66,7 @@ uuid2=$(cat /proc/sys/kernel/random/uuid)
     printf '%s\n' '      <string>wloc-service-ca.pem</string>'
     printf '%s\n' '      <key>PayloadContent</key>'
     printf '%s\n' '      <data>'
-    cat /tmp/wloc-ca.b64
+    cat "$CA_B64"
     printf '%s\n' '      </data>'
     printf '%s\n' '      <key>PayloadDescription</key>'
     printf '%s\n' '      <string>wloc-service root CA</string>'
@@ -77,7 +83,7 @@ uuid2=$(cat /proc/sys/kernel/random/uuid)
     printf '%s\n' '    </dict>'
     printf '%s\n' '  </array>'
     printf '%s\n' '  <key>PayloadDescription</key>'
-    printf '%s\n' '  <string>Install the wloc-service root CA for Wi-Fi Calling WLOC location</string>'
+    printf '%s\n' '  <string>Install the WLOC root CA for the integrated WiFi Calling + WLOC service</string>'
     printf '%s\n' '  <key>PayloadDisplayName</key>'
     printf '%s\n' '  <string>wloc-service root CA</string>'
     printf '%s\n' '  <key>PayloadIdentifier</key>'
@@ -105,6 +111,7 @@ fi
 if [ "${SIGNED:-0}" != "1" ]; then
     mv "$OUT.unsigned" "$OUT"
 fi
-rm -f "$OUT.unsigned" /tmp/wloc-ca.b64
+rm -f "$OUT.unsigned" "$CA_B64"
+trap - EXIT HUP INT TERM
 echo "export-mobileconfig: profile written to $OUT (signed=${SIGNED:-0})"
 echo "export-mobileconfig: open on the test iPhone: $CERT_URL"

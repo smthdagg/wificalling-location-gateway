@@ -2,12 +2,15 @@
 
 ## Event contract
 
-Gateway, WLOC, and the WLOC interception path use one JSONL envelope:
+The integrated WiFi Calling Gateway + WLOC lifecycle, device-profile, provider,
+and interception events use one JSONL envelope. Gateway activity remains in
+its bounded Gateway log while the shared supervisor and monitor correlate the
+two services:
 
 ```json
 {
   "timestamp": 1710000000,
-  "component": "wloc|gateway",
+  "component": "wloc|provider|redirect|device",
   "profile_scope": "service|device-policy",
   "severity": "info|warning|error",
   "event_code": "target_updated|response_rewritten|handshake_success|handshake_failed|sustained_traffic",
@@ -25,9 +28,9 @@ status projection, but event history is deliberately less sensitive.
 - Rust WLOC events, including response-rewrite events, are capped at 64 KiB
   and 2 KiB per JSON line. Rewrite events contain byte counters only; they do
   not contain target coordinates or device addresses.
-- Gateway events default to 64 KiB. Legacy pipe records retain the existing
-  per-device event count setting; privacy-safe JSON events have no device key,
-  so their retention is bounded globally by the same recent-record limit.
+- Provider and redirect events share the same bounded 64 KiB event budget.
+  Privacy-safe JSON events have no raw device key, so retention is bounded
+  globally by the same recent-record limit.
 - Rotation keeps complete newest records and never leaves a partial first
   record for LuCI parsing.
 - Debug output is not enabled by the structured event path; normal operation

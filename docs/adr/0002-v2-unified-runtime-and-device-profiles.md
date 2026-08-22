@@ -1,36 +1,42 @@
-# ADR 0002: v2 unified Gateway/WLOC runtime and device profiles
+# ADR 0002: v2 unified WLOC runtime and device profiles
 
-Status: Proposed
+Status: Superseded by ADR 0003 (2026-08-22)
+
+> This ADR captured the earlier Gateway/WLOC integration direction. Its useful
+> constraints (one supervisor, bounded profiles, fail-open behavior, and
+> rollback) remain, but all Gateway package, UCI, lifecycle, and UI coupling is
+> removed by [ADR 0003](0003-standalone-wloc-product-boundary.md).
 
 ## Context
 
-The v1.2.x product is distributed as one small architecture-specific package,
-but the installed runtime still has separate `wificalling-gateway` and
-`wloc-service` procd lifecycles. WLOC currently has one global device, node,
-location mode, and patch target. v2 must keep the AX6S resource profile while
-adding independent device records, unified control, observability, updates, and
-rollback.
+The current branch still contains historical Gateway adapters, while WLOC has
+one global device, node, location mode, and patch target. v2 must keep the AX6S
+resource profile while adding independent device records, unified control,
+observability, updates, and rollback without depending on the Gateway project.
 
-The existing Gateway data plane and sing-box process are valuable and must not
-be duplicated per device. The existing WLOC state machine, probe, Geo, TLS/H2,
-and protocol code should be reused behind a unified supervisor rather than
-rewritten without evidence.
+The optional sing-box provider must not be duplicated per device. The existing
+WLOC state machine, probe, Geo, TLS/H2, and protocol code should be reused
+behind a unified supervisor rather than rewritten without evidence.
 
 ## Decision
 
-v2 will provide one product supervisor and one management plane:
+v2 will provide one standalone WLOC supervisor and one management plane:
 
 - one procd entry point: `wificalling-location-gateway`;
 - one root-only control socket and versioned API;
 - one authoritative configuration model containing device profiles;
-- one lifecycle state machine coordinating Gateway, WLOC, redirect, and health;
+- one lifecycle state machine coordinating provider, WLOC, redirect, and health;
 - one unified status, event, diagnostic, and update surface;
 - sing-box remains a managed child process and is shared by profiles that use
   the same node;
+- the package resolves an existing `sing-box-tiny`, `sing-box-lite`, or
+  PassWall-provided executable before falling back to a normal system
+  `sing-box`; it does not copy a second binary or attach to a PassWall-owned
+  process;
 - no per-device WLOC process and no duplicated sing-box configuration.
 
-Legacy init scripts and UCI files may remain as a one-release migration facade,
-but they must not independently own runtime state after migration.
+Legacy WLOC init scripts and UCI fields may remain as a one-release migration
+facade, but they must not independently own runtime state after migration.
 
 ## Device profile contract
 
@@ -38,8 +44,8 @@ Each profile owns:
 
 - stable profile id and display label;
 - LAN identity and source address set;
-- Gateway enabled state and one node binding;
 - WLOC enabled state;
+- one explicit WLOC node binding;
 - `auto` or `manual` location mode;
 - manual coordinate/preset reference;
 - probe, Geo, redirect, proxy, log, and health state.
@@ -80,7 +86,7 @@ temporary artifacts.
 
 ## Observability contract
 
-All Gateway/WLOC events use one structured envelope with timestamp, level,
+All standalone WLOC events use one structured envelope with timestamp, level,
 component, profile id, event, outcome, reason code, retryability, and redaction
 version. Raw WLOC bodies, credentials, tokens, and private keys are excluded
 by default. Debug capture is explicit, time-limited, size-limited, and
@@ -106,12 +112,11 @@ Migration must:
 
 Positive consequences:
 
-- one authoritative lifecycle and status model;
+- one authoritative standalone WLOC lifecycle and status model;
 - independent multi-device control without global mutable WLOC state;
 - lower resource use than one process per device;
 - consistent diagnostics, updates, and rollback;
-- clearer separation between product integration and the existing sing-box
-  dependency.
+- clear separation between the product and its optional sing-box provider.
 
 Costs and risks:
 

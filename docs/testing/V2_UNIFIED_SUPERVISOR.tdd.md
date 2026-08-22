@@ -2,9 +2,13 @@
 
 ## Scope
 
-This evidence covers Issue #33's unified Gateway/WLOC lifecycle slice. The
-device-profile, LuCI, update, migration, and AX6S live-RSS slices remain
-follow-up work from the V2 task breakdown.
+This evidence started with Issue #33's unified WLOC lifecycle slice.
+The current V2 integration branch extends it with UCI-backed device profiles,
+LuCI management/monitoring, bounded diagnostics, component update/rollback
+contracts, and shared sing-box provider resolution. AX6S RSS, migration,
+reboot, fail-open, and transactional health-rollback observations are recorded
+in the redacted real-device evidence; hard power-cut and flash-full faults
+remain hardware gaps.
 
 ## RED/GREEN checkpoints
 
@@ -23,8 +27,8 @@ Command:
 ./scripts/ci/verify.sh
 ```
 
-Result: PASS. The run included 69 Python tests, Rust all-target tests, Rust
-line coverage of 81.29%, OpenWrt cross-build/resource gates, release package
+Result: PASS. The run included 83 Python tests, Rust all-target tests, Rust
+line coverage of 80.11%, OpenWrt cross-build/resource gates, release package
 tests, standalone AX6S package tests, JavaScript tests, secret scanning,
 formatting, and dependency audit. Cargo audit reported no advisories; it did
 report the pre-existing duplicate `socket2` and `windows-sys` lock entries.
@@ -34,8 +38,8 @@ report the pre-existing duplicate `socket2` and `windows-sys` lock entries.
 | Guarantee | Test or evidence |
 |---|---|
 | Redirect installation is after child start and health check | `tests/scripts/test-unified-supervisor.sh`; `tests/service_supervisor.rs` |
-| WLOC fault withdraws the WLOC redirect and leaves Gateway passthrough alive | `openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh` failure paths plus shell static gate |
+| WLOC fault withdraws the WLOC redirect and leaves unrelated router traffic outside the WLOC table | `openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh` failure paths plus shell static gate |
 | Cleanup uncertainty is visible as `CleanupUnsafe` | `tests/service_supervisor.rs:cleanup_failure_is_not_reported_as_stopped` |
-| Stable Gateway nftables namespace and UDP 500/4500 are not directly edited by WLOC cleanup | shell static gate and dedicated `wloc_service` stop mock |
+| Unrelated nftables namespaces and UDP 500/4500 are not directly edited by WLOC cleanup | shell static gate and dedicated `wloc_service` stop mock |
 | Release packaging enables the unified entry point | `tests/scripts/test-openwrt-release-packaging.sh` and `tests/scripts/test-standalone-ax6s-package.sh` |
-| No claim is made for live AX6S RSS, procd behavior, or multi-device UI in this slice | Requires hardware/package-install acceptance in the next issue |
+| AX6S RSS, procd behavior, migration, and rollback timing are evidenced | `docs/testing/AX6S_REAL_DEVICE_2026-08-22.md`; hard power-cut/flash-full remain open |

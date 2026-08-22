@@ -14,11 +14,13 @@ def assert_hard_security_semantics(testcase, threat_model, fail_open, contract):
     testcase.assertEqual(
         contract["scope"],
         {
-            "assigned_devices": 1,
+            "max_profiles": 8,
+            "assigned_device_binding": "one private IPv4 address per profile",
             "hostnames": ["gs-loc.apple.com", "gs-loc-cn.apple.com"],
             "transport": "TCP 443",
-            "dedicated_table": "wificalling_location",
-            "protected_table": "wificalling_gateway",
+            "shared_table": "wloc_service",
+            "profile_table_prefix": "wloc_profile_",
+            "protected_external_table": "wificalling_gateway",
             "forbidden_udp_ports": [500, 4500],
         },
     )
@@ -62,17 +64,19 @@ class SecurityInvariantDocumentationTests(unittest.TestCase):
         cls.fail_open = fail_open_path.read_text(encoding="utf-8") if fail_open_path.exists() else ""
 
     def test_contract_is_versioned_and_scope_is_exact(self):
-        self.assertEqual(self.contract["schema"], "wloc.security-invariants/v1")
+        self.assertEqual(self.contract["schema"], "wloc.security-invariants/v2")
         scope = self.contract["scope"]
-        self.assertEqual(scope["assigned_devices"], 1)
+        self.assertEqual(scope["max_profiles"], 8)
+        self.assertEqual(scope["assigned_device_binding"], "one private IPv4 address per profile")
         self.assertEqual(
             scope["hostnames"],
             ["gs-loc.apple.com", "gs-loc-cn.apple.com"],
         )
         self.assertEqual(scope["transport"], "TCP 443")
         self.assertEqual(scope["forbidden_udp_ports"], [500, 4500])
-        self.assertEqual(scope["dedicated_table"], "wificalling_location")
-        self.assertEqual(scope["protected_table"], "wificalling_gateway")
+        self.assertEqual(scope["shared_table"], "wloc_service")
+        self.assertEqual(scope["profile_table_prefix"], "wloc_profile_")
+        self.assertEqual(scope["protected_external_table"], "wificalling_gateway")
 
     def test_every_invariant_has_a_canonical_document_anchor(self):
         documents = {
@@ -86,12 +90,14 @@ class SecurityInvariantDocumentationTests(unittest.TestCase):
 
     def test_scope_excludes_gateway_and_wifi_calling_ipsec(self):
         required = (
-            "one assigned test device",
+            "up to 8 device profiles",
+            "one private IPv4 address per profile",
             "gs-loc.apple.com",
             "gs-loc-cn.apple.com",
             "TCP 443",
             "UDP 500/4500",
-            "wificalling_location",
+            "wloc_service",
+            "wloc_profile_<id>",
             "wificalling_gateway",
         )
         for text in required:

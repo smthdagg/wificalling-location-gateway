@@ -14,12 +14,10 @@ UPDATE=/usr/sbin/wloc-component-update.sh
 
 ctl_live() {
 	out="$("$CTL" "$@" 2>&1)" && return 0
-	# A pre-package hand deployment may leave an untracked process holding
-	# port 8443 after its control socket dies.  Remove only this service's
-	# process before handing lifecycle ownership back to procd.
-	killall -q wloc-service >/dev/null 2>&1 || true
-	rm -f /var/run/wloc-service/control.sock
-	/etc/init.d/wloc-service restart >/dev/null 2>&1 || return 1
+	# The unified supervisor is the only lifecycle owner. Never kill or
+	# directly restart the legacy child from an RPC facade: doing so can leave
+	# redirect state outside the supervisor's fail-open cleanup boundary.
+	/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1 || return 1
 	retry=0
 	while [ "$retry" -lt 10 ]; do
 		sleep 1
@@ -74,6 +72,8 @@ list)
 	json_close_object
 	json_add_object update_recover
 	json_close_object
+	json_add_object provider_test
+	json_close_object
 	json_add_object node_test
 	json_close_object
 	json_dump
@@ -88,10 +88,15 @@ call)
 		json_get_var query query
 		json_get_var lat lat
 		json_get_var lon lon
+		json_get_var profile_id profile_id
 
 		case "$method" in
 		status|disable|reload|geo-clear|refresh)
-			out="$("$CTL" "$method" 2>&1)"
+			if [ -n "$profile_id" ] && [ "$profile_id" != "null" ]; then
+				out="$("$CTL" "$method" --profile "$profile_id" 2>&1)"
+			else
+				out="$("$CTL" "$method" 2>&1)"
+			fi
 			;;
 		enable)
 			ctl_live enable
@@ -134,7 +139,7 @@ call)
 			if [ -n "$query" ] && [ "$query" != "null" ]; then
 				out="$("$CTL" geo-search --query "$query" 2>&1)"
 			else
-				echo '{"error":"geo-search 需要 --query 地名"}'
+				echo '{"error":"geo-search requires --query"}'
 				exit 1
 			fi
 			;;
@@ -171,7 +176,7 @@ call)
 	regen_profile)
 		if [ ! -x "$EXPORT" ]; then
 			json_init
-			json_add_string error "export-mobileconfig.sh 未安装"
+			json_add_string error "export-mobileconfig.sh is not installed"
 			json_dump
 			exit 1
 		fi
@@ -197,7 +202,7 @@ call)
 		if [ -f /etc/wloc-service/ca.info.json ]; then
 			cat /etc/wloc-service/ca.info.json
 		else
-			echo '{"error":"CA 信息文件不存在，请先启动 wloc-service"}'
+			echo '{"error":"CA information is unavailable; start wloc-service first"}'
 		fi
 		exit 0
 		;;
@@ -206,50 +211,54 @@ call)
 		json_load "$input"
 		json_get_var fingerprint fingerprint
 		if [ -z "$fingerprint" ] || [ "$fingerprint" = "null" ]; then
-			echo '{"error":"请粘贴 iPhone 上显示的证书指纹"}'
+			echo '{"error":"paste the certificate fingerprint shown on the iPhone"}'
 			exit 1
 		fi
 		if [ ! -f /etc/wloc-service/ca.info.json ]; then
-			echo '{"error":"CA 信息文件不存在，请先启动 wloc-service"}'
+			echo '{"error":"CA information is unavailable; start wloc-service first"}'
 			exit 1
 		fi
 		gw="$(jsonfilter -i /etc/wloc-service/ca.info.json -e '@.fingerprint')"
 		norm() { echo "$1" | tr -d ':' | tr '[:lower:]' '[:upper:]' | tr -d ' '; }
 		if [ "$(norm "$fingerprint")" = "$(norm "$gw")" ]; then
-			echo "{\"match\":true,\"gateway_fingerprint\":\"$gw\"}"
+			echo "{\"match\":true,\"ca_fingerprint\":\"$gw\"}"
 		else
-			echo "{\"match\":false,\"gateway_fingerprint\":\"$gw\"}"
+			echo "{\"match\":false,\"ca_fingerprint\":\"$gw\"}"
 		fi
 		exit 0
 		;;
 	restart_service)
-		# Re-sync the redirect rules first (the followed device may have
-		# changed), then restart the daemon so it reads the new config.
-		/usr/sbin/wloc-profile-redirect.sh stop-all >/dev/null 2>&1 || true
-		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
-		/etc/init.d/wloc-service restart >/dev/null 2>&1
-		sleep 2
-		echo '{"ok":true}'
-		exit 0
+		# One lifecycle owner: the standalone WLOC supervisor.
+		if /etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1; then
+			sleep 2
+			echo '{"ok":true}'
+			exit 0
+		fi
+		echo '{"error":"unified WLOC restart failed"}'
+	exit 1
 		;;
 	restart_gateway)
-		# Regenerate the sing-box config and restart the proxy for the
-		# Wi-Fi Calling Gateway (brief interruption of device proxy).
-		/etc/init.d/wificalling-gateway restart >/dev/null 2>&1
-		sleep 2
-		echo '{"ok":true}'
-		exit 0
+		if /etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1; then
+			sleep 2
+			echo '{"ok":true}'
+			exit 0
+		fi
+		echo '{"error":"unified Gateway/WLOC restart failed"}'
+		exit 1
 		;;
 	restart_unified)
-		/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1
-		sleep 2
-		echo '{"ok":true}'
-		exit 0
+		if /etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1; then
+			sleep 2
+			echo '{"ok":true}'
+			exit 0
+		fi
+		echo '{"error":"unified WLOC restart failed"}'
+		exit 1
 		;;
 	health)
 		if [ ! -x /usr/sbin/wloc-health.sh ]; then
 			json_init
-			json_add_string error "wloc-health.sh 未安装"
+			json_add_string error "wloc-health.sh is not installed"
 			json_dump
 			exit 1
 		fi
@@ -265,26 +274,31 @@ call)
 		exit $?
 		;;
 	clear_log)
-		# Truncate a usage log immediately with a shell redirect (O_TRUNC).
-		# The old path went through LuCI's fs.write ubus call, which could
-		# stall while a monitor process holds the file open, leaving the
-		# confirm modal open until the write returned.
+		# Truncate only the standalone WLOC usage log.
 		read -r input
 		json_load "$input"
 		json_get_var log log
 		case "$log" in
-			wfc) : > /var/run/wificalling-gateway/events.log ;;
 			wloc) : > /var/run/wloc-service/events.jsonl ;;
 			*) echo '{"error":"unknown log target"}'; exit 1 ;;
 		esac
 		echo '{"ok":true}'
 		exit 0
 		;;
+	provider_test)
+		# Read-only provider capability check.
+		read -r input
+		json_load "$input"
+		config=$(uci -q get wloc-service.main.singbox_config 2>/dev/null || true)
+		[ -n "$config" ] || config=/var/run/wloc-service/sing-box.json
+		if /usr/libexec/wificalling-location-gateway/singbox-runtime.sh check -c "$config" >/dev/null 2>&1; then
+			echo '{"state":"ok","reason":"provider_available"}'
+		else
+			echo '{"state":"failed","reason":"provider_unavailable"}'
+		fi
+		exit 0
+		;;
 	node_test)
-		# Manual connection test for a single node. WireGuard nodes get a
-		# fresh handshake (bypassing the monitor's result cache); other
-		# protocols get a TCP reachability probe. The helper reuses the
-		# monitor's handshake function where applicable.
 		read -r input
 		json_load "$input"
 		json_get_var id id
@@ -292,12 +306,12 @@ call)
 			echo '{"state":"failed","reason":"no_node_id"}'
 			exit 0
 		fi
-		if [ ! -x /usr/libexec/wificalling-gateway/node-test.sh ]; then
+		[ -x /usr/libexec/wificalling-gateway/node-test.sh ] || {
 			echo '{"state":"failed","reason":"no_test_helper"}'
 			exit 0
-		fi
+		}
 		/usr/libexec/wificalling-gateway/node-test.sh "$id"
-		exit 0
+		exit $?
 		;;
 	update_status)
 		[ -x "$UPDATE" ] || { echo '{"error":"component update helper is not installed"}'; exit 1; }
@@ -341,12 +355,11 @@ call)
 		# the iOS profile. The iPhone must reinstall and re-trust the CA.
 		rm -f /etc/wloc-service/ca.pem /etc/wloc-service/ca.key /etc/wloc-service/ca.info.json
 		/usr/sbin/wloc-profile-redirect.sh stop-all >/dev/null 2>&1 || true
-		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
-		/etc/init.d/wloc-service restart >/dev/null 2>&1
+		/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1
 		sleep 3
 		if [ ! -f /etc/wloc-service/ca.info.json ]; then
 			json_init
-			json_add_string error "重新生成证书失败，请检查 wloc-service 状态"
+			json_add_string error "CA regeneration failed; check wloc-service status"
 			json_dump
 			exit 1
 		fi

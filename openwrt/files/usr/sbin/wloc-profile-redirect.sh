@@ -2,7 +2,7 @@
 # Manage one device profile's WLOC TPROXY table.
 #
 # The table is intentionally profile-scoped. A profile stop deletes only its
-# own table; the shared policy route and the stable Gateway nftables namespace
+# own table; unrelated nftables namespaces
 # are owned elsewhere. The only approved destinations are the two exact Apple
 # WLOC hostnames, represented by the per-table apple_hosts set populated by
 # wloc-refresh-set.sh.
@@ -22,7 +22,7 @@ fail() {
 
 valid_profile_id() {
 	case "$1" in
-		''|*[!a-z0-9_-]*) return 1 ;;
+		''|*[!a-z0-9_]*) return 1 ;;
 	esac
 	[ "${#1}" -le 32 ]
 }
@@ -57,14 +57,12 @@ valid_private_ipv4() {
 
 stop_all_profiles() {
 	# This is the crash/upgrade cleanup boundary. Only tables with the exact
-	# component-owned prefix are eligible; the stable Gateway namespace is
+	# component-owned prefix are eligible; unrelated namespaces are
 	# never enumerated or modified here.
 	for table in $("$nft_binary" list tables inet 2>/dev/null \
-		| sed -n 's/^table inet \(wloc_profile_[a-z0-9_-]*\)$/\1/p'); do
+		| sed -n 's/^table inet \(wloc_profile_[a-z0-9_]*\)$/\1/p'); do
 		case "$table" in
-			wloc_profile_*|*[!a-z0-9_-]*)
-				case "$table" in *[!a-z0-9_-]*) continue ;; esac
-				;;
+			wloc_profile_[a-z0-9_]*) ;;
 			*) continue ;;
 		esac
 		"$nft_binary" delete table inet "$table" 2>/dev/null || true
@@ -109,7 +107,7 @@ case "$action" in
 		table=${PROFILE_TABLE_PREFIX}${profile_id}
 		device_ip=$3
 		"$nft_binary" add table inet "$table" 2>/dev/null || true
-		"$nft_binary" add set inet "$table" apple_hosts '{ type ipv4_addr; }' 2>/dev/null || true
+		"$nft_binary" add set inet "$table" apple_hosts '{ type ipv4_addr; flags timeout; timeout 30s; }' 2>/dev/null || true
 		"$nft_binary" flush chain inet "$table" prerouting 2>/dev/null || true
 		"$nft_binary" delete chain inet "$table" prerouting 2>/dev/null || true
 		"$nft_binary" "add chain inet $table prerouting { type filter hook prerouting priority mangle; }"
@@ -121,8 +119,9 @@ case "$action" in
 		[ "$#" -eq 2 ] || fail 'usage: stop PROFILE_ID'
 		valid_profile_id "$profile_id" || fail 'invalid profile id'
 		"$nft_binary" delete table inet "${PROFILE_TABLE_PREFIX}${profile_id}" 2>/dev/null || true
+		"$nft_binary" list table inet "${PROFILE_TABLE_PREFIX}${profile_id}" >/dev/null 2>&1 && fail 'profile redirect table remains after stop' || true
 		remaining=$("$nft_binary" list tables inet 2>/dev/null \
-			| sed -n 's/^table inet \(wloc_profile_[a-z0-9_-]*\)$/\1/p')
+			| sed -n 's/^table inet \(wloc_profile_[a-z0-9_]*\)$/\1/p')
 		[ -n "$remaining" ] || remove_policy_route
 		;;
 	status)

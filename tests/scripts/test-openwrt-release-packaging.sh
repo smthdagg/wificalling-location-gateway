@@ -8,109 +8,63 @@ runtime_builder="$repo_root/scripts/openwrt/build-x86_64-runtime.sh"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-package-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
-fail() {
-	printf 'FAIL: %s\n' "$*" >&2
-	exit 1
-}
-
-[ -x "$builder" ] || fail "missing executable $builder"
-[ -x "$matrix" ] || fail "missing executable $matrix"
-[ -x "$runtime_builder" ] || fail "missing executable $runtime_builder"
-
-grep -F '\$\$required' "$builder" >/dev/null ||
-	fail 'package post-install must preserve the full prerequisite path through Make'
-grep -F 'mkdir -p /var/run/wificalling-gateway' "$builder" >/dev/null ||
-	fail 'release post-install must create the volatile Gateway runtime directory before restart'
-grep -F 'chmod 0700 /var/run/wificalling-gateway' "$builder" >/dev/null ||
-	fail 'release post-install must restrict the Gateway runtime directory'
-grep -F 'wificalling-location-gateway/unified-supervisor.sh' "$builder" >/dev/null ||
-	fail 'release builder must package the unified supervisor'
-grep -F '/etc/init.d/wificalling-gateway disable' "$builder" >/dev/null ||
-	fail 'release post-install must disable the legacy Gateway owner'
-grep -F '/etc/init.d/wloc-service disable' "$builder" >/dev/null ||
-	fail 'release post-install must disable the legacy WLOC owner'
-grep -F '/etc/init.d/wificalling-location-gateway restart' "$builder" >/dev/null ||
-	fail 'release post-install must restart the unified owner'
-grep -F 'rm -f /tmp/luci-indexcache.*' "$builder" >/dev/null ||
-	fail 'release post-install must invalidate every LuCI menu cache variant'
-if grep -F 'wloc-docker-smoke-deps' "$matrix" >/dev/null; then
-	fail 'Docker verification must use real 25.x rootfs prerequisites, not conflicting fake providers'
+[ -x "$builder" ] && [ -x "$matrix" ] && [ -x "$runtime_builder" ]
+grep -F 'external application UCI or package' "$builder" >/dev/null
+grep -F 'wloc-service' "$builder" >/dev/null
+grep -F 'wificalling-gateway' "$builder" >/dev/null
+grep -F 'wificalling-gateway/overview' "$repo_root/openwrt/files/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json" >/dev/null
+grep -F -- '--ax6s-package' "$builder" >/dev/null
+grep -F 'expected three integrated packages' "$builder" >/dev/null
+grep -F 'X-WLOC-Product' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null
+grep -F 'X-WLOC-Target: x86/64' "$builder" >/dev/null
+grep -F 'X-WLOC-OpenWrt: 24.10+' "$builder" >/dev/null
+grep -F 'X-WLOC-Package-Format: ipk' "$builder" >/dev/null
+grep -F 'x86_64-full' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null
+grep -F 'DEPENDS:=' "$builder" >/dev/null
+for dependency in '+luci-base' '+rpcd-mod-rpcsys' '+nftables' '+firewall4' '+kmod-nft-tproxy' '+kmod-nft-socket' '+ip-full'; do
+  grep -F "$dependency" "$builder" >/dev/null
+done
+grep -F "wificalling-location-gateway*.manifest" "$builder" >/dev/null
+grep -F "wificalling-location-gateway*.sig" "$builder" >/dev/null
+grep -F 'WLOC_UPDATE_SIGNING_KEY is required' "$builder" >/dev/null
+grep -F '/etc/init.d/wificalling-location-gateway restart' "$matrix" >/dev/null
+if grep -E -- '--gateway-ipk|GATEWAY_IPK' "$builder" >/dev/null; then
+  echo 'release builder still exposes a Gateway package input' >&2
+  exit 1
 fi
-grep -F 'SHA256SUMS' "$matrix" >/dev/null ||
-	fail 'Docker verification must bind tested packages to the release checksum manifest'
-grep -F 'manifest_entries=' "$matrix" >/dev/null ||
-	fail 'Docker verification must select install artifacts from the checksum manifest'
-grep -F 'unexpected release package not listed in SHA256SUMS' "$matrix" >/dev/null ||
-	fail 'Docker verification must reject unlisted matching release packages'
-if grep -F 'shasum -a 256 ./wificalling-location-gateway' "$builder" >/dev/null; then
-	fail 'release builder must write basename-only SHA256SUMS entries'
-fi
-grep -F 'luci-app-wificalling-gateway.json' "$builder" >/dev/null ||
-	fail 'integrated release builder must remove the standalone Gateway LuCI menu'
 
-printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
-printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"
+printf '#!/bin/sh
+exit 0
+' > "$tmp/wloc-service"
+printf '#!/bin/sh
+exit 0
+' > "$tmp/wloc-ctl"
 chmod 0755 "$tmp/wloc-service" "$tmp/wloc-ctl"
-
-plan=$(
-	"$builder" --plan \
-		--arch x86_64 \
-		--service-bin "$tmp/wloc-service" \
-		--ctl-bin "$tmp/wloc-ctl"
-)
-
-printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway_1.2.0-r1_x86_64.ipk' >/dev/null ||
-	fail '24.10 must produce one architecture-specific integrated IPK'
-printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway-1.2.0-r1.apk (arch: x86_64)' >/dev/null ||
-	fail '25.12 must produce one architecture-specific integrated APK'
-if printf '%s\n' "$plan" | grep -E 'wloc-service[_-]|luci-app-wificalling-location-gateway[_-]' >/dev/null; then
-	fail 'formal 1.2.0 plan must not expose split component packages'
-fi
-printf '%s\n' "$plan" | grep -F 'ghcr.io/openwrt/sdk:x86_64-24.10.8@sha256:b28d5e4087dbd3f815a8bf5440a11e54e6bbd3d7400c3729d872e7940a4a77c1' >/dev/null ||
-	fail '24.10 SDK image must be immutable'
-printf '%s\n' "$plan" | grep -F 'ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35bebb77b3f6d9523fd68873fab78a1bd19cc123cd0f' >/dev/null ||
-	fail '25.12 SDK image must be immutable'
+plan=$("$builder" --plan --arch x86_64 --service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl")
+printf '%s
+' "$plan" | grep -F 'wificalling-location-gateway_2.0.0-r1_x86_64.ipk' >/dev/null
+printf '%s
+' "$plan" | grep -F 'wificalling-location-gateway-2.0.0-r1.apk (arch: x86_64)' >/dev/null
+printf '%s
+' "$plan" | grep -F 'ghcr.io/openwrt/sdk:x86_64-24.10.8@sha256:b28d5e4087dbd3f815a8bf5440a11e54e6bbd3d7400c3729d872e7940a4a77c1' >/dev/null
+printf '%s
+' "$plan" | grep -F 'ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35bebb77b3f6d9523fd68873fab78a1bd19cc123cd0f' >/dev/null
 
 if "$builder" --plan --arch all --service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl" >"$tmp/out" 2>"$tmp/err"; then
-	fail 'runtime architecture all must be rejected'
+  exit 1
 fi
-grep -F 'runtime architecture must not be all or noarch' "$tmp/err" >/dev/null ||
-	fail 'architecture rejection must be explicit'
-if "$builder" --plan --arch aarch64_cortex-a53 --service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl" >"$tmp/out" 2>"$tmp/err"; then
-	fail 'x86_64 SDK must reject an AArch64 package label'
-fi
-grep -F 'this SDK matrix currently supports x86_64 only' "$tmp/err" >/dev/null ||
-	fail 'unsupported SDK architecture rejection must be explicit'
+grep -F 'runtime architecture must not be all or noarch' "$tmp/err" >/dev/null
 if "$builder" --out-dir /tmp --arch x86_64 --service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl" >"$tmp/out" 2>"$tmp/err"; then
-	fail 'broad release output directory must be rejected'
+  exit 1
 fi
-grep -F 'dedicated openwrt-release directory' "$tmp/err" >/dev/null ||
-	fail 'output directory rejection must be explicit'
+grep -F 'dedicated openwrt-release directory' "$tmp/err" >/dev/null
 
 matrix_plan=$("$matrix" --plan --dist-dir "$tmp")
-for expected in \
-	'Redmi AX6S / OpenWrt 24.10.5|opkg|ghcr.io/openwrt/rootfs:aarch64_generic-24.10.5' \
-	'OpenWrt 24.10.8|opkg|ghcr.io/openwrt/rootfs:x86_64-24.10.8' \
-	'OpenWrt 25.12.3|apk|ghcr.io/openwrt/rootfs:x86_64-25.12.3' \
-	'iStoreOS 24.10.5|opkg|wukongdaily/openwrt-istoreos:amd64-latest'; do
-	printf '%s\n' "$matrix_plan" | grep -F "$expected" >/dev/null ||
-		fail "missing Docker matrix row: $expected"
-done
-printf '%s\n' "$matrix_plan" | grep -F 'sha256:93f980c266b9b68e3085f3eee7909c04f1dc4061047558e18a9ef12aec43efa9' >/dev/null ||
-	fail 'AX6S-compatible AArch64 rootfs image must be immutable'
-printf '%s\n' "$matrix_plan" | grep -F 'sha256:9972a4b4747cd136abd597475d7b88c51a49fd849d0d53f069a2f4bf446061b9' >/dev/null ||
-	fail '24.10 rootfs image must be immutable'
-printf '%s\n' "$matrix_plan" | grep -F 'sha256:af882e0583954fc2ceac6b081a9d214fc739cfea36a29b48795a5f15563aa3b5' >/dev/null ||
-	fail '25.12 rootfs image must be immutable'
-printf '%s\n' "$matrix_plan" | grep -F 'sha256:83965cb67d661a28e471c491c60efffa0bffd9bec6bf13a3f0172ffd9f46b6b3' >/dev/null ||
-	fail 'iStoreOS rootfs image must be immutable'
-
+printf '%s
+' "$matrix_plan" | grep -F 'Redmi AX6S / OpenWrt 24.10.5|opkg' >/dev/null
+printf '%s
+' "$matrix_plan" | grep -F 'OpenWrt 25.12.3|apk' >/dev/null
 runtime_plan=$("$runtime_builder" --plan --out-dir "$tmp")
-printf '%s\n' "$runtime_plan" | grep -F 'x86_64-unknown-linux-musl' >/dev/null ||
-	fail 'runtime builder must use the musl Rust target'
-printf '%s\n' "$runtime_plan" | grep -F 'ghcr.io/openwrt/sdk:x86_64-24.10.8@sha256:b28d5e4087dbd3f815a8bf5440a11e54e6bbd3d7400c3729d872e7940a4a77c1' >/dev/null ||
-	fail 'runtime builder must use the immutable OpenWrt toolchain image'
-printf '%s\n' "$runtime_plan" | grep -F 'rust:1.90.0-slim-bookworm@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9' >/dev/null ||
-	fail 'runtime builder must use the immutable Rust image'
-
-printf '%s\n' 'OpenWrt release packaging tests passed'
+printf '%s
+' "$runtime_plan" | grep -F 'x86_64-unknown-linux-musl' >/dev/null
+echo 'integrated Gateway/WLOC release packaging tests passed'

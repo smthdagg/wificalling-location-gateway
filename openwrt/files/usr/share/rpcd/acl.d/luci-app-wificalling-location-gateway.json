@@ -1,26 +1,24 @@
 {
   "luci-app-wificalling-location-gateway": {
-    "description": "Grant access to the Wi-Fi Calling & WLOC location gateway admin pages",
+    "description": "Grant access to the unified Wi-Fi Calling Gateway and WLOC admin pages",
     "read": {
       "ubus": {
         "luci.wloc": [
-          "ctl",
-          "regen_profile",
           "cert_info",
-          "regen_ca",
-          "restart_service",
           "verify_fingerprint",
           "health",
-          "restart_gateway",
-          "node_test",
-          "update_status"
+          "provider_test",
+          "update_status",
+          "node_test"
         ],
         "file": [
           "read"
         ]
       },
       "uci": [
-        "wloc-service"
+        "wloc-service",
+        "wificalling-gateway",
+        "dhcp"
       ],
       "file": {
         "/var/run/wloc-service/status.json": [
@@ -29,10 +27,34 @@
         "/var/run/wloc-service/events.jsonl": [
           "read"
         ],
+        "/var/run/wloc-service/profiles/*/status.json": [
+          "read"
+        ],
+        "/var/run/wloc-service/profiles/*/events.jsonl": [
+          "read"
+        ],
         "/tmp/run/wloc-service/status.json": [
           "read"
         ],
         "/tmp/run/wloc-service/events.jsonl": [
+          "read"
+        ],
+        "/var/run/wificalling-gateway/status.json": [
+          "read"
+        ],
+        "/var/run/wificalling-gateway/node-status.json": [
+          "read"
+        ],
+        "/var/run/wificalling-gateway/events.log": [
+          "read"
+        ],
+        "/tmp/run/wificalling-gateway/status.json": [
+          "read"
+        ],
+        "/tmp/run/wificalling-gateway/node-status.json": [
+          "read"
+        ],
+        "/tmp/run/wificalling-gateway/events.log": [
           "read"
         ]
       }
@@ -42,28 +64,31 @@
         "luci.wloc": [
           "ctl",
           "regen_profile",
-          "cert_info",
           "regen_ca",
           "restart_service",
           "restart_unified",
           "support_bundle",
           "verify_fingerprint",
-          "node_test",
-          "restart_gateway",
           "clear_log",
           "update_preflight",
           "update_apply",
-          "update_recover"
+          "update_recover",
+          "restart_gateway",
+          "node_test"
         ],
         "file": [
           "write"
         ]
       },
       "uci": [
-        "wloc-service"
+        "wloc-service",
+        "wificalling-gateway"
       ],
       "file": {
         "/var/run/wloc-service/events.jsonl": [
+          "write"
+        ],
+        "/var/run/wloc-service/profiles/*/events.jsonl": [
           "write"
         ],
         "/tmp/run/wloc-service/events.jsonl": [

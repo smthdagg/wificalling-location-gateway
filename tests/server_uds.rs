@@ -13,8 +13,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 
 use wificalling_location_gateway::service::api::RequestParams;
-use wificalling_location_gateway::service::api::SERVICE_API_ID;
-use wificalling_location_gateway::service::dispatch::{DispatchError, ServiceDispatch};
+use wificalling_location_gateway::service::api::{SERVICE_API_ID, SERVICE_API_V2_ID};
+use wificalling_location_gateway::service::dispatch::{
+    DispatchError, InMemoryProfileStore, ServiceDispatch,
+};
 use wificalling_location_gateway::service::server::ControlServer;
 
 struct StubDispatch {
@@ -98,6 +100,28 @@ async fn spawn_server(handler: StubDispatch, path: PathBuf) -> tokio::task::Join
             .serve(listener, std::time::Duration::from_secs(3600))
             .await;
     })
+}
+
+async fn spawn_profile_server(handler: StubDispatch, path: PathBuf) -> tokio::task::JoinHandle<()> {
+    let listener = tokio::net::UnixListener::bind(&path).unwrap();
+    let server = ControlServer::with_profile_dispatch(handler, InMemoryProfileStore::new());
+    tokio::spawn(async move {
+        server
+            .serve(listener, std::time::Duration::from_secs(3600))
+            .await;
+    })
+}
+
+fn v2_request_frame(method: &str, request_id: &str, params: Value) -> Vec<u8> {
+    encoded(
+        &serde_json::to_vec(&json!({
+            "api_version": SERVICE_API_V2_ID,
+            "request_id": request_id,
+            "method": method,
+            "params": params
+        }))
+        .unwrap(),
+    )
 }
 
 #[tokio::test]
@@ -253,6 +277,86 @@ async fn multiple_requests_on_one_connection_succeed() {
         serde_json::from_slice::<Value>(&body).unwrap()["request_id"],
         "c"
     );
+
+    task.abort();
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn v2_profile_crud_round_trips_through_control_server() {
+    let path = temp_socket_path();
+    let task = spawn_profile_server(
+        StubDispatch {
+            enable_fails: false,
+        },
+        path.clone(),
+    )
+    .await;
+    let mut client = UnixStream::connect(&path).await.unwrap();
+
+    client
+        .write_all(&v2_request_frame(
+            "profile.create",
+            "p-create",
+            json!({
+                "profile_id": "phone",
+                "label": "Phone",
+                "assigned_device": "192.168.1.10",
+                "node_ref": "node-a",
+                "node_mode": "fixed",
+                "geo_source": "auto",
+                "enabled": true
+            }),
+        ))
+        .await
+        .unwrap();
+    let created: Value = serde_json::from_slice(&read_response(&mut client).await).unwrap();
+    assert_eq!(created["api_version"], SERVICE_API_V2_ID);
+    assert_eq!(created["result"]["profile_id"], "phone");
+
+    client
+        .write_all(&v2_request_frame("profile.list", "p-list", json!({})))
+        .await
+        .unwrap();
+    let listed: Value = serde_json::from_slice(&read_response(&mut client).await).unwrap();
+    assert_eq!(listed["result"]["profiles"][0]["profile_id"], "phone");
+    assert!(listed["result"]["profiles"][0]
+        .get("assigned_device")
+        .is_none());
+
+    client
+        .write_all(&v2_request_frame(
+            "profile.update",
+            "p-update",
+            json!({"profile_id": "phone", "label": "Updated", "enabled": false}),
+        ))
+        .await
+        .unwrap();
+    let updated: Value = serde_json::from_slice(&read_response(&mut client).await).unwrap();
+    assert_eq!(updated["result"]["profile_id"], "phone");
+
+    client
+        .write_all(&v2_request_frame(
+            "profile.get",
+            "p-get",
+            json!({"profile_id": "phone"}),
+        ))
+        .await
+        .unwrap();
+    let fetched: Value = serde_json::from_slice(&read_response(&mut client).await).unwrap();
+    assert_eq!(fetched["result"]["profile"]["label"], "Updated");
+    assert!(fetched["result"]["profile"].get("node_ref").is_none());
+
+    client
+        .write_all(&v2_request_frame(
+            "profile.delete",
+            "p-delete",
+            json!({"profile_id": "phone"}),
+        ))
+        .await
+        .unwrap();
+    let deleted: Value = serde_json::from_slice(&read_response(&mut client).await).unwrap();
+    assert_eq!(deleted["result"]["profile_id"], "phone");
 
     task.abort();
     let _ = std::fs::remove_file(&path);

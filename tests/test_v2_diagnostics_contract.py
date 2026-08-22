@@ -17,6 +17,15 @@ class V2DiagnosticsContractTests(unittest.TestCase):
         self.assertIn("tar -czf", source)
         self.assertIn("wloc-support-bundle.lock", source)
 
+    def test_raw_wloc_capture_is_opt_in_and_http_forwarding_has_no_dump(self):
+        init = (self.root / "openwrt/files/etc/init.d/wloc-service").read_text(encoding="utf-8")
+        proxy = (self.root / "src/mitm/proxy.rs").read_text(encoding="utf-8")
+        http1 = (self.root / "src/mitm/http1.rs").read_text(encoding="utf-8")
+        self.assertNotIn('"WLOC_DUMP_DIR=/tmp/wloc-dump"', init)
+        self.assertIn("WLOC_DEBUG_DUMP", proxy)
+        self.assertNotIn("/tmp/wloc-forward.dump", http1)
+        self.assertNotIn("wire_preview", http1)
+
     def test_support_bundle_is_installed_by_all_openwrt_package_paths(self):
         makefile = (self.root / "openwrt/Makefile").read_text(encoding="utf-8")
         standalone = (self.root / "scripts/build-luci-ipk.sh").read_text(encoding="utf-8")
@@ -38,15 +47,25 @@ class V2DiagnosticsContractTests(unittest.TestCase):
         self.assertNotIn("opkg remove", source)
         self.assertNotIn("nft ", source)
         builder = (self.root / "scripts/build-luci-ipk.sh").read_text(encoding="utf-8")
-        self.assertIn("X-WFC-Product: wificalling-location-gateway/v2", builder)
-        self.assertIn("X-WFC-Gateway: 1.7", builder)
-        self.assertIn("X-WFC-Wloc-Api: wloc.service/v2", builder)
+        self.assertIn("X-WLOC-Product: wificalling-location-gateway/v2", builder)
+        self.assertIn("X-WLOC-Api: wloc.service/v2", builder)
+        self.assertIn("X-WLOC-OpenWrt: 24.10+", builder)
         self.assertIn("create-update-manifest.sh", builder)
         for compatibility in (
             self.root / "openwrt/files/usr/share/wificalling-location-gateway/compatibility",
             self.root / "openwrt/luci-app-wificalling-location-gateway/files/usr/share/wificalling-location-gateway/compatibility",
         ):
-            self.assertIn("X-WFC-Product: wificalling-location-gateway/v2", compatibility.read_text(encoding="utf-8"))
+            self.assertIn("X-WLOC-Product: wificalling-location-gateway/v2", compatibility.read_text(encoding="utf-8"))
+            self.assertIn("X-WLOC-Target:", compatibility.read_text(encoding="utf-8"))
+
+    def test_package_install_clears_stale_transaction_status(self):
+        for relative in (
+            "scripts/build-luci-ipk.sh",
+            "scripts/openwrt/build-release-packages.sh",
+        ):
+            source = (self.root / relative).read_text(encoding="utf-8")
+            self.assertIn("update_state=/var/lib/wificalling-location-gateway/update", source)
+            self.assertIn("status.json", source)
 
     def test_component_update_is_installed_and_exposed_with_minimum_acl(self):
         makefile = (self.root / "openwrt/Makefile").read_text(encoding="utf-8")
@@ -67,11 +86,13 @@ class V2DiagnosticsContractTests(unittest.TestCase):
             self.assertIn("update_preflight", write_methods)
             self.assertIn("update_apply", write_methods)
             self.assertIn("update_recover", write_methods)
+            update = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-update.js").read_text(encoding="utf-8")
+            self.assertIn("update_preflight", update)
+            self.assertIn("update_apply", update)
+            self.assertIn("params: ['path']", update)
+            self.assertIn("call(path.value)", update)
             health = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js").read_text(encoding="utf-8")
-            self.assertIn("update_preflight", health)
-            self.assertIn("update_apply", health)
-            self.assertIn("params: [ 'path' ]", health)
-            self.assertIn("call(updatePath.value)", health)
+            self.assertNotIn("update_apply", health)
 
     def test_diagnostics_rpc_acl_and_ui_are_present_in_both_package_sources(self):
         for prefix in (
@@ -91,8 +112,17 @@ class V2DiagnosticsContractTests(unittest.TestCase):
             self.assertIn("support_bundle", write_methods)
             health = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js").read_text(encoding="utf-8")
             self.assertIn("Generate support bundle", health)
-            monitor = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wfc-monitor.js").read_text(encoding="utf-8")
-            self.assertIn("eventFields", monitor)
+            monitor = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-monitor.js").read_text(encoding="utf-8")
+            self.assertIn("parseEvents", monitor)
+
+    def test_integrated_health_projection_exposes_gateway_and_wloc(self):
+        health = (self.root / "openwrt/files/usr/sbin/wloc-health.sh").read_text(encoding="utf-8")
+        ui = (self.root / "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js").read_text(encoding="utf-8")
+        self.assertIn("wificalling-gateway.main.enabled", health)
+        self.assertIn('"gateway"', health)
+        self.assertIn("/var/run/wificalling-gateway/sing-box.json", health)
+        self.assertIn("services.gateway", ui)
+        self.assertIn("Gateway phase", ui)
 
     def test_support_bundle_shell_and_log_regression_scripts_pass(self):
         for name in (

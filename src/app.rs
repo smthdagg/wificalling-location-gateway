@@ -253,6 +253,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                 self.exit_evidence = ExitEvidence::Unavailable;
                 self.geo_resolution = GeoResolution::Unavailable;
                 self.last_probe_error = Some(error.to_string());
+                self.publish_patch_target();
             }
         }
     }

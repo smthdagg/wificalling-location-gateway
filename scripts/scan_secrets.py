@@ -37,6 +37,11 @@ def main() -> int:
     findings: list[str] = []
     for name in tracked_files():
         path = pathlib.Path(name)
+        # A worktree may intentionally remove a tracked legacy file before
+        # the change is staged. There is no local byte content to scan; Git's
+        # diff review remains the authority for the deletion itself.
+        if not path.exists():
+            continue
         try:
             data = path.read_bytes()
         except OSError as exc:

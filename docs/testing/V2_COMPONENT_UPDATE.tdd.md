@@ -31,8 +31,10 @@ interruption.
 ## Coverage and known gaps
 
 The shell transaction contract is deterministic and runs through the full
-repository gate. Real AX6S power-loss timing, opkg database recovery after a
-hard power cut, and an on-device flash-full fault still require Issue #40
-hardware evidence. The helper deliberately requires a known-good rollback IPK;
-first installation is outside the update transaction and must establish that
-baseline before upgrades are enabled.
+repository gate. AX6S real-device evidence now covers signed preflight, a
+successful 2.0.0-17 -> 2.0.0-18 update, and health-gate rollback from
+2.0.0-19 -> 2.0.0-18. The remaining hardware gaps are a hard power-cut during
+opkg, opkg database recovery after that cut, and an on-device flash-full fault.
+The helper deliberately requires a known-good rollback IPK; first installation
+is outside the update transaction and must establish that baseline before
+upgrades are enabled.

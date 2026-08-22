@@ -47,6 +47,7 @@ pub struct WlocUciConfig {
     pub probe_interval_secs: u64,
     pub geo_provider: String,
     pub probe_port: u16,
+    pub singbox_config: String,
     pub presets: Vec<Preset>,
     /// Explicit v2 device sections. An empty list means the legacy singleton
     /// fields above are still the source and can be migrated by `profile_model`.
@@ -65,6 +66,7 @@ impl Default for WlocUciConfig {
             probe_interval_secs: DEFAULT_PROBE_INTERVAL_SECS,
             geo_provider: "http".to_owned(),
             probe_port: DEFAULT_PROBE_PORT,
+            singbox_config: "/var/run/wloc-service/sing-box.json".to_owned(),
             presets: Vec::new(),
             profiles: Vec::new(),
         }
@@ -308,7 +310,6 @@ fn apply_option(
                 "node_mode" => {
                     builder.node_mode = match value {
                         "fixed" => super::profile::NodeSelectionMode::Fixed,
-                        "gateway_default" => super::profile::NodeSelectionMode::GatewayDefault,
                         _ => return Err(UciError::Profile("unknown node_mode".to_owned())),
                     }
                 }
@@ -345,6 +346,7 @@ fn apply_option(
             }
             "geo_provider" => config.geo_provider = value.to_owned(),
             "probe_port" => config.probe_port = u16::from_str(value).unwrap_or(DEFAULT_PROBE_PORT),
+            "singbox_config" => config.singbox_config = value.to_owned(),
             _ => {}
         },
         _ => {}

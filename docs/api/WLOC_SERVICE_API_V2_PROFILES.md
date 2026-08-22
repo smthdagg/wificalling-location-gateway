@@ -1,6 +1,6 @@
 # WLOC service v2 profile slice
 
-This document records the V2-01 profile-management slice. It is additive to
+This document records the V2-01/V2-02 profile-management slice. It is additive to
 the existing `wloc.service/v1` API; no v1 request is interpreted as a profile
 request.
 
@@ -11,9 +11,8 @@ contains:
 
 - a stable lower-case `id`;
 - a display `label`;
-- an assigned IPv4/IPv6 address or six-octet MAC address for explicit v2
-  device sections;
-- a node reference and `node_mode` (`fixed` or `gateway_default`);
+- an assigned private LAN IPv4 address for explicit v2 device sections;
+- a fixed node reference;
 - a WLOC source (`auto` or `manual`), optional manual coordinates, and an
   optional manual location reference;
 - an `enabled` flag.
@@ -45,16 +44,14 @@ duplicate IDs reject the UCI parse before any runtime operation.
 
 The current daemon consumes exactly one explicit profile. If more than one
 profile is configured before the unified multi-device runtime lands, it stays
-disabled rather than selecting a profile implicitly. Explicit addresses must
-be usable unicast LAN bindings: unspecified, loopback, multicast, broadcast,
-IPv4 link-local, IPv6 link-local, zero MAC, and multicast MAC values are
-rejected. MAC addresses are accepted in the profile schema for the future
-multi-device resolver, but the current single-runtime daemon accepts only IP
-bindings and stays disabled for a MAC-only profile. The legacy singleton
-projection may still have no address so an existing installation can continue
-its current Gateway-policy discovery path. Explicit IP bindings are limited to
-RFC1918 IPv4 or ULA IPv6 and the sing-box probe requires a matching Gateway
-device policy; it never falls back to an unrelated outbound for a profile.
+disabled rather than selecting a profile implicitly. Explicit bindings are
+private LAN IPv4 addresses only: unspecified, loopback, multicast, broadcast,
+and IPv4 link-local values are rejected. MAC and IPv6 bindings are rejected at
+model validation because the current OpenWrt TPROXY and source-device router
+are IPv4-scoped; they are not accepted and then silently left inactive. The
+legacy singleton projection may still have no address so an existing
+installation can continue its migration behavior. The sing-box probe requires
+a matching WLOC provider node; it never falls back to an unrelated outbound.
 
 A missing UCI file retains the v1 unconfigured-default behavior. An existing
 but malformed or oversized UCI file is fail-closed and cannot be re-enabled by
@@ -86,5 +83,17 @@ Profile status is redacted: it reports whether an assigned device or manual
 location is configured, but never returns the device address, node reference,
 coordinates, credentials, or private key material.
 
-Runtime dispatch, multi-device nftables routing, the unified procd supervisor,
-LuCI pages, and component updates are subsequent v2 issues.
+The production control-plane dispatcher routes these methods through a bounded
+UCI-backed adapter. It validates the candidate model before issuing separate
+`uci` arguments, commits once, and reverts staged changes on failure; it never
+interpolates a shell command or returns node credentials, device addresses, or
+coordinates. The active runtime still follows the unified supervisor boundary:
+LuCI's Apply action restarts that boundary after UCI changes, while direct
+`wloc-ctl` profile mutations take effect after the next unified-service restart.
+A server created through the legacy constructor returns an `unavailable` v2
+error for profile operations until an adapter is supplied.
+
+`wloc-ctl` exposes `profile-list`, `profile-get`, `profile-create`,
+`profile-update`, and `profile-delete`; the existing v1 commands and envelope
+remain unchanged. OpenWrt UCI writes, runtime redirect lifecycle, and unified
+supervisor wiring remain outside this control-plane slice.

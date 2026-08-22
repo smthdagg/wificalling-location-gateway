@@ -13,6 +13,28 @@
 
 var STATUS_FILE = '/var/run/wloc-service/status.json';
 var EVENTS_FILE = '/var/run/wloc-service/events.jsonl';
+var PROFILE_STATUS_ROOT = '/var/run/wloc-service/profiles/';
+var PROFILE_ID_RE = /^[a-z0-9_]{1,32}$/;
+
+function profileFile(profileId, filename) {
+	if (profileId === 'default') return filename === 'status.json' ? STATUS_FILE : EVENTS_FILE;
+	if (!PROFILE_ID_RE.test(profileId)) return null;
+	return PROFILE_STATUS_ROOT + profileId + '/' + filename;
+}
+
+function readProfileState(profileId) {
+	var statusPath = profileFile(profileId, 'status.json');
+	var eventsPath = profileFile(profileId, 'events.jsonl');
+	if (!statusPath || !eventsPath) return Promise.reject(new Error('invalid profile id'));
+	return Promise.all([
+		L.resolveDefault(fs.read(statusPath), '{}'),
+		L.resolveDefault(fs.read(eventsPath), '')
+	]).then(function(values) {
+		var parsed;
+		try { parsed = JSON.parse(values[0]); } catch (e) { parsed = {}; }
+		return { status: parsed, events: values[1] || '' };
+	});
+}
 
 // 手动刷新按钮的忙碌状态；轮询重渲染表格时据此保持按钮为“刷新中”。
 var refreshingIp = false;
@@ -20,7 +42,7 @@ var refreshingIp = false;
 var callCtl = rpc.declare({
 	object: 'luci.wloc',
 	method: 'ctl',
-	params: [ 'method', 'query', 'lat', 'lon' ]
+	params: [ 'method', 'query', 'lat', 'lon', 'profile_id' ]
 });
 
 function fmtTime(unix) {
@@ -56,7 +78,7 @@ return view.extend({
 		return Promise.all([
 			L.resolveDefault(fs.read(STATUS_FILE), '{}'),
 			L.resolveDefault(fs.read(EVENTS_FILE), ''),
-			uci.load('wificalling-gateway')
+			uci.load('wloc-service')
 		]);
 	},
 
@@ -66,9 +88,18 @@ return view.extend({
 		try { status = JSON.parse(data[0]); } catch (e) { status = {}; }
 		var eventsText = data[1] || '';
 		var geo = status.geo || {};
+		var selectedProfile = 'default';
+		var profiles = uci.sections('wloc-service', 'device');
 
 		/* ---------- 当前定位 ---------- */
 		var geoBody = E('tbody', {}, []);
+		var profileSelector = E('select', { 'class': 'cbi-input-select' });
+		profileSelector.appendChild(E('option', { value: 'default' }, wlocI18n.t('Default / legacy profile')));
+		profiles.forEach(function(profile) {
+			if (!PROFILE_ID_RE.test(profile['.name'])) return;
+			profileSelector.appendChild(E('option', { value: profile['.name'] },
+				(profile.label || profile['.name']) + ' (' + profile['.name'] + ')'));
+		});
 		// 手动刷新 IP：通知守护进程丢弃缓存的出口探测结果并立即重新
 		// 探测（切换设备节点后无需等待周期巡检），完成后重读状态文件。
 		function refreshIpBtn() {
@@ -81,11 +112,11 @@ return view.extend({
 					if (refreshingIp) return;
 					refreshingIp = true;
 					renderGeo(status);
-					callCtl('refresh', null, null, null).then(function() {
+					callCtl('refresh', null, null, null, selectedProfile).then(function() {
 						// The daemon re-probes and rewrites status.json
 						// before replying; read it once so the rows update
 						// immediately instead of on the next poll tick.
-						return L.resolveDefault(fs.read(STATUS_FILE), '{}');
+						return L.resolveDefault(fs.read(profileFile(selectedProfile, 'status.json')), '{}');
 					}).then(function(text) {
 						var fresh;
 						try { fresh = JSON.parse(text); } catch (e) { fresh = status; }
@@ -103,9 +134,9 @@ return view.extend({
 			var g = s.geo || {};
 			var deviceLabel = '-';
 			if (s.assigned_device) {
-				// source_ip is a DynamicList value (array) on the device policy.
-				var dev = uci.sections('wificalling-gateway', 'device').find(function(d) {
-					return (d.source_ip || []).indexOf(s.assigned_device) >= 0;
+				// assigned_device is the profile's canonical device address.
+				var dev = uci.sections('wloc-service', 'device').find(function(d) {
+					return d.assigned_device === s.assigned_device;
 				});
 				deviceLabel = (dev && dev.label ? dev.label : s.assigned_device) + ' (' + s.assigned_device + ')';
 			}
@@ -124,6 +155,19 @@ return view.extend({
 		}
 		function renderGeo(s) { dom.content(geoBody, geoRows(s)); }
 		renderGeo(status);
+		profileSelector.onchange = function() {
+			var next = this.value;
+			if (next !== 'default' && !PROFILE_ID_RE.test(next)) return;
+			selectedProfile = next;
+			readProfileState(selectedProfile).then(function(state) {
+				status = state.status;
+				eventsText = state.events;
+				renderGeo(status);
+				renderLog(eventsText);
+			}).catch(function(error) {
+				ui.addNotification(null, E('p', {}, wlocI18n.t('Profile state unavailable: ') + error.message), 'error');
+			});
+		};
 
 		/* ---------- 使用日志 ---------- */
 		var logBody = E('tbody', {}, []);
@@ -158,7 +202,7 @@ return view.extend({
 			ui.showModal(wlocI18n.t('Clear WLOC usage log?'), [E('p', {}, wlocI18n.t('This clears the local history of WLOC location events. Location interception settings are not affected.')),
 				E('div', { class: 'right' }, [E('button', { class: 'btn', click: ui.hideModal }, wlocI18n.t('Cancel')),
 				E('button', { class: 'btn cbi-button-negative', click: function() {
-					fs.write(EVENTS_FILE, '').then(function() {
+					fs.write(profileFile(selectedProfile, 'events.jsonl'), '').then(function() {
 						renderLog('');
 						ui.hideModal();
 						ui.addNotification(null, E('p', {}, wlocI18n.t('WLOC usage log cleared.')), 'info');
@@ -170,18 +214,20 @@ return view.extend({
 
 		/* ---------- 轮询刷新 ---------- */
 		poll.add(function() {
-			return L.resolveDefault(fs.read(STATUS_FILE), '{}').then(function(v) {
-				var s;
-				try { s = JSON.parse(v); } catch (e) { return; }
-				renderGeo(s);
+			return readProfileState(selectedProfile).then(function(state) {
+				status = state.status;
+				eventsText = state.events;
+				renderGeo(status);
+				renderLog(eventsText);
 			});
-		}, 5);
-		poll.add(function() {
-			return L.resolveDefault(fs.read(EVENTS_FILE), '').then(renderLog);
 		}, 5);
 
 		return E([], [
 			E('h2', {}, wlocI18n.t('WLOC Monitor & Log')),
+			E('div', { 'class': 'cbi-section' }, [
+				E('label', { 'class': 'cbi-value-title' }, wlocI18n.t('Device profile')), ' ', profileSelector,
+				E('p', { style: 'color:#666;font-size:12px' }, wlocI18n.t('Each profile has independent location state and bounded events.'))
+			]),
 			E('div', { 'class': 'cbi-section' }, [
 				E('h3', {}, wlocI18n.t('Current location')),
 				E('p', {}, wlocI18n.t('Shows the effective location target: auto follows the node exit, manual uses the coordinates from the settings page. GPS values stay on this router.')),

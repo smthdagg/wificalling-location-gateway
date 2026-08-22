@@ -2,16 +2,16 @@
 
 ## Packaging boundary
 
-The reference Wi-Fi Calling Gateway can publish one `all.ipk` and one
-`noarch.apk` because its payload is Lua, JavaScript, and shell. WLOC adds two
-Rust ELF executables, so the runtime package must name the real OpenWrt CPU
-architecture. Marking an AArch64 or x86-64 ELF as `all` is invalid and can
-install an unusable binary on another router.
+This is the integrated WiFi Calling Gateway + WLOC package. It does not depend
+on the separate Gateway 1.7 repository. Its payload includes Rust ELF executables, so
+the runtime package must name the real OpenWrt CPU architecture. Marking an
+AArch64 or x86-64 ELF as `all` is invalid and can install an unusable binary on
+another router.
 
-Release 1.0 contains one architecture-specific integrated package for each
-package-manager generation. It combines the verified Wi-Fi Calling Gateway
-1.7 payload, `wloc-service`, `wloc-ctl`, procd/UCI/network helpers, and the
-unified LuCI/rpcd UI. The Docker builder is deliberately limited to `x86_64`;
+The V2 release version is `2.0.0`. It uses one architecture-specific package
+for each package-manager generation. It contains `wloc-service`, `wloc-ctl`,
+Gateway/WLOC procd/UCI/network helpers, and the unified LuCI/rpcd UI. The
+Docker builder is deliberately limited to `x86_64`;
 it refuses an AArch64 label because these SDKs are x86-64 targets.
 
 OpenWrt 24.10 and iStoreOS 24.10 install IPK packages with `opkg`. OpenWrt
@@ -37,28 +37,31 @@ Then build the release packages:
 
 ```sh
 ./scripts/openwrt/build-release-packages.sh \
-  --version 1.0.0 \
+  --version 2.0.0 \
   --release 1 \
   --arch x86_64 \
   --service-bin /absolute/path/wloc-service \
   --ctl-bin /absolute/path/wloc-ctl \
-  --gateway-ipk /absolute/path/luci-app-wificalling-gateway_1.7.3-1_all.ipk \
-  --gateway-sha256 VERIFIED_SHA256 \
+  --ax6s-package /absolute/path/wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk \
   --out-dir /absolute/path/dist/openwrt-release
 ```
 
 The builder uses immutable official OpenWrt SDK containers for 24.10.8 and
 25.12.3. Product packaging runs with networking disabled and `--pull never`.
-Images therefore must be fetched explicitly once. The output includes one IPK,
-one native APK v3 package, and `SHA256SUMS`. The Gateway input is rejected
-unless its package identity is `luci-app-wificalling-gateway`, its version is
-1.7.x, its archive paths are safe, and its digest matches the explicit pin.
+Images therefore must be fetched explicitly once. The output includes the AX6S
+AArch64 IPK, the x86_64 24.x IPK, the native APK v3 package, per-IPK update
+manifests, and `SHA256SUMS`. The AX6S package is an architecture-correct
+integrated package produced by the AX6S builder; it is validated for identity,
+version, architecture, and integrated metadata before being included. The
+builder accepts no Gateway IPK input. Package preflight validates the router
+architecture, OpenWrt release family, package format, required kernel/module
+capabilities, and available space.
 
 ## Every release asset: four-environment Docker verification
 
 The matrix installs every release package. It uses:
 
-1. official OpenWrt 24.10.5 AArch64 rootfs with the AX6S/cortex-a53 IPK;
+1. official OpenWrt 24.10.5 AArch64 rootfs with the AX6S/cortex-a53 integrated IPK;
 2. OpenWrt 24.10.8 x86-64 with the 24.x IPK;
 3. OpenWrt 25.12.3 x86-64 with the native APK;
 4. iStoreOS 24.10.5 x86-64 with the same 24.x IPK.
@@ -67,7 +70,7 @@ Run:
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir /absolute/path/dist/v1.0.0
+  --dist-dir /absolute/path/dist/openwrt-release
 ```
 
 For each environment the verifier boots `/sbin/init`, waits for ubus, installs
@@ -75,20 +78,30 @@ the single integrated package, enables and restarts the procd service, checks th
 control socket, and requires a valid `wloc.service/v1` status response. The
 verifier first validates every package against the release `SHA256SUMS`, binding
 the Docker evidence to the exact files intended for upload. The
-rootfs images do not contain the full dependency feeds used by a router, so
-the isolated install test bypasses unresolved optional dependencies; it does
-not claim that sing-box, nftables interception, DNS behavior, Wi-Fi Calling,
-or an iPhone were exercised. Those remain AX6S/real-device gates. Release 1.0
-has these exact x86-64 assets:
+rootfs images do not contain the full dependency feeds used by a router. In
+the 25.12 case, the APK solver therefore falls back to extracting the exact
+verified payload after the dependency-free smoke install leaves it absent;
+this is recorded as `payload-extracted`, not as a production package-manager
+success. The isolated matrix also does not claim that sing-box, nftables
+interception, DNS behavior, Wi-Fi Calling, or an iPhone were exercised. Those
+remain AX6S/real-device gates. The V2 candidate has these target assets:
 
-- `wificalling-location-gateway_1.0.0-r1_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
-- `wificalling-location-gateway-1.0.0-r1.apk` for OpenWrt 25.x.
+- `wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk` for AX6S;
+- `wificalling-location-gateway_2.0.0-1_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
+- `wificalling-location-gateway-2.0.0-r1.apk` for OpenWrt 25.x.
 
-The formal 1.0 verification result was:
+The host-side release candidate, SHA-256 verification, and four-environment
+Docker lifecycle matrix passed on 2026-08-22. Each case installed or extracted
+the single integrated Gateway/WLOC payload, enabled/restarted the service,
+created the control socket, and returned a valid `wloc.service/v1` status:
 
 ```text
 Redmi AX6S / OpenWrt 24.10.5|OpenWrt 24.10.5 aarch64_generic|installed|started|socket-ok|status-ok
 OpenWrt 24.10.8|OpenWrt 24.10.8 x86_64|installed|started|socket-ok|status-ok
-OpenWrt 25.12.3|OpenWrt 25.12.3 x86_64|installed|started|socket-ok|status-ok
+OpenWrt 25.12.3|OpenWrt 25.12.3 x86_64|payload-extracted|started|socket-ok|status-ok
 iStoreOS 24.10.5|iStoreOS 24.10.5 x86_64|installed|started|socket-ok|status-ok
 ```
+
+This matrix does not claim sing-box, nftables interception, DNS behavior,
+Wi-Fi Calling, or real iPhone traffic. Those remain separate runtime/fixture
+coverage items.

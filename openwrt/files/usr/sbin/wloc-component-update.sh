@@ -1,5 +1,5 @@
 #!/bin/sh
-# Transactional updater for the unified Gateway/WLOC component.
+# Transactional updater for the integrated WiFi Calling Gateway + WLOC product.
 #
 # The package is validated before the first mutation. A known-good package and
 # configuration snapshot are retained until restart and health validation pass;
@@ -9,13 +9,23 @@ set -eu
 
 ROOT=${WLOC_UPDATE_ROOT:-/}
 STATE_DIR=${WLOC_UPDATE_STATE_DIR:-/var/lib/wificalling-location-gateway/update}
-OPKG=${WLOC_UPDATE_OPKG:-/usr/bin/opkg}
+OPKG=${WLOC_UPDATE_OPKG:-}
+if [ -z "$OPKG" ]; then
+	OPKG=$(command -v opkg 2>/dev/null || true)
+	[ -n "$OPKG" ] || OPKG=/usr/bin/opkg
+fi
 SUPERVISOR=${WLOC_UPDATE_SUPERVISOR:-/etc/init.d/wificalling-location-gateway}
 HEALTH=${WLOC_UPDATE_HEALTH:-/usr/sbin/wloc-health.sh}
+HEALTH_TIMEOUT=${WLOC_UPDATE_HEALTH_TIMEOUT:-30}
 STATUS=$STATE_DIR/status.json
 TXN=$STATE_DIR/transaction
 LOCK=$STATE_DIR/.lock
 WORK=
+case "$HEALTH_TIMEOUT" in
+	''|*[!0-9]*) HEALTH_TIMEOUT=30 ;;
+esac
+[ "$HEALTH_TIMEOUT" -ge 1 ] || HEALTH_TIMEOUT=1
+[ "$HEALTH_TIMEOUT" -le 120 ] || HEALTH_TIMEOUT=120
 
 die() {
 	printf '%s\n' "$1" >&2
@@ -49,6 +59,26 @@ cleanup_lock() {
 	cleanup_work
 	rm -f "$LOCK/pid"
 	rmdir "$LOCK" 2>/dev/null || true
+}
+
+health_check() {
+	health_report=$($HEALTH 2>/dev/null) || return 1
+	printf '%s\n' "$health_report" | grep -F '"wloc":{"running":1,"socket":1,"status_fresh":1' >/dev/null || return 1
+	case "$health_report" in
+		*'"gateway":{"enabled":1,"running":1,'*) ;;
+		*'"gateway":{"enabled":0,'*) ;;
+		*) return 1 ;;
+	esac
+	printf '%s\n' "$health_report" | grep -F '"provider":{"available":1,"valid":1,"config_present":1,"config_valid":1' >/dev/null || return 1
+	printf '%s\n' "$health_report" | grep -F '"redirect":{"table_present":1,"rules":1}' >/dev/null || return 1
+}
+
+wait_for_health() {
+	deadline=$(( $(now) + HEALTH_TIMEOUT ))
+	while ! health_check; do
+		[ "$(now)" -lt "$deadline" ] || return 1
+		sleep 1
+	done
 }
 
 trap 'cleanup_work' EXIT HUP INT TERM
@@ -104,7 +134,7 @@ verify_manifest() {
 	manifest_package_sha256=$(field Package-SHA256 "$manifest")
 	manifest_control_sha256=$(field Control-SHA256 "$manifest")
 	manifest_data_sha256=$(field Data-SHA256 "$manifest")
-	[ "$format" = 'wfc-update-manifest/v1' ] || die 'update manifest format is invalid'
+	[ "$format" = 'wloc-update-manifest/v1' ] || die 'update manifest format is invalid'
 	[ "$manifest_package" = "$(field Package "$work/control/control")" ] || die 'update manifest package mismatch'
 	[ "$manifest_version" = "$(field Version "$work/control/control")" ] || die 'update manifest version mismatch'
 	[ "$manifest_architecture" = "$(field Architecture "$work/control/control")" ] || die 'update manifest architecture mismatch'
@@ -166,27 +196,31 @@ package_info() {
 		|| die 'update package lacks control archive'
 	tar -tzf "$package" | awk '$0 == "./data.tar.gz" || $0 == "data.tar.gz" { found=1 } END { exit found ? 0 : 1 }' \
 		|| die 'update package lacks data archive'
-	mkdir -p "$work/control"
-	tar -xOf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
-		|| tar -xOf "$package" ./control.tar.gz > "$work/control.tar.gz"
+mkdir -p "$work/control"
+tar -xOzf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
+		|| tar -xOzf "$package" ./control.tar.gz > "$work/control.tar.gz"
 	archive_safe "$work/control.tar.gz" || die 'control archive is unsafe or corrupt'
 	tar -xzf "$work/control.tar.gz" -C "$work/control" ./control
 	control="$work/control/control"
 	name=$(field Package "$control")
 	version=$(field Version "$control")
 	architecture=$(field Architecture "$control")
-	product=$(field X-WFC-Product "$control")
-	gateway=$(field X-WFC-Gateway "$control")
-	api=$(field X-WFC-Wloc-Api "$control")
-	tar -xOf "$package" data.tar.gz > "$work/data.tar.gz" 2>/dev/null \
-		|| tar -xOf "$package" ./data.tar.gz > "$work/data.tar.gz"
+	product=$(field X-WLOC-Product "$control")
+	api=$(field X-WLOC-Api "$control")
+	openwrt=$(field X-WLOC-OpenWrt "$control")
+	target=$(field X-WLOC-Target "$control")
+	package_format=$(field X-WLOC-Package-Format "$control")
+	tar -xOzf "$package" data.tar.gz > "$work/data.tar.gz" 2>/dev/null \
+		|| tar -xOzf "$package" ./data.tar.gz > "$work/data.tar.gz"
 	archive_safe "$work/data.tar.gz" || die 'data archive is unsafe or corrupt'
 	verify_manifest "$package" "$work/control.tar.gz" "$work/data.tar.gz"
-	if [ -z "$product" ] || [ -z "$gateway" ] || [ -z "$api" ]; then
+	if [ -z "$product" ] || [ -z "$api" ] || [ -z "$openwrt" ] || [ -z "$package_format" ]; then
 		compatibility=$(tar -xOf "$work/data.tar.gz" ./usr/share/wificalling-location-gateway/compatibility 2>/dev/null || true)
-		[ -n "$product" ] || product=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WFC-Product:[[:space:]]*//p')
-		[ -n "$gateway" ] || gateway=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WFC-Gateway:[[:space:]]*//p')
-		[ -n "$api" ] || api=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WFC-Wloc-Api:[[:space:]]*//p')
+		[ -n "$product" ] || product=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-Product:[[:space:]]*//p')
+		[ -n "$api" ] || api=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-Api:[[:space:]]*//p')
+		[ -n "$openwrt" ] || openwrt=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-OpenWrt:[[:space:]]*//p')
+		[ -n "$target" ] || target=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-Target:[[:space:]]*//p')
+		[ -n "$package_format" ] || package_format=$(printf '%s\n' "$compatibility" | sed -n 's/^X-WLOC-Package-Format:[[:space:]]*//p')
 	fi
 	case "$name" in
 		wificalling-location-gateway|luci-app-wificalling-location-gateway) ;;
@@ -194,12 +228,27 @@ package_info() {
 	esac
 	validate_version "$version" || die 'update package version is invalid'
 	[ "$product" = 'wificalling-location-gateway/v2' ] || die 'update package compatibility metadata is missing'
-	[ "$gateway" = '1.7' ] || die 'update package requires an incompatible Gateway major version'
 	[ "$api" = 'wloc.service/v2' ] || die 'update package requires an incompatible WLOC API'
+	[ "$openwrt" = '24.10+' ] || die 'update package requires OpenWrt 24.10 or newer'
+	[ -n "$target" ] || die 'update package firmware target metadata is missing'
+	[ "$package_format" = 'ipk' ] || die 'update package format is not supported by the opkg updater'
+	[ -x "$OPKG" ] || die 'opkg is required for an IPK update on this firmware'
+	if [ -f "$ROOT/etc/openwrt_release" ]; then
+		firmware_release=$(sed -n "s/^DISTRIB_RELEASE='\([^']*\)'.*/\1/p" "$ROOT/etc/openwrt_release" | head -n 1)
+		firmware_target=$(sed -n "s/^DISTRIB_TARGET='\([^']*\)'.*/\1/p" "$ROOT/etc/openwrt_release" | head -n 1)
+		case "$firmware_release" in
+			24.*|25.*|26.*) ;;
+			'') die 'OpenWrt release could not be detected' ;;
+			*) die 'firmware release is older than the WLOC package contract' ;;
+		esac
+		[ -n "$firmware_target" ] || die 'firmware target could not be detected'
+		[ "$firmware_target" = "$target" ] || die 'update package firmware target is incompatible'
+	fi
 	if [ "$architecture" != all ]; then
 		expected=${WLOC_UPDATE_ARCHITECTURE:-}
 		if [ -z "$expected" ] && [ -x "$OPKG" ]; then
-			expected=$($OPKG print-architecture 2>/dev/null | awk '$2 != "all" { print $2; exit }')
+			expected=$($OPKG print-architecture 2>/dev/null \
+			| awk '$2 != "all" && $2 != "noarch" { print $2; exit }')
 		fi
 		[ -n "$expected" ] && [ "$architecture" = "$expected" ] || die 'update package architecture is incompatible'
 	fi
@@ -209,6 +258,24 @@ package_info() {
 		END { exit bad ? 1 : 0 }
 	' || die 'data archive contains an invalid path'
 	printf '%s\n' "$version"
+}
+
+rollback_package_is_integrated() {
+	package=$1
+	work_dir=$2
+	rollback_data="$work_dir/rollback-data.tar.gz"
+	tar -xOzf "$package" data.tar.gz > "$rollback_data" 2>/dev/null \
+		|| tar -xOzf "$package" ./data.tar.gz > "$rollback_data" 2>/dev/null \
+		|| return 1
+	archive_safe "$rollback_data" || return 1
+	for required in \
+		'etc/config/wificalling-gateway' \
+		'etc/init.d/wificalling-gateway' \
+		'etc/init.d/wificalling-location-gateway'; do
+		tar -tzf "$rollback_data" | awk -v required="$required" \
+			'$0 == required || $0 == "./" required { found=1 } END { exit found ? 0 : 1 }' \
+			|| return 1
+	done
 }
 
 restore_configs() {
@@ -236,7 +303,7 @@ rollback_transaction() {
 	restore_configs || rollback_ok=0
 	if [ "$rollback_ok" -eq 1 ]; then
 		"$SUPERVISOR" restart >/dev/null 2>&1 || rollback_ok=0
-		"$HEALTH" >/dev/null 2>&1 || rollback_ok=0
+		wait_for_health || rollback_ok=0
 	fi
 	if [ "$rollback_ok" -eq 1 ]; then
 		if [ -f "$TXN/rollback.ipk" ]; then
@@ -283,13 +350,13 @@ preflight() {
 }
 
 apply_update() {
-	package=$1
+	target_package=$1
 	acquire_lock
 	[ ! -e "$TXN" ] || die 'an interrupted update must be recovered before another update'
 	mkdir -m 0700 -p "$STATE_DIR/incoming"
 	WORK=$(mktemp -d "${TMPDIR:-/tmp}/wloc-update-check.XXXXXX")
-	version=$(package_info "$package" "$WORK")
-	bytes=$(wc -c < "$package" | tr -d ' ')
+	version=$(package_info "$target_package" "$WORK")
+	bytes=$(wc -c < "$target_package" | tr -d ' ')
 	available=$(free_kb)
 	case "$available" in ''|*[!0-9]*) die 'free-space check is unavailable' ;; esac
 	required=$(( (bytes / 1024) + 2048 ))
@@ -302,6 +369,8 @@ apply_update() {
 	fi
 	rollback_package=${WLOC_UPDATE_CURRENT_PACKAGE:-$STATE_DIR/current.ipk}
 	[ -f "$rollback_package" ] && [ ! -L "$rollback_package" ] || die 'known-good rollback package is required'
+	rollback_package_is_integrated "$rollback_package" "$WORK" \
+		|| die 'known-good rollback package is not an integrated Gateway/WLOC package'
 	mkdir -m 0700 -p "$TXN"
 	chmod 0700 "$TXN"
 	printf '%s\n' "$version" > "$TXN/target.version"
@@ -317,7 +386,7 @@ apply_update() {
 		fi
 	done
 	write_status applying validating "$version" "$current"
-	"$OPKG" install "$package" >/dev/null 2>&1 || {
+	"$OPKG" install "$target_package" >/dev/null 2>&1 || {
 		rollback_transaction package_install_failed
 		exit 1
 	}
@@ -334,11 +403,11 @@ apply_update() {
 		rollback_transaction restart_failed
 		exit 1
 	}
-	if ! "$HEALTH" >/dev/null 2>&1; then
+	if ! wait_for_health; then
 		rollback_transaction health_check_failed
 		exit 1
 	fi
-	if ! cp -p "$package" "$STATE_DIR/current.ipk" \
+	if ! cp -p "$target_package" "$STATE_DIR/current.ipk" \
 		|| ! chmod 0600 "$STATE_DIR/current.ipk" \
 		|| ! printf '%s\n' "$version" > "$STATE_DIR/current.version"; then
 		rollback_transaction state_commit_failed

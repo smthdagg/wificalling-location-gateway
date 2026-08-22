@@ -1,6 +1,7 @@
-# ADR: isolated OpenWrt traffic and IPv6 lifecycle
+# ADR: isolated OpenWrt traffic and IPv6 lifecycle (historical boundary)
 
-Status: proposed for independent network and security review. This ADR and its
+Status: historical Phase 0 boundary. The current standalone WLOC lifecycle is
+defined by ADR 0003; this ADR and its
 tests are offline design evidence only. They do not authorize or contain live
 `nft`, `dnsmasq`, `procd`, router, CA, MITM, or device operations.
 
@@ -173,4 +174,6 @@ repeat these cases in a namespace/QEMU environment before AX6S measurement.
 
 This ADR does not implement rules, edit configuration, require root, generate
 certificates, use production traffic, connect a device, or authorize live
-router mutation. Gateway 1.7 remains a read-only external dependency.
+router mutation. The WLOC service has no Gateway dependency. Any provider
+executable (system sing-box, sing-box tiny, or a PassWall-provided sing-box)
+is an explicitly configured capability and is never managed as another product.

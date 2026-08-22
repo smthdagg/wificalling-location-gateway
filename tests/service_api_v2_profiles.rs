@@ -1,6 +1,6 @@
 use wificalling_location_gateway::service::api::{
-    decode_v2_profile_request, encode_v2_result_response, ApiV2ErrorCode, ProfileApiMethod,
-    MAX_CONTROL_FRAME_BYTES, SERVICE_API_V2_ID,
+    decode_v2_profile_request, encode_v2_error_response, encode_v2_result_response, ApiV2ErrorCode,
+    ProfileApiMethod, MAX_CONTROL_FRAME_BYTES, SERVICE_API_V2_ID,
 };
 
 #[test]
@@ -106,4 +106,14 @@ fn v2_result_uses_the_v2_envelope_and_frame_limit() {
     assert_eq!(value["api_version"], SERVICE_API_V2_ID);
     assert_eq!(value["request_id"], "req-1");
     assert!(value.get("error").is_none());
+}
+
+#[test]
+fn v2_error_uses_the_v2_envelope_and_has_no_result() {
+    let encoded = encode_v2_error_response("req-2", ApiV2ErrorCode::InvalidParams).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(value["api_version"], SERVICE_API_V2_ID);
+    assert_eq!(value["request_id"], "req-2");
+    assert_eq!(value["error"]["code"], "invalid_params");
+    assert!(value.get("result").is_none());
 }

@@ -1,8 +1,10 @@
-# Standalone AX6S package — TDD evidence
+# AX6S standalone WLOC package builder — TDD evidence
 
 ## User journey
 
-As an AX6S administrator, I can install one architecture-specific IPK that restores both Wi-Fi Calling Gateway and WLOC without clearing either existing UCI configuration.
+As an AX6S administrator, I can install one architecture-specific WLOC IPK
+without installing or depending on a Wi-Fi Calling Gateway and without losing
+the existing WLOC configuration or CA.
 
 ## RED
 
@@ -16,32 +18,34 @@ As an AX6S administrator, I can install one architecture-specific IPK that resto
 - Command: `./tests/scripts/test-standalone-ax6s-package.sh`
 - Result: `standalone AX6S package tests passed`
 - Full command: `./scripts/ci/verify.sh`
-- Result: repository gates passed; 67 Python tests passed; Rust line coverage 80.32%; audit, deny, secret scan, release-size, shell and packaging gates passed.
+- Result: repository gates passed; 85 Python tests passed; Rust line coverage
+  80.40%; audit, deny, secret scan, release-size, shell and packaging gates passed.
 
 ## Guarantees
 
 | Guarantee | Evidence |
 |---|---|
-| The complete product package is named `wificalling-location-gateway`, matching the project instead of looking like a LuCI-only component | Filename and control package-name assertions |
+| The standalone WLOC package is named `wificalling-location-gateway`, matching the project instead of looking like a LuCI-only component | Filename and control package-name assertions |
 | The output identifies the AX6S runtime as `aarch64_cortex-a53`, not `all` | Package filename and control metadata assertions |
-| The integrated package has no dependency on separate Gateway or WLOC packages | Exact `Depends` and negative dependency assertions |
-| Gateway 1.7.x input has the expected identity and pinned SHA-256 | Identity/version and digest rejection tests |
-| Both UCI files survive reinstall/upgrade | Exact `conffiles` assertions for both paths |
-| Gateway init/config, WLOC init/config, service and control client are all present | Required payload member assertions |
-| A mismatched Gateway package digest stops the build | Negative SHA-256 test |
+| The package has no dependency on separate Gateway or WLOC packages | Exact `Depends` and negative dependency assertions |
+| The package has no Gateway IPK input or Gateway compatibility metadata | Builder contract and negative dependency assertions |
+| WLOC UCI and CA survive reinstall/upgrade | Exact `conffiles` and migration assertions |
+| WLOC init/config, service, control client, provider detector, and UI are present | Required payload member assertions |
+| A mismatched device architecture or firmware family stops preflight | Negative compatibility tests |
 
 ## Scope and gap
 
-The formal release artifact is
-`wificalling-location-gateway_1.0.0-1_aarch64_cortex-a53.ipk`. Its product
-binaries were rebuilt from the version 1.0.0 source with the pinned mt7622
-toolchain: `wloc-service` is a static AArch64 ELF of 1,904,800 bytes and
-`wloc-ctl` is a static AArch64 ELF of 462,792 bytes. The package SHA-256 is
-`7565a77ae36917ce1898134b6f1a7e7c7b50790335f1a39ff2f89745148f8f0f`
-and is also recorded in the release `SHA256SUMS`.
+The current V2 package target is
+`wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk`. The final
+architecture-correct AArch64 cross-build is 2,035,872 bytes for
+`wloc-service` and 462,792 bytes for `wloc-ctl`; both are static ELF artifacts.
+The release package SHA-256 is emitted in `SHA256SUMS`. A detached release
+signature still requires the protected release signing key and is intentionally
+not committed.
 
-The exact final asset was installed over the authorized ImmortalWrt 24.10.6
-AX6S. Both UCI hashes remained unchanged, both services ran, the restored
-Wi-Fi Calling settings rendered existing policies, and LuCI Manual → Auto →
-Manual completed without a socket error. “Standalone” means no separate
-Gateway or WLOC application package; normal OpenWrt facilities remain required.
+This document records package-construction evidence and links to the separate
+redacted AX6S installation/resource/rollback evidence. The real device was
+tested after removing the old WLOC package, while preserving the selected
+tiny/lite/PassWall provider. The exact release candidate package was then
+installed and verified on AX6S; its SHA-256 is recorded in the release
+directory's `SHA256SUMS`.

@@ -1,45 +1,31 @@
 #!/bin/sh
-# Service health report for the WLOC monitor page.
-#
-# Emits a single JSON document covering both services (wloc-service and
-# the Wi-Fi Calling Gateway incl. sing-box), the node health document, the
-# build patches, and the recent log lines. The LuCI "Service status" page
-# renders it via the luci.wloc rpcd `health` method.
-#
-# Every check is defensive: a missing file or binary reports warn/error
-# instead of failing the whole report.
+# Bounded integrated Gateway/WLOC health projection for LuCI and the update gate.
 
 set -eu
 
-json_escape() {
-	printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g'
-}
-
+json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/[[:cntrl:]]/ /g'; }
 now=$(date +%s)
-
-# File age in seconds (busybox-safe; -1 when unknown).
 file_age() {
-	local f="$1"
-	if [ -f "$f" ] && date -r "$f" +%s >/dev/null 2>&1; then
-		echo $((now - $(date -r "$f" +%s)))
+	file=$1
+	if [ -f "$file" ] && date -r "$file" +%s >/dev/null 2>&1; then
+		echo $((now - $(date -r "$file" +%s)))
 	else
 		echo -1
 	fi
 }
 
-# --- wloc-service ---------------------------------------------------------
 wloc_pid=$(pgrep -f '/usr/sbin/wloc-service' 2>/dev/null | head -n 1 || true)
 wloc_running=0; [ -n "$wloc_pid" ] && wloc_running=1
-wloc_socket=0; [ -S /var/run/wloc-service/control.sock ] && wloc_socket=1
-
-wloc_phase=unknown; wloc_exit=unknown; wloc_geo=unknown; wloc_error=null; wloc_status_fresh=0
-wloc_status=/var/run/wloc-service/status.json
+WLOC_SOCKET=${WLOC_HEALTH_SOCKET:-/var/run/wloc-service/control.sock}
+WLOC_STATUS=${WLOC_HEALTH_STATUS_FILE:-/var/run/wloc-service/status.json}
+wloc_socket=0; [ -S "$WLOC_SOCKET" ] && wloc_socket=1
+wloc_status=$WLOC_STATUS
+wloc_status_fresh=0; wloc_phase=unknown; wloc_exit=unknown; wloc_geo=unknown; wloc_error=null
 if [ -f "$wloc_status" ]; then
-	wloc_age=$(file_age "$wloc_status")
-	[ "$wloc_age" -ge 0 ] && [ "$wloc_age" -le 120 ] && wloc_status_fresh=1
+	age=$(file_age "$wloc_status")
+	[ "$age" -ge 0 ] && [ "$age" -le 120 ] && wloc_status_fresh=1
 	wloc_phase=$(sed -n 's/.*"service_phase"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$wloc_status" | head -n 1)
 	[ -n "$wloc_phase" ] || wloc_phase=unknown
-	# exit/geo blocks span multiple lines; pull each block and read its state.
 	wloc_exit=$(grep -A5 '"exit"' "$wloc_status" | sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
 	[ -n "$wloc_exit" ] || wloc_exit=unknown
 	wloc_geo=$(grep -A10 '"geo":' "$wloc_status" | sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
@@ -48,87 +34,83 @@ if [ -f "$wloc_status" ]; then
 	[ -n "$wloc_err" ] && wloc_error=$(json_escape "$wloc_err")
 fi
 
-# --- wificalling-gateway / sing-box ---------------------------------------
-monitor_pid=$(pgrep -f 'monitor-loop.sh' 2>/dev/null | head -n 1 || true)
-monitor_running=0; [ -n "$monitor_pid" ] && monitor_running=1
-sb_pid=$(pgrep -f '/usr/bin/sing-box run' 2>/dev/null | head -n 1 || true)
-sb_running=0; [ -n "$sb_pid" ] && sb_running=1
-
-rundir=/var/run/wificalling-gateway
-sb_config=0; sb_config_valid=0; sb_config_age=-1
-# True only when the UCI config changed AFTER the running proxy config was
-# generated - i.e. the admin edited nodes/devices but the gateway was not
-# restarted, so sing-box still runs the old config. A large config age by
-# itself is normal: the config is only regenerated on restart.
-sb_config_stale=0
-if [ -f "$rundir/sing-box.json" ]; then
-	sb_config=1
-	sb_config_age=$(file_age "$rundir/sing-box.json")
-	if [ -f /etc/config/wificalling-gateway ] \
-		&& [ /etc/config/wificalling-gateway -nt "$rundir/sing-box.json" ]; then
-		sb_config_stale=1
-	fi
-	if command -v sing-box >/dev/null 2>&1; then
-		if sing-box check -c "$rundir/sing-box.json" >/dev/null 2>&1; then
-			sb_config_valid=1
-		fi
-	fi
+UNIFIED_STATE=${WLOC_HEALTH_UNIFIED_STATE:-/var/run/wificalling-location-gateway/supervisor.json}
+gateway_enabled=0; gateway_running=0; gateway_phase=stopped; gateway_reason=not_enabled
+gateway_uci=$(uci -q get wificalling-gateway.main.enabled 2>/dev/null || true)
+case "$gateway_uci" in 1|true|on|yes) gateway_enabled=1 ;; esac
+if [ -f "$UNIFIED_STATE" ]; then
+	state_gateway=$(sed -n 's/.*"gateway"[[:space:]]*:[[:space:]]*\([01]\).*/\1/p' "$UNIFIED_STATE" | head -n 1)
+	case "$state_gateway" in 1) gateway_running=1 ;; esac
+	state_phase=$(sed -n 's/.*"phase"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$UNIFIED_STATE" | head -n 1)
+	state_reason=$(sed -n 's/.*"reason"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$UNIFIED_STATE" | head -n 1)
+	[ -n "$state_phase" ] && gateway_phase=$state_phase
+	[ -n "$state_reason" ] && gateway_reason=$(json_escape "$state_reason")
+elif [ "$gateway_enabled" -eq 1 ]; then
+	gateway_phase=unknown
+	gateway_reason=supervisor_state_missing
 fi
 
-norm_fresh=0; norm_age=-1
-if [ -f "$rundir/normalized.conf" ]; then
-	norm_age=$(file_age "$rundir/normalized.conf")
-	[ "$norm_age" -ge 0 ] && [ "$norm_age" -le 120 ] && norm_fresh=1
+HELPER=${WLOC_PROVIDER_HELPER:-/usr/libexec/wificalling-location-gateway/singbox-runtime.sh}
+provider_bin=$([ -x "$HELPER" ] && "$HELPER" path 2>/dev/null || true)
+provider_available=0; provider_valid=0
+[ -n "$provider_bin" ] && provider_available=1
+if [ -n "${WLOC_HEALTH_CONFIG_PATH:-}" ]; then
+	config_path=$WLOC_HEALTH_CONFIG_PATH
+elif [ "$gateway_enabled" -eq 1 ] && [ -f /var/run/wificalling-gateway/sing-box.json ]; then
+	config_path=/var/run/wificalling-gateway/sing-box.json
+else
+	config_path=$(uci -q get wloc-service.main.singbox_config 2>/dev/null || echo /var/run/wloc-service/sing-box.json)
 fi
+config_present=0; config_valid=0; config_age=-1
+if [ -f "$config_path" ]; then
+	config_present=1; config_age=$(file_age "$config_path")
+	[ -n "$provider_bin" ] && "$provider_bin" check -c "$config_path" >/dev/null 2>&1 && config_valid=1
+fi
+[ "$provider_available" -eq 1 ] && [ "$config_valid" -eq 1 ] && provider_valid=1
 
+nft_table_present=0
 nft_rules=0
-if command -v nft >/dev/null 2>&1; then
-	nft_rules=$(nft list ruleset 2>/dev/null | grep -c -E 'tproxy|redirect' || true)
+NFT_BINARY=${WLOC_HEALTH_NFT_BINARY:-$(command -v nft 2>/dev/null || true)}
+if [ -n "$NFT_BINARY" ]; then
+	# Single-device mode uses the legacy table. Multi-device mode deliberately
+	# removes it and creates one isolated table per active profile, so the health
+	# gate must recognize either ownership shape.
+	if "$NFT_BINARY" list table inet wloc_service >/dev/null 2>&1; then
+		nft_table_present=1
+		nft_rules=1
+	else
+		profile_tables=$("$NFT_BINARY" list tables inet 2>/dev/null || true)
+		while IFS= read -r profile_table; do
+			case "$profile_table" in
+				table\ inet\ wloc_profile_[a-z0-9_]* )
+					table=${profile_table#table inet }
+					[ "$table" != wloc_profile_ ] || continue
+					if table_dump=$("$NFT_BINARY" list table inet "$table" 2>/dev/null); then
+						nft_table_present=1
+						printf '%s\n' "$table_dump" | grep -E 'tproxy|meta mark set' >/dev/null 2>&1 && nft_rules=1
+					fi
+					;;
+			esac
+		done <<EOF
+$profile_tables
+EOF
+	fi
 fi
 
-devices=$(grep -c '^device|' "$rundir/normalized.conf" 2>/dev/null || true)
-[ -n "$devices" ] || devices=0
-
-# --- build patches --------------------------------------------------------
-patch_psk=0; patch_health=0; patch_compact=0; patch_device_guard=0
-[ -f /usr/libexec/wificalling-gateway/compiler.sh ] && {
-	grep -q 'pre_shared_key' /usr/libexec/wificalling-gateway/compiler.sh && patch_psk=1
-	grep -q 'device_guard_marker' /usr/libexec/wificalling-gateway/compiler.sh && patch_device_guard=1
-}
-[ -f /usr/libexec/wificalling-gateway/node-health.sh ] && {
-	grep -q 'wg_handshake_test' /usr/libexec/wificalling-gateway/node-health.sh && patch_health=1
-	grep -q 'compact_status_marker' /usr/libexec/wificalling-gateway/node-health.sh && patch_compact=1
-}
-
-# --- node health ----------------------------------------------------------
-nodes_total=0; nodes_ok=0; nodes_down=0; nodes_unknown=0
-node_status=/www/wloc-node-status.json
-if [ -f "$node_status" ]; then
-	nodes_total=$(grep -o '"id":"' "$node_status" | wc -l)
-	nodes_ok=$(grep -o '"state":"\(reachable\|tcp_reachable\|handshake_ok\)"' "$node_status" | wc -l)
-	nodes_down=$(grep -o '"state":"\(unreachable\|handshake_failed\)"' "$node_status" | wc -l)
-	nodes_unknown=$((nodes_total - nodes_ok - nodes_down))
-	[ "$nodes_unknown" -lt 0 ] && nodes_unknown=0
-fi
-
-# --- v2 profile projection ------------------------------------------------
-# Keep profile state separate from the aggregate process checks. The helper
-# returns only bounded, redacted fields; if it is absent the health document
-# remains valid for v1 packages.
 profiles='[]'
-if [ -x /usr/sbin/wloc-profile-status.sh ]; then
-	profile_json=$(/usr/sbin/wloc-profile-status.sh 2>/dev/null || true)
-	profiles=$(printf '%s\n' "$profile_json" \
-		| sed -n 's/^{"profiles":\(.*\)}$/\1/p')
+PROFILE_STATUS=${WLOC_HEALTH_PROFILE_STATUS:-/usr/sbin/wloc-profile-status.sh}
+if [ -x "$PROFILE_STATUS" ]; then
+	profile_json=$($PROFILE_STATUS 2>/dev/null || true)
+	profiles=$(printf '%s\n' "$profile_json" | sed -n 's/^{"profiles":\(.*\)}$/\1/p')
 	[ -n "$profiles" ] || profiles='[]'
 fi
 
 printf '{"generated_at":%s,' "$now"
 printf '"services":{"wloc":{"running":%s,"socket":%s,"status_fresh":%s,"phase":"%s","exit":"%s","geo":"%s","last_error":%s},' \
 	"$wloc_running" "$wloc_socket" "$wloc_status_fresh" "$wloc_phase" "$wloc_exit" "$wloc_geo" "$wloc_error"
-printf '"gateway":{"running":%s,"monitor":%s,"singbox":%s,"config_present":%s,"config_valid":%s,"config_age":%s,"config_stale":%s,"nft_rules":%s,"devices":%s,' \
-	"$monitor_running" "$monitor_running" "$sb_running" "$sb_config" "$sb_config_valid" "$sb_config_age" "$sb_config_stale" "$nft_rules" "$devices"
-printf '"patches":{"psk":%s,"handshake":%s,"compact":%s,"device_guard":%s}}},' \
-	"$patch_psk" "$patch_health" "$patch_compact" "$patch_device_guard"
-printf '"nodes":{"total":%s,"ok":%s,"down":%s,"unknown":%s},"profiles":%s}\n' \
-	"$nodes_total" "$nodes_ok" "$nodes_down" "$nodes_unknown" "$profiles"
+printf '"gateway":{"enabled":%s,"running":%s,"phase":"%s","reason":"%s"},' \
+	"$gateway_enabled" "$gateway_running" "$gateway_phase" "$gateway_reason"
+printf '"provider":{"available":%s,"valid":%s,"config_present":%s,"config_valid":%s,"config_age":%s},' \
+	"$provider_available" "$provider_valid" "$config_present" "$config_valid" "$config_age"
+printf '"redirect":{"table_present":%s,"rules":%s}},' "$nft_table_present" "$nft_rules"
+printf '"nodes":{"total":0,"ok":0,"down":0,"unknown":0},"profiles":%s}\n' "$profiles"

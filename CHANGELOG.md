@@ -2,6 +2,31 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [2.0.0] - 2026-08-22
+
+Standalone WLOC lifecycle and multi-device profile release candidate.
+
+### Added
+
+- Unified standalone WLOC supervisor, shared provider selection, profile-aware
+  LuCI settings/status/log/update management, bounded diagnostics, and
+  transactional update/recovery flows. The separate Wi-Fi Calling Gateway is
+  not a package, UCI, process, or runtime dependency.
+- Independent device profiles with fixed-node or follow-node selection,
+  auto/manual location mode, enablement, status, and redacted monitoring.
+
+### Fixed
+
+- AX6S redirect installation, UCI profile persistence, BusyBox tar/opkg update
+  compatibility, strict update health validation, and bounded startup waits.
+
+### Release status
+
+AX6S migration, reboot, update, rollback, resource, and final release-candidate
+installation evidence is recorded. Real iPhone WLOC traffic, hard power-loss/
+flash-full fault injection, and signed release-feed publication remain explicit
+gaps.
+
 ## [1.2.2] - 2026-08-19
 
 Manual-mode exit-probe fix, compiler endpoint filtering, and LuCI follow-device logic corrections.

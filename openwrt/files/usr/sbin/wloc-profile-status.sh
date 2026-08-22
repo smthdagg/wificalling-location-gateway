@@ -16,7 +16,7 @@ json_escape() {
 
 valid_profile_id() {
 	case "$1" in
-		''|*[!a-z0-9_-]*) return 1 ;;
+		''|*[!a-z0-9_]*) return 1 ;;
 	esac
 	[ "${#1}" -le 32 ]
 }
@@ -30,7 +30,7 @@ profile_phase() {
 	enabled=$2
 	assigned_device=$3
 	table="wloc_profile_${profile_id}"
-	[ "$profile_id" = default ] && table=wloc_service
+	[ "$profile_id" = default ] && [ "$legacy_singleton" -eq 1 ] && table=wloc_service
 	if [ "$enabled" != 1 ]; then
 		printf '%s' 'disabled|disabled'
 	elif [ -z "$assigned_device" ] && [ "$profile_id" != default ]; then
@@ -43,13 +43,22 @@ profile_phase() {
 }
 
 sections=$(uci -q show wloc-service 2>/dev/null \
-	| sed -n 's/^wloc-service\.\([a-z0-9_-]*\)=device$/\1/p' \
+	| sed -n 's/^wloc-service\.\([a-z0-9_]*\)=device$/\1/p' \
 	| head -n "$MAX_PROFILES" || true)
+legacy_singleton=0
+profile_count=$(printf '%s\n' "$sections" | sed '/^$/d' | wc -l | tr -d ' ')
+if [ "$profile_count" -eq 1 ] && [ "$sections" = default ]; then
+	# The daemon keeps the legacy redirect table for a singleton, even when
+	# LuCI has materialized that singleton as an explicit `device default` UCI
+	# section during migration.
+	legacy_singleton=1
+fi
 if [ -z "$sections" ]; then
 	# Keep the v1 singleton visible during migration without returning its
 	# address. It is not treated as a v2 device section by the parser.
 	if [ -n "$(uci_get wloc-service.main.enabled)" ]; then
 		sections=default
+		legacy_singleton=1
 	fi
 fi
 
@@ -57,7 +66,7 @@ printf '{"profiles":['
 first=1
 for profile_id in $sections; do
 	valid_profile_id "$profile_id" || continue
-	if [ "$profile_id" = default ]; then
+	if [ "$profile_id" = default ] && [ "$legacy_singleton" -eq 1 ]; then
 		prefix=wloc-service.main
 		label='Default device'
 	else

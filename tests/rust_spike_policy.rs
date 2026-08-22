@@ -29,7 +29,8 @@ fn pull_requests_run_the_real_pinned_openwrt_cross_build() {
 
     assert!(workflow.contains("openwrt-cross-build:"));
     assert!(workflow.contains("docker pull --platform linux/amd64"));
-    assert!(workflow.contains("rust:1.90.0-slim-bookworm@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9"));
+    assert!(workflow
+        .contains("rust@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9"));
     assert!(workflow.contains("./scripts/ci/verify-rust-openwrt.sh"));
 }
 

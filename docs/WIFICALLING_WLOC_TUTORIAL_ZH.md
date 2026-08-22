@@ -1,6 +1,8 @@
-# Wi‑Fi Calling & WLOC 完整使用教程
+# Wi‑Fi Calling + WLOC 一体化产品教程
 
-适用于集成 Wi‑Fi Calling Gateway 1.7 与路由器端 WLOC 服务的 OpenWrt / ImmortalWrt 网关。本教程严格按照插件内置 FAQ 的操作顺序编写：**先完整配置 Wi‑Fi Calling Gateway，再配置 WLOC**。
+本文适用于当前独立仓库产品：本项目包含并管理自己的 Wi‑Fi Calling
+Gateway 与 WLOC 模块，但不安装或依赖外部 Gateway 1.7 仓库。简明流程请
+同时参阅 [`docs/WLOC_TUTORIAL_EN.md`](WLOC_TUTORIAL_EN.md)。
 
 [English tutorial](WIFICALLING_WLOC_TUTORIAL_EN.md)
 

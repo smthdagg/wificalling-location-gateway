@@ -13,8 +13,13 @@ use std::time::Duration;
 use tokio::net::UnixListener;
 
 use crate::runtime::uds::FramedIo;
-use crate::service::api::{decode_request, encode_error_response, ApiRequest};
-use crate::service::dispatch::{dispatch, ServiceDispatch};
+use crate::service::api::{
+    decode_request, decode_v2_profile_request, encode_error_response, encode_v2_error_response,
+    ApiRequest, SERVICE_API_V2_ID,
+};
+use crate::service::dispatch::{
+    dispatch, dispatch_v2, DispatchError, ProfileDispatch, ServiceDispatch,
+};
 
 /// Maximum concurrent control connections permitted by the frozen API.
 pub const MAX_CONCURRENT_CONNECTIONS: usize = 2;
@@ -25,13 +30,57 @@ pub const MAX_CONCURRENT_CONNECTIONS: usize = 2;
 /// request/response pairs until the connection poisons or closes, then accept
 /// the next. This keeps the active connection count within the limit without
 /// extra synchronization.
-pub struct ControlServer<S: ServiceDispatch> {
+pub struct ControlServer<S: ServiceDispatch, P: ProfileDispatch = NoProfileDispatch> {
     handler: S,
+    profiles: P,
 }
 
-impl<S: ServiceDispatch> ControlServer<S> {
+/// Default v2 adapter used by the legacy constructor. It makes v2 available
+/// without changing v1 callers, but never invents profiles.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoProfileDispatch;
+
+impl ProfileDispatch for NoProfileDispatch {
+    fn list_profiles(&mut self) -> Result<serde_json::Value, DispatchError> {
+        Err(DispatchError::Unavailable)
+    }
+
+    fn get_profile(&mut self, _profile_id: &str) -> Result<serde_json::Value, DispatchError> {
+        Err(DispatchError::Unavailable)
+    }
+
+    fn create_profile(
+        &mut self,
+        _params: &crate::service::api::ProfileRequestParams,
+    ) -> Result<serde_json::Value, DispatchError> {
+        Err(DispatchError::Unavailable)
+    }
+
+    fn update_profile(
+        &mut self,
+        _profile_id: &str,
+        _params: &crate::service::api::ProfileRequestParams,
+    ) -> Result<serde_json::Value, DispatchError> {
+        Err(DispatchError::Unavailable)
+    }
+
+    fn delete_profile(&mut self, _profile_id: &str) -> Result<serde_json::Value, DispatchError> {
+        Err(DispatchError::Unavailable)
+    }
+}
+
+impl<S: ServiceDispatch> ControlServer<S, NoProfileDispatch> {
     pub const fn new(handler: S) -> Self {
-        Self { handler }
+        Self {
+            handler,
+            profiles: NoProfileDispatch,
+        }
+    }
+}
+
+impl<S: ServiceDispatch, P: ProfileDispatch> ControlServer<S, P> {
+    pub const fn with_profile_dispatch(handler: S, profiles: P) -> Self {
+        Self { handler, profiles }
     }
 
     /// Accept and serve connections until the listener is closed, while
@@ -61,9 +110,16 @@ impl<S: ServiceDispatch> ControlServer<S> {
                 Ok(frame) => frame,
                 Err(_) => break,
             };
-            let response = match decode_request(&request_frame) {
-                Ok(request) => dispatch(&request, &mut self.handler),
-                Err(code) => encode_error_response("", code),
+            let response = if is_v2_frame(&request_frame) {
+                match decode_v2_profile_request(&request_frame) {
+                    Ok(request) => dispatch_v2(&request, &mut self.profiles),
+                    Err(code) => encode_v2_error_response("", code),
+                }
+            } else {
+                match decode_request(&request_frame) {
+                    Ok(request) => dispatch(&request, &mut self.handler),
+                    Err(code) => encode_error_response("", code),
+                }
             };
             let response_bytes = match response {
                 Ok(bytes) => bytes,
@@ -74,6 +130,18 @@ impl<S: ServiceDispatch> ControlServer<S> {
             }
         }
     }
+}
+
+fn is_v2_frame(frame: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(frame)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("api_version")
+                .and_then(serde_json::Value::as_str)
+                .map(|version| version == SERVICE_API_V2_ID)
+        })
+        .unwrap_or(false)
 }
 
 /// Decode a single request frame for inspection without a running server.

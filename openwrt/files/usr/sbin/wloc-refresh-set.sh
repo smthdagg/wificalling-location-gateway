@@ -13,6 +13,7 @@ set -eu
 TABLE=wloc_service
 SET=apple_hosts
 NFT_BINARY=${WLOC_NFT_BINARY:-nft}
+UPSTREAM_IP_FILE=${WLOC_UPSTREAM_IP_FILE:-/var/run/wloc-service/apple-upstream-ip}
 
 HOSTS="gs-loc.apple.com gs-loc-cn.apple.com"
 
@@ -45,17 +46,33 @@ collect() {
     done
 }
 
-ips=$(collect | grep -v "^$ROUTER_IP$" | sort -u | tr '
-' ',' | sed 's/,\$$//')
+ips=$(collect | grep -v "^$ROUTER_IP$" | sort -u | tr '\n' ',' | sed 's/,$//')
 [ -n "$ips" ] || {
-    echo "wloc-refresh-set: no A records resolved (DNS unavailable?)" >&2
-    exit 1
+	rm -f "$UPSTREAM_IP_FILE"
+	echo "wloc-refresh-set: no A records resolved (DNS unavailable?)" >&2
+	exit 1
 }
+
+upstream_dir=${UPSTREAM_IP_FILE%/*}
+[ "$upstream_dir" = "$UPSTREAM_IP_FILE" ] || mkdir -p "$upstream_dir"
+printf '%s\n' "${ips%%,*}" > "$UPSTREAM_IP_FILE"
+chmod 0600 "$UPSTREAM_IP_FILE"
+
+# Elements expire when this component stops refreshing them. The rules remain
+# present but their destination set becomes empty, so a hard kill cannot leave
+# an indefinite interception path behind.
+timed_ips=
+old_ifs=$IFS
+IFS=,
+for ip in $ips; do
+	timed_ips="${timed_ips}${timed_ips:+, }${ip} timeout 30s"
+done
+IFS=$old_ifs
 
 multiple_profiles_configured() {
 	command -v uci >/dev/null 2>&1 || return 1
 	profiles=$(uci -q show wloc-service 2>/dev/null \
-		| sed -n 's/^wloc-service\.[a-z0-9_-]*=device$/x/p' \
+		| sed -n 's/^wloc-service\.[a-z0-9_]*=device$/x/p' \
 		| wc -l | tr -d ' ')
 	[ "${profiles:-0}" -gt 1 ] 2>/dev/null
 }
@@ -66,17 +83,17 @@ if multiple_profiles_configured; then
 	"$NFT_BINARY" delete table inet "$TABLE" 2>/dev/null || true
 elif "$NFT_BINARY" list table inet "$TABLE" >/dev/null 2>&1; then
 	"$NFT_BINARY" flush set inet "$TABLE" "$SET" 2>/dev/null || \
-		"$NFT_BINARY" add set inet "$TABLE" "$SET" '{ type ipv4_addr; }'
-	"$NFT_BINARY" add element inet "$TABLE" "$SET" "{ $ips }"
+		"$NFT_BINARY" add set inet "$TABLE" "$SET" '{ type ipv4_addr; flags timeout; timeout 30s; }'
+	"$NFT_BINARY" add element inet "$TABLE" "$SET" "{ $timed_ips }"
 fi
 
 # V2 profiles each have an isolated nft table and set. Refresh the same
 # approved Apple answers into every live profile table without touching the
-# stable Gateway namespace. Table names are validated before being reused as
+# unrelated nftables namespaces. Table names are validated before being reused as
 # nft arguments even though they originate from the local kernel listing.
 profile_tables=$(
     "$NFT_BINARY" list tables inet 2>/dev/null \
-        | sed -n 's/^table inet \(wloc_profile_[a-z0-9_-]*\)$/\1/p' \
+        | sed -n 's/^table inet \(wloc_profile_[a-z0-9_]*\)$/\1/p' \
 		|| true
 )
 profile_is_live() {
@@ -92,12 +109,8 @@ profile_is_live() {
 }
 while IFS= read -r profile_table; do
     [ -n "$profile_table" ] || continue
-    case "$profile_table" in
-        wloc_profile_*|*[!a-z0-9_-]*)
-            case "$profile_table" in
-                *[!a-z0-9_-]*) continue ;;
-            esac
-            ;;
+	case "$profile_table" in
+		wloc_profile_[a-z0-9_]*) ;;
 		*) continue ;;
 	esac
 	profile_id=${profile_table#wloc_profile_}
@@ -109,8 +122,8 @@ while IFS= read -r profile_table; do
 		continue
 	fi
 	"$NFT_BINARY" flush set inet "$profile_table" "$SET" 2>/dev/null || \
-        "$NFT_BINARY" add set inet "$profile_table" "$SET" '{ type ipv4_addr; }'
-    "$NFT_BINARY" add element inet "$profile_table" "$SET" "{ $ips }"
+		"$NFT_BINARY" add set inet "$profile_table" "$SET" '{ type ipv4_addr; flags timeout; timeout 30s; }'
+	"$NFT_BINARY" add element inet "$profile_table" "$SET" "{ $timed_ips }"
 done <<EOF
 $profile_tables
 EOF

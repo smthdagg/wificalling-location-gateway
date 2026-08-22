@@ -5,13 +5,12 @@ OPENWRT_24_SDK='ghcr.io/openwrt/sdk:x86_64-24.10.8@sha256:b28d5e4087dbd3f815a8bf
 OPENWRT_25_SDK='ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35bebb77b3f6d9523fd68873fab78a1bd19cc123cd0f'
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
-version=1.2.0
+version=2.0.0
 release=1
 arch=x86_64
 service_bin=
 ctl_bin=
-gateway_ipk=
-gateway_sha256=
+ax6s_package=
 out_dir="$repo_root/dist/openwrt-release"
 plan_only=0
 
@@ -25,13 +24,12 @@ usage() {
 Usage: build-release-packages.sh [--plan] [options]
 
 Options:
-  --version VERSION          Package version (default: 1.2.0)
+  --version VERSION          Package version (default: 2.0.0)
   --release RELEASE          Package release number (default: 1)
   --arch ARCH                OpenWrt runtime architecture (default: x86_64)
   --service-bin PATH         Static wloc-service binary (required)
   --ctl-bin PATH             Static wloc-ctl binary (required)
-  --gateway-ipk PATH         Pinned Wi-Fi Calling Gateway 1.7 IPK (required to build)
-  --gateway-sha256 SHA256    Expected Gateway IPK digest (required to build)
+  --ax6s-package PATH        Architecture-correct AX6S AArch64 IPK (required for a release build)
   --out-dir PATH             Output directory
   --plan                     Print the immutable build plan without Docker
 EOF
@@ -44,8 +42,7 @@ while [ "$#" -gt 0 ]; do
 		--arch) [ "$#" -ge 2 ] || fail 'missing --arch value'; arch=$2; shift 2 ;;
 		--service-bin) [ "$#" -ge 2 ] || fail 'missing --service-bin value'; service_bin=$2; shift 2 ;;
 		--ctl-bin) [ "$#" -ge 2 ] || fail 'missing --ctl-bin value'; ctl_bin=$2; shift 2 ;;
-		--gateway-ipk) [ "$#" -ge 2 ] || fail 'missing --gateway-ipk value'; gateway_ipk=$2; shift 2 ;;
-		--gateway-sha256) [ "$#" -ge 2 ] || fail 'missing --gateway-sha256 value'; gateway_sha256=$2; shift 2 ;;
+		--ax6s-package) [ "$#" -ge 2 ] || fail 'missing --ax6s-package value'; ax6s_package=$2; shift 2 ;;
 		--out-dir) [ "$#" -ge 2 ] || fail 'missing --out-dir value'; out_dir=$2; shift 2 ;;
 		--plan) plan_only=1; shift ;;
 		-h|--help) usage; exit 0 ;;
@@ -64,7 +61,6 @@ esac
 [ -n "$ctl_bin" ] || fail '--ctl-bin is required'
 [ -x "$service_bin" ] || fail "service binary is not executable: $service_bin"
 [ -x "$ctl_bin" ] || fail "control binary is not executable: $ctl_bin"
-
 cat <<EOF
 24.10 SDK: $OPENWRT_24_SDK
 25.12 SDK: $OPENWRT_25_SDK
@@ -81,57 +77,36 @@ case "${out_dir##*/}" in
 esac
 case "$out_dir" in /|"$repo_root") fail 'unsafe --out-dir' ;; esac
 [ ! -L "$out_dir" ] || fail '--out-dir must not be a symbolic link'
-[ -f "$gateway_ipk" ] || fail '--gateway-ipk must name an existing file'
-[ -n "$gateway_sha256" ] || fail '--gateway-sha256 is required'
-case "$gateway_sha256" in *[!0-9a-fA-F]*|'') fail 'invalid Gateway SHA-256' ;; esac
-[ "${#gateway_sha256}" -eq 64 ] || fail 'invalid Gateway SHA-256'
-actual_gateway_sha=$(shasum -a 256 "$gateway_ipk" | awk '{print $1}')
-[ "$actual_gateway_sha" = "$gateway_sha256" ] || fail 'Gateway IPK SHA-256 mismatch'
+if [ "$plan_only" -eq 0 ]; then
+	[ -n "$ax6s_package" ] || fail '--ax6s-package is required for a release build'
+	case "$ax6s_package" in /*) ;; *) fail '--ax6s-package must be absolute' ;; esac
+	[ -f "$ax6s_package" ] || fail "AX6S package is not a regular file: $ax6s_package"
+	[ ! -L "$ax6s_package" ] || fail 'AX6S package must not be a symbolic link'
+	[ -n "${WLOC_UPDATE_SIGNING_KEY:-}" ] || fail 'WLOC_UPDATE_SIGNING_KEY is required for a signed release build'
+	[ -f "$WLOC_UPDATE_SIGNING_KEY" ] || fail 'WLOC_UPDATE_SIGNING_KEY must point to a regular file'
+	update_usign=${WLOC_UPDATE_USIGN:-/usr/bin/usign}
+	[ -x "$update_usign" ] || fail "release signing usign is not executable: $update_usign"
+fi
 
 stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-openwrt-package.XXXXXX")
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
 package_dir="$stage/input/wificalling-location-gateway"
-mkdir -p "$package_dir/files" "$stage/gateway" "$stage/output"
+mkdir -p "$package_dir/files" "$stage/output"
 chmod 0777 "$stage/output"
 
-tar -xf "$gateway_ipk" -C "$stage/gateway"
-gateway_control=$(tar -xOf "$stage/gateway/control.tar.gz" ./control)
-printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null ||
-	fail 'Gateway IPK has an unexpected package identity'
-printf '%s\n' "$gateway_control" | grep -E '^Version: (1\.7|1\.2)\.[0-9]+-[0-9]+$' >/dev/null ||
-	fail 'Gateway IPK must be a validated 1.7.x or 1.2.x release'
-tar -tzf "$stage/gateway/data.tar.gz" | while IFS= read -r member; do
-	case "$member" in /*|../*|*/../*|*/..) fail 'Gateway IPK contains an unsafe path' ;; esac
-done
-tar -xzf "$stage/gateway/data.tar.gz" -C "$package_dir/files"
-
-# Gateway 1.2.x already includes WireGuard PSK, device-guard, node-status,
-# and health-check features; only apply compatibility patches for 1.7.x.
-gw_version=$(printf '%s\n' "$gateway_control" | sed -n 's/^Version: //p')
-case "$gw_version" in
-  1.7.*)
-    "$repo_root/scripts/openwrt/patch-wireguard-psk.sh" "$package_dir/files"
-    "$repo_root/scripts/openwrt/patch-wireguard-health.sh" "$package_dir/files"
-    "$repo_root/scripts/openwrt/patch-node-status-compact.sh" "$package_dir/files"
-    "$repo_root/scripts/openwrt/patch-gateway-device-guard.sh" "$package_dir/files"
-    ;;
-  1.2.*)
-    echo "build-release-packages: gateway $gw_version — skipping 1.7.x patches"
-    # The 1.2.x gateway IPK ships an OLDER gateway baseline (older
-    # compiler/init.d/monitor/node-health/config/LuCI). The project's
-    # openwrt/files/ carries the maintained 1.2.0 baseline (plus the
-    # memory-optimization compiler patch); overlay it wholesale so the
-    # integrated package never regresses to the older gateway files.
-    cp -R "$repo_root/openwrt/files/." "$package_dir/files/"
-    ;;
-  *)
-    fail "unexpected gateway version: $gw_version"
-    ;;
-esac
+# Assemble only from this repository. No external application UCI or package
+# is accepted as a build input.
+cp -R "$repo_root/openwrt/files/." "$package_dir/files/"
 
 # Overlay the integrated UI, then the architecture-specific WLOC runtime.
 cp -R "$repo_root/openwrt/luci-app-wificalling-location-gateway/files/." "$package_dir/files/"
-rm -f "$package_dir/files/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"
+cat > "$package_dir/files/usr/share/wificalling-location-gateway/compatibility" <<'EOF'
+X-WLOC-Product: wificalling-location-gateway/v2
+X-WLOC-Api: wloc.service/v2
+X-WLOC-OpenWrt: 24.10+
+X-WLOC-Target: x86/64
+X-WLOC-Package-Format: ipk
+EOF
 mkdir -p "$package_dir/files/usr/sbin" "$package_dir/files/etc/init.d" "$package_dir/files/etc/config"
 cp "$service_bin" "$package_dir/files/usr/sbin/wloc-service"
 cp "$ctl_bin" "$package_dir/files/usr/sbin/wloc-ctl"
@@ -140,6 +115,8 @@ cp "$repo_root/openwrt/files/etc/init.d/wificalling-location-gateway" "$package_
 mkdir -p "$package_dir/files/usr/libexec/wificalling-location-gateway"
 cp "$repo_root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \
 	"$package_dir/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
+cp "$repo_root/openwrt/files/usr/libexec/wificalling-location-gateway/singbox-runtime.sh" \
+	"$package_dir/files/usr/libexec/wificalling-location-gateway/singbox-runtime.sh"
 cp "$repo_root/openwrt/files/etc/config/wloc-service" "$package_dir/files/etc/config/wloc-service"
 for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh wloc-profile-redirect.sh wloc-profile-status.sh wloc-health.sh wloc-support-bundle.sh wloc-component-update.sh; do
 	cp "$repo_root/openwrt/files/usr/sbin/$helper" "$package_dir/files/usr/sbin/$helper"
@@ -158,17 +135,19 @@ include \$(INCLUDE_DIR)/package.mk
 define Package/wificalling-location-gateway
   SECTION:=net
   CATEGORY:=Network
-  TITLE:=Integrated Wi-Fi Calling and WLOC Location Gateway
-  PROVIDES:=wloc-service luci-app-wificalling-location-gateway luci-app-wificalling-gateway
+  TITLE:=WiFi Calling Gateway and WLOC unified service
+  DEPENDS:=+luci-base +rpcd-mod-rpcsys +nftables +firewall4 +kmod-nft-tproxy +kmod-nft-socket +ip-full
+  PROVIDES:=wloc-service wificalling-gateway luci-app-wificalling-location-gateway
 endef
 define Package/wificalling-location-gateway/description
-  Complete Wi-Fi Calling Gateway, WLOC service, control client, and unified LuCI UI.
+  Integrated WiFi Calling Gateway and WLOC service, control client, provider
+  adapter, shared lifecycle, and LuCI UI.
 endef
 define Build/Compile
 endef
 define Package/wificalling-location-gateway/conffiles
-/etc/config/wificalling-gateway
 /etc/config/wloc-service
+/etc/config/wificalling-gateway
 endef
 define Package/wificalling-location-gateway/install
 	\$(CP) ./files/. \$(1)/
@@ -176,13 +155,30 @@ endef
 define Package/wificalling-location-gateway/postinst
 #!/bin/sh
 [ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
-for required in /usr/bin/sing-box /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd; do
+# A direct package install is outside the transactional updater. Do not leave
+# an older transaction result visible as if it described this package.
+update_state=/var/lib/wificalling-location-gateway/update
+rm -f "\$\$update_state/status.json"
+opkg_bin=\$\$(command -v opkg 2>/dev/null || true)
+if [ -n "\$\$opkg_bin" ]; then
+  installed_version=\$\$("\$\$opkg_bin" status wificalling-location-gateway 2>/dev/null | sed -n 's/^Version:[[:space:]]*//p' | head -n 1)
+  recorded_version=\$\$(cat "\$\$update_state/current.version" 2>/dev/null || true)
+  if [ -n "\$\$installed_version" ] && [ "\$\$installed_version" != "\$\$recorded_version" ]; then
+    # A direct install may have replaced the package behind the updater's
+    # back. Never retain an older (possibly WLOC-only) rollback IPK.
+    rm -f "\$\$update_state/current.ipk" "\$\$update_state/current.version"
+  fi
+fi
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
+for required in /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd /usr/libexec/wificalling-location-gateway/singbox-runtime.sh; do
   [ -e "\$\$required" ] || echo "wificalling-location-gateway: prerequisite missing: \$\$required" >&2
 done
-/etc/init.d/wificalling-gateway disable >/dev/null 2>&1 || true
+if [ -x /usr/libexec/wificalling-location-gateway/singbox-runtime.sh ]; then
+  /usr/libexec/wificalling-location-gateway/singbox-runtime.sh path >/dev/null 2>&1 || echo "wificalling-location-gateway: install sing-box tiny/lite or a PassWall sing-box provider" >&2
+fi
 /etc/init.d/wloc-service disable >/dev/null 2>&1 || true
-mkdir -p /var/run/wificalling-gateway
-chmod 0700 /var/run/wificalling-gateway
+/etc/init.d/wificalling-gateway disable >/dev/null 2>&1 || true
 /etc/init.d/wificalling-location-gateway enable >/dev/null 2>&1 || true
 /etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1 || true
 rm -f /tmp/luci-indexcache.*
@@ -220,11 +216,70 @@ build_with_sdk openwrt-25.12 "$OPENWRT_25_SDK"
 mkdir -p "$out_dir"
 find "$out_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk' \
 	-o -name 'wificalling-location-gateway*.apk' -o -name 'SHA256SUMS' \
+	-o -name 'wificalling-location-gateway*.manifest' -o -name 'wificalling-location-gateway*.sig' \
 	-o -name 'docker-matrix-report.txt' \) -delete
 find "$stage/output" -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp {} "$out_dir/" \;
+cp "$ax6s_package" "$out_dir/"
+
+validate_ax6s_package() {
+	package=$1
+	tar -tzf "$package" >/dev/null 2>&1 || fail 'AX6S package is not a valid gzip IPK'
+	tar -tzf "$package" | awk '
+		/^\// || /(^|\/)\.\.($|\/)/ { bad=1 }
+		END { exit bad ? 1 : 0 }
+	' || fail 'AX6S package archive contains an unsafe path'
+	tar -tzf "$package" | awk '$0 == "./control.tar.gz" || $0 == "control.tar.gz" { found=1 } END { exit found ? 0 : 1 }' \
+		|| fail 'AX6S package lacks control archive'
+	tar -tzf "$package" | awk '$0 == "./data.tar.gz" || $0 == "data.tar.gz" { found=1 } END { exit found ? 0 : 1 }' \
+		|| fail 'AX6S package lacks data archive'
+	control_archive=$(mktemp "$stage/control.XXXXXX.tar.gz")
+	data_archive=$(mktemp "$stage/data.XXXXXX.tar.gz")
+	tar -xOzf "$package" control.tar.gz > "$control_archive" 2>/dev/null \
+		|| tar -xOzf "$package" ./control.tar.gz > "$control_archive"
+	tar -xOzf "$package" data.tar.gz > "$data_archive" 2>/dev/null \
+		|| tar -xOzf "$package" ./data.tar.gz > "$data_archive"
+	for archive in "$control_archive" "$data_archive"; do
+		tar -tzf "$archive" | awk '
+			/^\// || /(^|\/)\.\.($|\/)/ { bad=1 }
+			END { exit bad ? 1 : 0 }
+		' || fail 'AX6S package member archive contains an unsafe path'
+	done
+	control=$(tar -xOzf "$control_archive" ./control)
+	printf '%s\n' "$control" | grep -Fx 'Package: wificalling-location-gateway' >/dev/null \
+		|| fail 'AX6S package has the wrong package identity'
+	printf '%s\n' "$control" | grep -Fx "Version: ${version}-${release}" >/dev/null \
+		|| fail "AX6S package version must be ${version}-${release}"
+	printf '%s\n' "$control" | grep -Fx 'Architecture: aarch64_cortex-a53' >/dev/null \
+		|| fail 'AX6S package must target aarch64_cortex-a53'
+	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Product: wificalling-location-gateway/v2' >/dev/null \
+		|| fail 'AX6S package is missing integrated product metadata'
+	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Api: wloc.service/v2' >/dev/null \
+		|| fail 'AX6S package is missing WLOC API metadata'
+	printf '%s\n' "$control" | grep -Fx 'X-WLOC-OpenWrt: 24.10+' >/dev/null \
+		|| fail 'AX6S package is missing OpenWrt compatibility metadata'
+	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Target: mediatek/mt7622' >/dev/null \
+		|| fail 'AX6S package has the wrong firmware target metadata'
+	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Package-Format: ipk' >/dev/null \
+		|| fail 'AX6S package is missing package-format metadata'
+	printf '%s\n' "$control" | grep -F 'wificalling-gateway' >/dev/null \
+		|| fail 'AX6S package is missing integrated Gateway capability metadata'
+}
+
+validate_ax6s_package "$out_dir/$(basename "$ax6s_package")"
+
 count=$(find "$out_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk' \
 	-o -name 'wificalling-location-gateway*.apk' \) | wc -l | tr -d ' ')
-[ "$count" -eq 2 ] || fail "expected two integrated packages, found $count"
+[ "$count" -eq 3 ] || fail "expected three integrated packages, found $count"
+for package in "$out_dir"/wificalling-location-gateway*.ipk \
+	"$out_dir"/wificalling-location-gateway*.apk; do
+	[ -f "$package" ] || continue
+	"$repo_root/scripts/ci/verify-package-budget.sh" "$package"
+	case "$package" in
+		*.ipk) "$repo_root/scripts/create-update-manifest.sh" "$package" >/dev/null ;;
+		*.apk) : ;; # APK v3 is installed by apk; the IPK updater does not consume it.
+		*) fail "unexpected release package format: $package" ;;
+	esac
+done
 (cd "$out_dir" && shasum -a 256 wificalling-location-gateway*.ipk \
 	wificalling-location-gateway*.apk > SHA256SUMS)
 printf 'release packages: %s\n' "$out_dir"

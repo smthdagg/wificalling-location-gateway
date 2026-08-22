@@ -33,7 +33,7 @@ done
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo llvm-cov --workspace --all-targets --locked --fail-under-lines 80
-cargo build --locked --release --bin wloc-gateway-spike
+cargo build --locked --release --bins
 cargo audit --file Cargo.lock
 cargo deny check
 
@@ -51,6 +51,7 @@ if [ "$size_bytes" -gt "$limit_bytes" ]; then
 fi
 
 "$binary" >/dev/null
+./scripts/ci/verify-resource-budgets.sh
 
 if grep -R "unsafe[[:space:]]*{" src >/dev/null 2>&1; then
   echo "unsafe marker found in Rust spike scope" >&2

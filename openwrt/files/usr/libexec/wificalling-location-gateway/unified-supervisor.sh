@@ -1,11 +1,7 @@
 #!/bin/sh
-# Unified Gateway/WLOC lifecycle supervisor.
-#
-# This is intentionally a small, POSIX/busybox-compatible coordinator. The
-# stable Gateway 1.7 service remains available as a rollback facade, but only
-# this supervisor is enabled after migration. It owns ordering and cleanup;
-# the Gateway nftables table and UDP 500/4500 handling remain owned by the
-# stable Gateway init/helper and are never edited here.
+# Unified Wi-Fi Calling Gateway + WLOC lifecycle supervisor.
+# The two modules remain separately scoped internally, but this is their one
+# product lifecycle owner. The external Gateway 1.7 repository is not read.
 
 set -eu
 
@@ -16,43 +12,112 @@ PIDFILE=$RUNDIR/supervisor.pid
 LOCKDIR=$RUNDIR/.lock
 WLOC_INIT=${WLOC_INIT:-/etc/init.d/wloc-service}
 GATEWAY_INIT=${GATEWAY_INIT:-/etc/init.d/wificalling-gateway}
+GATEWAY_RUNDIR=${GATEWAY_RUNDIR:-/var/run/wificalling-gateway}
+GATEWAY_CONFIG=${GATEWAY_CONFIG:-$GATEWAY_RUNDIR/sing-box.json}
+GATEWAY_SINGBOX_PID=${GATEWAY_SINGBOX_PID:-$GATEWAY_RUNDIR/sing-box.pid}
+GATEWAY_MONITOR_PID=${GATEWAY_MONITOR_PID:-$GATEWAY_RUNDIR/monitor.pid}
 REDIRECT_HELPER=${WLOC_REDIRECT_HELPER:-/usr/sbin/wloc-redirect-sync.sh}
 PROFILE_REDIRECT_HELPER=${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.sh}
+WLOC_SOCKET=${WLOC_SOCKET:-/var/run/wloc-service/control.sock}
+WLOC_SERVICE_PIDFILE=${WLOC_SERVICE_PIDFILE:-/var/run/wloc-service/service.pid}
+WLOC_SERVICE_BIN=${WLOC_SERVICE_BIN:-/usr/sbin/wloc-service}
+WLOC_REFRESH_SET_HELPER=${WLOC_REFRESH_SET_HELPER:-/usr/sbin/wloc-refresh-set.sh}
+UPSTREAM_IP_FILE=${WLOC_UPSTREAM_IP_FILE:-/var/run/wloc-service/apple-upstream-ip}
+PROVIDER_HELPER=${WLOC_PROVIDER_HELPER:-/usr/libexec/wificalling-location-gateway/singbox-runtime.sh}
 PROFILE_PROXY_READY_FILE=${WLOC_PROFILE_PROXY_READY_FILE:-/var/run/wloc-service/profiles/.proxy-ready}
 PROFILE_ACTIVATE_FILE=${WLOC_PROFILE_ACTIVATE_FILE:-/var/run/wloc-service/profiles/.activate}
 PROFILE_READY_FILE=${WLOC_PROFILE_READY_FILE:-/var/run/wloc-service/profiles/.ready}
 CHECK_INTERVAL=${WLOC_SUPERVISOR_HEALTH_INTERVAL:-10}
-MAX_RUNTIME_SECONDS=${WLOC_SUPERVISOR_MAX_RUNTIME:-0}
 START_TIMEOUT=${WLOC_SUPERVISOR_START_TIMEOUT:-30}
 case "$CHECK_INTERVAL" in ''|*[!0-9]*) CHECK_INTERVAL=10;; esac
 [ "$CHECK_INTERVAL" -ge 1 ] || CHECK_INTERVAL=1
 [ "$CHECK_INTERVAL" -le 60 ] || CHECK_INTERVAL=60
-case "$MAX_RUNTIME_SECONDS" in ''|*[!0-9]*) MAX_RUNTIME_SECONDS=0;; esac
 case "$START_TIMEOUT" in ''|*[!0-9]*) START_TIMEOUT=30;; esac
 [ "$START_TIMEOUT" -ge 1 ] || START_TIMEOUT=1
 [ "$START_TIMEOUT" -le 120 ] || START_TIMEOUT=120
-gateway_running=0
 wloc_running=0
+gateway_running=0
+provider_available=0
 redirect_present=0
 
 now() { date +%s; }
-
-json_escape() {
-	printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/[[:cntrl:]]/ /g'
-}
+json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/[[:cntrl:]]/ /g'; }
 
 write_state() {
 	phase=$1; reason=$2
-	updated=$(now)
-	printf '{"version":1,"phase":"%s","reason":"%s","gateway":%s,"wloc":%s,"redirect":%s,"updated_at":%s}\n' \
-		"$(json_escape "$phase")" "$(json_escape "$reason")" \
-		"$gateway_running" "$wloc_running" "$redirect_present" "$updated" > "$STATE"
+	printf '{"version":3,"phase":"%s","reason":"%s","gateway":%s,"wloc":%s,"provider":%s,"redirect":%s,"updated_at":%s}\n' \
+		"$(json_escape "$phase")" "$(json_escape "$reason")" "$gateway_running" "$wloc_running" "$provider_available" "$redirect_present" "$(now)" > "$STATE"
 	chmod 0600 "$STATE"
 }
 
-pid_alive() {
-	pid=$1
-	[ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+pid_alive() { [ -n "$1" ] && kill -0 "$1" 2>/dev/null; }
+
+provider_config_path() {
+	config=${WLOC_SINGBOX_CONFIG:-}
+	[ -n "$config" ] || config=$(uci -q get wloc-service.main.singbox_config 2>/dev/null || true)
+	[ -n "$config" ] || config=/var/run/wloc-service/sing-box.json
+	printf '%s\n' "$config"
+}
+
+provider_health() {
+	[ -x "$PROVIDER_HELPER" ] || return 1
+	"$PROVIDER_HELPER" path >/dev/null 2>&1 || return 1
+	config=$(provider_config_path)
+	[ -f "$config" ] || return 1
+	"$PROVIDER_HELPER" check -c "$config" >/dev/null 2>&1
+}
+
+gateway_enabled() {
+	command -v uci >/dev/null 2>&1 || return 1
+	enabled=$(uci -q get wificalling-gateway.main.enabled 2>/dev/null || true)
+	case "$enabled" in 1|true|on|yes) return 0 ;; *) return 1 ;; esac
+}
+
+wloc_enabled() {
+	command -v uci >/dev/null 2>&1 || return 0
+	enabled=$(uci -q get wloc-service.main.enabled 2>/dev/null || true)
+	case "$enabled" in 0|false|off|no) return 1 ;; *) return 0 ;; esac
+}
+
+product_enabled() { gateway_enabled || wloc_enabled; }
+
+gateway_pid_matches() {
+	pidfile=$1
+	command=$2
+	[ -s "$pidfile" ] || return 1
+	pid=$(sed -n '1p' "$pidfile")
+	case "$pid" in ''|*[!0-9]*) return 1;; esac
+	pid_alive "$pid" || return 1
+	[ -r "/proc/$pid/cmdline" ] || return 1
+	cmdline=$(tr '\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
+	case "$command" in
+		*.sh)
+			case " $cmdline " in *" $command "*) return 0 ;; *) return 1 ;; esac
+			;;
+		*)
+			first_arg=$(printf '%s' "$cmdline" | awk '{print $1}')
+			[ "$first_arg" = "$command" ]
+			;;
+	esac
+}
+
+gateway_health() {
+	gateway_enabled || return 0
+	[ -f "$GATEWAY_CONFIG" ] || return 1
+	command -v sing-box >/dev/null 2>&1 || return 1
+	sing-box check -c "$GATEWAY_CONFIG" >/dev/null 2>&1 || return 1
+	gateway_pid_matches "$GATEWAY_SINGBOX_PID" /usr/bin/sing-box || return 1
+	gateway_pid_matches "$GATEWAY_MONITOR_PID" /usr/libexec/wificalling-gateway/monitor-loop.sh
+}
+
+start_gateway() {
+	[ -x "$GATEWAY_INIT" ] || return 1
+	WLOC_SUPERVISED=1 "$GATEWAY_INIT" start >/dev/null 2>&1
+}
+
+stop_gateway() {
+	[ -x "$GATEWAY_INIT" ] && WLOC_SUPERVISED=1 "$GATEWAY_INIT" stop >/dev/null 2>&1 || true
+	rm -f "$GATEWAY_SINGBOX_PID" "$GATEWAY_MONITOR_PID"
 }
 
 read_pid() {
@@ -62,107 +127,71 @@ read_pid() {
 	pid_alive "$pid"
 }
 
-stop_child() {
-	init=$1
-	[ -x "$init" ] || return 0
-	"$init" stop >/dev/null 2>&1 || true
-}
+stop_wloc() { [ -x "$WLOC_INIT" ] && "$WLOC_INIT" stop >/dev/null 2>&1 || true; }
 
 withdraw_redirect() {
 	redirect_present=0
 	[ -x "$REDIRECT_HELPER" ] && "$REDIRECT_HELPER" stop >/dev/null 2>&1 || true
-}
-
-withdraw_profile_redirects() {
-	[ -x "$PROFILE_REDIRECT_HELPER" ] && \
-		"$PROFILE_REDIRECT_HELPER" stop-all >/dev/null 2>&1 || true
+	[ -x "$PROFILE_REDIRECT_HELPER" ] && "$PROFILE_REDIRECT_HELPER" stop-all >/dev/null 2>&1 || true
 	rm -f "$PROFILE_PROXY_READY_FILE" "$PROFILE_ACTIVATE_FILE" "$PROFILE_READY_FILE"
 }
 
-profile_mode() {
-	case "${WLOC_PROFILE_MODE:-auto}" in
-		1|yes|profile) return 0 ;;
-		0|no|legacy) return 1 ;;
-	esac
+main_service_enabled() {
+	product_enabled
+}
+
+multi_profile_mode() {
 	command -v uci >/dev/null 2>&1 || return 1
-	profiles=$(uci -q show wloc-service 2>/dev/null \
-		| sed -n 's/^wloc-service\.[a-z0-9_-]*=device$/x/p' \
-		| wc -l | tr -d ' ')
+	profiles=$(uci -q show wloc-service 2>/dev/null | sed -n 's/^wloc-service\.[a-z0-9_]*=device$/x/p' | wc -l | tr -d ' ')
 	[ "${profiles:-0}" -gt 1 ] 2>/dev/null
 }
 
 install_redirect() {
-	if profile_mode; then
-		# In multi-profile mode wloc-service owns one verified redirect per
-		# profile. Installing the legacy all-device table here would bypass
-		# ProfilePatchRouter's disabled/fail-closed boundary. The shared
-		# policy route is still required by every profile-scoped TPROXY chain.
-		"$REDIRECT_HELPER" legacy-stop
+	if multi_profile_mode; then
+		[ -x "$REDIRECT_HELPER" ] && "$REDIRECT_HELPER" legacy-stop >/dev/null 2>&1 || true
 		[ -x "$PROFILE_REDIRECT_HELPER" ] || return 1
 		"$PROFILE_REDIRECT_HELPER" route-start
+		[ ! -x "$WLOC_REFRESH_SET_HELPER" ] || "$WLOC_REFRESH_SET_HELPER" >/dev/null 2>&1 || return 1
 		: > "$PROFILE_ACTIVATE_FILE"
 		deadline=$(( $(now) + START_TIMEOUT ))
 		while [ ! -f "$PROFILE_READY_FILE" ]; do
 			[ "$(now)" -lt "$deadline" ] || return 1
 			sleep 1
 		done
-		redirect_present=1
-		return 0
-	fi
-	"$REDIRECT_HELPER" start
-}
-
-cleanup_runtime() {
-	reason=$1
-	keep_gateway=${2:-1}
-	state_phase=${3:-degraded_passthrough}
-	withdraw_redirect
-	withdraw_profile_redirects
-	stop_child "$WLOC_INIT"
-	wloc_running=0
-	if [ "$keep_gateway" -eq 1 ]; then
-		# The stable Gateway is deliberately never stopped here. WLOC failure
-		# is fail-open, and explicit stop/reload only withdraws WLOC-owned
-		# rules; the stable Gateway table remains under its original owner.
-		gateway_running=1
-		write_state "$state_phase" "$reason"
 	else
-		gateway_running=0
-		write_state "$state_phase" "$reason"
+		"$REDIRECT_HELPER" start
+		[ ! -x "$WLOC_REFRESH_SET_HELPER" ] || "$WLOC_REFRESH_SET_HELPER" >/dev/null 2>&1 || return 1
 	fi
-	rm -f "$PIDFILE"
+	redirect_present=1
 }
 
-stop_supervisor() {
-	if read_pid; then
-		pid=$(sed -n '1p' "$PIDFILE")
-		[ "$$" = "$pid" ] || kill -TERM "$pid" 2>/dev/null || true
-		# The procd-owned process receives SIGTERM as well; cleanup is also
-		# idempotent here for direct upgrade/rollback invocations.
-	fi
-	cleanup_runtime requested_stop 1 stopped
-	rmdir "$LOCKDIR" 2>/dev/null || true
+service_pid_matches() {
+	[ -s "$WLOC_SERVICE_PIDFILE" ] || return 1
+	service_pid=$(sed -n '1p' "$WLOC_SERVICE_PIDFILE")
+	case "$service_pid" in ''|*[!0-9]*) return 1;; esac
+	pid_alive "$service_pid" || return 1
+	[ -r "/proc/$service_pid/cmdline" ] || return 1
+	service_command=$(tr '\000' '\n' < "/proc/$service_pid/cmdline" 2>/dev/null | sed -n '1p')
+	[ "$service_command" = "$WLOC_SERVICE_BIN" ]
 }
 
 health_ok() {
-	# The supervisor only considers a child healthy when its init action
-	# succeeded, the process is observable, and WLOC's root-only socket exists.
-	# No network probe or unbounded command output is used in this loop.
-	if command -v pgrep >/dev/null 2>&1; then
-		pgrep -f '/usr/bin/sing-box run' >/dev/null 2>&1 || return 1
-		pgrep -f '/usr/sbin/wloc-service' >/dev/null 2>&1 || return 1
+	if gateway_enabled; then
+		gateway_health || return 1
+	fi
+	if wloc_enabled; then
+		service_pid_matches || return 1
+		[ -S "$WLOC_SOCKET" ] || return 1
+		if provider_health; then
+			provider_available=1
+		else
+			provider_available=0
+			return 1
+		fi
+		if multi_profile_mode; then [ -f "$PROFILE_PROXY_READY_FILE" ] || return 1; fi
 	else
-		return 1
+		provider_available=0
 	fi
-	[ -S "${WLOC_SOCKET:-/var/run/wloc-service/control.sock}" ] || return 1
-	if profile_mode; then
-		[ -f "$PROFILE_PROXY_READY_FILE" ] || return 1
-	fi
-}
-
-gateway_healthy() {
-	command -v pgrep >/dev/null 2>&1 || return 1
-	pgrep -f '/usr/bin/sing-box run' >/dev/null 2>&1
 }
 
 wait_for_health() {
@@ -173,89 +202,120 @@ wait_for_health() {
 	done
 }
 
-start_supervisor() {
-	mkdir -p "$RUNDIR"
-	chmod 0700 "$RUNDIR"
-	if read_pid; then
-		return 0
-	fi
-	rmdir "$LOCKDIR" 2>/dev/null || true
-	if ! mkdir "$LOCKDIR" 2>/dev/null; then
-		return 0
-	fi
-	trap 'cleanup_runtime signal 1 stopped; rmdir "$LOCKDIR" 2>/dev/null || true; exit 0' TERM INT
-	echo "$$" > "$PIDFILE"
-	chmod 0600 "$PIDFILE"
-	gateway_running=0
+cleanup_runtime() {
+	reason=$1
+	withdraw_redirect
+	# Cleanup is also called by a fresh `stop` invocation, whose in-memory
+	# flags are zero even though the long-running supervisor owns children.
+	# Always ask both child init scripts to stop so stale Gateway/WLOC processes
+	# cannot survive a service stop or a failed startup.
+	stop_wloc
+	stop_gateway
+	rm -f "$WLOC_SERVICE_PIDFILE" "$WLOC_SOCKET" "$PIDFILE"
 	wloc_running=0
-	redirect_present=0
+	gateway_running=0
+	write_state degraded_passthrough "$reason"
+}
+
+stop_supervisor() {
+	# `stop` is launched as a new shell by procd. Signal the existing long-lived
+	# supervisor first; otherwise cleanup would update the state file while the
+	# original process continued to run and later restart its child services.
+	existing_pid=
+	if [ -s "$PIDFILE" ]; then
+		existing_pid=$(sed -n '1p' "$PIDFILE")
+	fi
+	case "$existing_pid" in
+		''|*[!0-9]*|"$$") ;;
+		*)
+			if pid_alive "$existing_pid"; then
+				kill -TERM "$existing_pid" 2>/dev/null || true
+				deadline=$(( $(now) + 10 ))
+				while pid_alive "$existing_pid" && [ "$(now)" -lt "$deadline" ]; do sleep 1; done
+			fi
+			;;
+	esac
+	cleanup_runtime requested_stop
+	rmdir "$LOCKDIR" 2>/dev/null || true
+}
+
+start_supervisor() {
+	mkdir -p "$RUNDIR"; chmod 0700 "$RUNDIR"
+	if read_pid; then return 0; fi
+	rmdir "$LOCKDIR" 2>/dev/null || true
+	mkdir "$LOCKDIR" 2>/dev/null || return 0
+	trap 'cleanup_runtime signal; rmdir "$LOCKDIR" 2>/dev/null || true; exit 0' TERM INT
+	echo "$$" > "$PIDFILE"; chmod 0600 "$PIDFILE"
+	wloc_running=0; gateway_running=0; provider_available=0; redirect_present=0
 	write_state starting passthrough
-
-	# Legacy children are used only as a one-release adapter. Disable their
-	# independent boot ownership before invoking them under this boundary.
-	[ -x "$WLOC_INIT" ] && "$WLOC_INIT" disable >/dev/null 2>&1 || true
+	if ! main_service_enabled; then
+		cleanup_runtime disabled_by_configuration
+		rmdir "$LOCKDIR" 2>/dev/null || true
+		exit 0
+	fi
+	# The child init scripts are disabled so only this supervisor owns their
+	# boot/restart lifecycle. Existing procd instances are stopped before the
+	# unified start sequence to prevent duplicate sing-box processes.
 	[ -x "$GATEWAY_INIT" ] && "$GATEWAY_INIT" disable >/dev/null 2>&1 || true
-	stop_child "$WLOC_INIT"
-	if profile_mode; then
-		# Remove all profile and legacy tables before either child becomes
-		# ready; startup must never inherit interception from the previous mode.
-		withdraw_profile_redirects
-		"$REDIRECT_HELPER" legacy-stop >/dev/null 2>&1 || true
-	fi
-
-	if ! gateway_healthy; then
-		if ! WLOC_SUPERVISED=1 "$GATEWAY_INIT" start >/dev/null 2>&1; then
-			cleanup_runtime gateway_start_failed 0 stopped
+	[ -x "$WLOC_INIT" ] && "$WLOC_INIT" disable >/dev/null 2>&1 || true
+	# Always stop any independently-started child instance before handing
+	# ownership to this supervisor. The running flags only describe this
+	# supervisor invocation, not a stale procd instance from a previous boot.
+	stop_gateway
+	stop_wloc
+	if gateway_enabled; then
+		if ! start_gateway; then
+			cleanup_runtime gateway_start_failed
 			exit 1
 		fi
+		gateway_running=1
+		WLOC_SINGBOX_CONFIG="$GATEWAY_CONFIG"
+		export WLOC_SINGBOX_CONFIG
+		write_state starting gateway_started
 	fi
-	gateway_running=1
-	write_state starting gateway_ready
-
-	if ! WLOC_SUPERVISED=1 WLOC_DEFER_REDIRECT=1 WLOC_SKIP_REDIRECT=1 "$WLOC_INIT" start >/dev/null 2>&1; then
-		cleanup_runtime wloc_start_failed 1
-		exit 1
+	withdraw_redirect
+	rm -f "$UPSTREAM_IP_FILE"
+	if wloc_enabled; then
+		if [ ! -x "$WLOC_REFRESH_SET_HELPER" ] || ! "$WLOC_REFRESH_SET_HELPER" >/dev/null 2>&1; then
+			cleanup_runtime upstream_resolution_failed
+			exit 1
+		fi
+		if gateway_enabled; then
+			if ! WLOC_SINGBOX_CONFIG="$GATEWAY_CONFIG" WLOC_SUPERVISED=1 WLOC_DEFER_REDIRECT=1 WLOC_SKIP_REDIRECT=1 "$WLOC_INIT" start >/dev/null 2>&1; then
+				cleanup_runtime wloc_start_failed
+				exit 1
+			fi
+		else
+			if ! WLOC_SUPERVISED=1 WLOC_DEFER_REDIRECT=1 WLOC_SKIP_REDIRECT=1 "$WLOC_INIT" start >/dev/null 2>&1; then
+				cleanup_runtime wloc_start_failed
+				exit 1
+			fi
+		fi
+		wloc_running=1
+		write_state starting wloc_started
 	fi
-	wloc_running=1
-	write_state passthrough children_started
-
-	# Redirect installation is the final step. It only edits the dedicated
-	# wloc_service table and policy route; it never touches Gateway tables.
-	if ! wait_for_health; then
-		cleanup_runtime child_health_failed 1
-		exit 1
+	if ! wait_for_health; then cleanup_runtime wloc_health_failed; exit 1; fi
+	if wloc_enabled && ! install_redirect >/dev/null 2>&1; then cleanup_runtime redirect_install_failed; exit 1; fi
+	if wloc_enabled; then
+		write_state intercepting ready
+	else
+		write_state running gateway_ready
 	fi
-	if ! install_redirect >/dev/null 2>&1; then
-		cleanup_runtime redirect_install_failed 1
-		exit 1
-	fi
-	redirect_present=1
-	write_state intercepting ready
-
-	started=$(now)
 	while :; do
-		if ! health_ok; then
-			cleanup_runtime health_failed 1
-			exit 1
+		main_service_enabled || { cleanup_runtime disabled_by_configuration; exit 0; }
+		if [ "$wloc_running" -eq 1 ]; then
+			[ ! -x "$WLOC_REFRESH_SET_HELPER" ] || "$WLOC_REFRESH_SET_HELPER" >/dev/null 2>&1 || { cleanup_runtime upstream_refresh_failed; exit 1; }
 		fi
-		if [ "$MAX_RUNTIME_SECONDS" -gt 0 ] 2>/dev/null \
-			&& [ "$(($(now) - started))" -ge "$MAX_RUNTIME_SECONDS" ]; then
-			cleanup_runtime test_runtime_limit 1 stopped
-			exit 0
-		fi
+		if ! health_ok; then cleanup_runtime health_failed; exit 1; fi
 		sleep "$CHECK_INTERVAL"
 	done
 }
 
-main() {
-	command=${1:-start}
-	case "$command" in
-		start) start_supervisor ;;
-		stop) stop_supervisor ;;
-		reload) stop_supervisor; start_supervisor ;;
-		status) [ -s "$STATE" ] && cat "$STATE" || printf '%s\n' '{"version":1,"phase":"stopped","reason":"not_running"}' ;;
-		*) echo "usage: $0 {start|stop|reload|status}" >&2; exit 2 ;;
-	esac
-}
-
-main "$@"
+case "${1:-start}" in
+	start) start_supervisor ;;
+	stop) stop_supervisor ;;
+	reload) stop_supervisor; start_supervisor ;;
+	health) health_ok ;;
+	status) [ -s "$STATE" ] && cat "$STATE" || printf '%s\n' '{"version":3,"phase":"stopped","reason":"not_running","gateway":false,"wloc":false}' ;;
+	*) echo "usage: $0 {start|stop|reload|health|status}" >&2; exit 2 ;;
+esac

@@ -1,24 +1,44 @@
-# WLOC router PoC threat model
+# WLOC router PoC threat model (historical)
 
-Status: Phase 0 canonical security specification. This approval is for offline documentation and tests only. It does not authorize protocol patching, certificate generation, router rules, production traffic, or real-device testing.
+> This Phase 0 document is retained as historical security evidence. It is
+> superseded for the current independent integrated product by
+> `docs/adr/0004-integrated-gateway-wloc-product-boundary.md` and the V2 release
+> addendum in `DEVELOPMENT_TEST_PLAN.md`. The repository contains both Gateway
+> and WLOC; references to the separate Gateway 1.7 project are historical only.
 
-This model covers one explicitly authorized test device and LAN, the isolated WLOC component, its future router integration boundary, and its upstream dependencies. It intentionally does not describe Apple private protocol fields.
+Status: Historical Phase 0 canonical security specification. Its threat
+invariants remain applicable, while the V2 implementation and release status
+are governed by `DEVELOPMENT_TEST_PLAN.md`, the current OpenWrt/Rust tests, and
+the redacted AX6S evidence template. This document does not itself prove live
+device acceptance. The Phase 0 approval was for offline documentation and tests only; that historical restriction must not be read as evidence that the
+current V2 implementation is absent.
+
+This model covers up to 8 device profiles on the authorized LAN, with one private IPv4 address per profile. The profiles share one isolated WLOC component and provider process; they do not create a dependency on another product. It intentionally does not describe Apple private protocol fields.
 
 ## Security objectives and scope
 
 <!-- SECURITY_INVARIANT id="SCOPE-01" -->
 
-Interception is allowed only when all three predicates match: one assigned test device, one of the two exact hostnames `gs-loc.apple.com` or `gs-loc-cn.apple.com`, and TCP 443. Matching only an IP address, a hostname suffix, a wildcard, a port, or a device subnet is insufficient. A second exact hostname check is required at TLS ingress because DNS addresses can be shared or poisoned.
+Interception is allowed only when all three predicates match: one profile's assigned private IPv4 address, one of the two exact hostnames `gs-loc.apple.com` or `gs-loc-cn.apple.com`, and TCP 443. Up to 8 profiles are independently bounded; matching only an IP address without its profile, a hostname suffix, a wildcard, a port, or a device subnet is insufficient. A second exact hostname check is required at TLS ingress because DNS addresses can be shared or poisoned.
 
 <!-- SECURITY_INVARIANT id="GATEWAY-01" -->
 
-The component may create only the dedicated `wificalling_location` table and its fully named objects. It must never modify, reuse, flush, or depend on the `wificalling_gateway` table. UDP 500/4500, ordinary HTTPS, router management, sing-box management/health traffic, and every non-assigned LAN device remain outside the WLOC path. Gateway 1.7 and its running sing-box configuration are read-only dependencies.
+The component may create only its shared `wloc_service` table and fully named
+per-profile `wloc_profile_<id>` tables and objects. It must never modify, reuse, flush, or depend on the `wificalling_gateway` table. UDP 500/4500, ordinary HTTPS, router management,
+provider management/health traffic, and every non-assigned LAN device remain
+outside the WLOC path. Wi-Fi Calling Gateway 1.7 is outside this project's
+source, package, UCI, lifecycle, and acceptance boundary; a system sing-box or
+PassWall provider is an optional capability selected by the integrated WLOC
+adapter, not an external Gateway dependency.
 
 The primary security objective is containment and recovery, not guaranteed location modification. Unknown inputs and component failures preserve the original network path or the verified original response; they never expand trust or synthesize a plausible-looking result.
 
 ## Assets and trust boundaries
 
-Protected assets are the assigned device's traffic and availability, the router-local CA and leaf keys, Apple upstream identity, node credentials, Geo cache integrity, the dedicated redirect state, Gateway 1.7 state, and privacy-sensitive logs or support bundles.
+Protected assets are the assigned device's traffic and availability, the
+router-local CA and leaf keys, Apple upstream identity, node credentials, Geo
+cache integrity, the dedicated redirect state, provider state, and
+privacy-sensitive logs or support bundles.
 
 ```mermaid
 flowchart LR
@@ -26,7 +46,7 @@ flowchart LR
     N --> T["TLS / ALPN / HTTP/2 ingress"]
     T --> P["Bounded protocol handling"]
     P -->|"validated upstream TLS"| A["Apple WLOC upstream"]
-    G["Gateway 1.7 device-to-node mapping"] --> E["Isolated exit probe"]
+    G["Standalone WLOC device-profile mapping"] --> E["Isolated exit probe"]
     E --> X["Untrusted exit-IP service"]
     X --> R["Bounded Geo resolver/cache"]
     Q["Untrusted Geo providers"] --> R
@@ -51,14 +71,16 @@ Root compromise is outside the PoC's confidentiality guarantee, but even a root-
 
 ## Critical and High threat register
 
-Each row names the mandatory control and the future executable or operational evidence required before its implementation phase may exit. This document records requirements, not a claim that those future tests already pass.
+Each row names the mandatory control and the executable or operational evidence
+required before its release gate may exit. Repository tests cover the current
+implementation; this document does not itself prove AX6S live acceptance.
 
 | ID | Severity and abuse case | Mandatory control | Required evidence owner |
 |---|---|---|---|
 | S-01 | Critical: forged Apple upstream or invalid certificate is accepted | Verify the full upstream certificate chain, validity, SNI, and exact hostname with the system or reviewed trust store; never retry with verification disabled | TLS integration: invalid chain, expiry, unknown CA, and hostname mismatch |
-| S-02 | High: a spoofed or drifted source enters the redirect | Bind exactly one assigned device to validated address/lease identity and disable interception on binding drift | Network integration: other device, spoofed source, and DHCP drift |
+| S-02 | High: a spoofed or drifted source enters a profile redirect | Bind each profile to one validated private IPv4 identity and disable that profile on binding drift | Network integration: other device, spoofed source, duplicate profile, and DHCP drift |
 | S-03 | High: poisoned DNS or a shared CDN IP captures another origin | Populate sets from only the two exact names, then require an exact ingress hostname before leaf issuance or proxying | DNS/TLS integration: rotation, shared IP, absent/wrong SNI, ordinary HTTPS |
-| T-01 | Critical: WLOC changes the stable Gateway data plane | Operate only fully named `wificalling_location` objects; keep Gateway and sing-box state read-only | OpenWrt integration: before/after semantic diff and zero UDP 500/4500 hits |
+| T-01 | Critical: WLOC changes unrelated router data planes | Operate only fully named `wloc_service` and `wloc_profile_<id>` objects; keep external tables and provider state read-only | OpenWrt integration: before/after semantic diff and zero UDP 500/4500 hits |
 | T-02 | High: unknown or malformed protocol is patched or damaged | Patch only an authorized, frozen structure; preserve unknown fields and original bytes otherwise | Protocol: fixture round-trip, malformed, unknown version, order, and fuzz |
 | T-03 | High: poisoned, stale, conflicting, or wrong-exit Geo creates a location | Validate schema/ranges/timezone, bind cache to node plus exit IP, enforce expiry, and mark conflicts uncertain | Geo: bad schema, range, conflict, expiry, clock rollback, and exit change |
 | I-01 | Critical: CA or leaf private key escapes router-local storage | Generate locally with secure umask, store root-owned mode `0600`, export public certificate only, and exclude private keys from backup/support paths | CA: permissions, backup/support extraction, repository and artifact scans |
@@ -91,11 +113,21 @@ Before any real-device test, a reviewed deployment ADR must choose either a comp
 
 ## Kernel expiry lease for watchdog loss
 
-The future OpenWrt implementation requires a safety mechanism independent of the continued life of any userspace engine or watchdog. Redirect can match only when the assigned device key is present in dedicated short-TTL nft set elements. The nftables redirect expression must require both the normal device/destination/TCP scope and membership in this live lease set; creating a rule without that match is prohibited.
+The V2 OpenWrt implementation uses a safety mechanism independent of the
+continued life of any userspace engine or watchdog. Redirect can match only
+when the profile's assigned device key is present in its short-TTL nft set
+elements. The nftables redirect expression must require both the normal
+profile/device/destination/TCP scope and membership in this live lease set;
+creating a rule without that match is prohibited.
 
 The external supervisor renews the lease only while engine, scope, and IPv6 health pass. If the supervisor is killed, OOM-terminated, wedged, or unable to check health, renewal stops and the kernel automatically expires the lease. A rule may remain present but cannot redirect without a matching live lease. Startup and reboot begin with no lease, so neither stale userspace state nor a surviving rule enables interception.
 
-This is a required design and test gate, not a claim that a lease mechanism is implemented in Phase 0. The owning implementation Issue must freeze the short TTL and maximum blackhole bound, account for timer/scheduling behavior, and measure the bound on the AX6S by killing or OOM-terminating both engine and supervisor. Active stop still deletes the redirect and verifies absence before stopping the engine; lease expiry is an independent last-resort safety net, not a replacement for cleanup.
+V2 implements this lease mechanism and covers its safety contract in the
+supervisor/redirect tests. The release evidence must still freeze and measure
+the short TTL and maximum blackhole bound on AX6S by killing or
+OOM-terminating both engine and supervisor. Active stop still deletes the
+redirect and verifies absence before stopping the engine; lease expiry is an
+independent last-resort safety net, not a replacement for cleanup.
 
 ## Resource exhaustion controls
 

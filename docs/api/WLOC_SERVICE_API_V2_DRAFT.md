@@ -1,4 +1,4 @@
-# Unified Gateway/WLOC control API v2 draft
+# Unified WLOC control API v2 draft
 
 Status: proposed contract; profile request decoding and bounded local runtime
 primitives are implemented, and production source-device multi-profile
@@ -8,7 +8,7 @@ a subsequent control-plane slice. It does not change the frozen
 
 ## Purpose
 
-v2 replaces the single global WLOC control model with a unified Gateway/WLOC
+v2 replaces the single global WLOC control model with one standalone WLOC
 control plane. It coordinates device profiles, node bindings, WLOC auto/manual
 location, health, logs, diagnostics, and component updates through one
 root-only local Unix socket or an audited rpcd facade.
@@ -55,7 +55,7 @@ or unbounded command output.
 | `profile.create` | Create a validated profile | configuration |
 | `profile.update` | Update profile fields transactionally | configuration |
 | `profile.delete` | Disable, clean redirect, then remove profile | configuration |
-| `profile.enable` | Enable Gateway/WLOC for one profile | runtime |
+| `profile.enable` | Enable WLOC for one profile | runtime |
 | `profile.disable` | Withdraw redirect and disable one profile | runtime |
 | `profile.reload` | Apply profile/config changes | runtime |
 | `profile.node_test` | Run a bounded node test | background job |
@@ -64,7 +64,7 @@ or unbounded command output.
 | `profile.wloc.set_location` | Set validated manual coordinates/preset | runtime/config |
 | `profile.wloc.clear_location` | Return profile to auto mode | runtime/config |
 
-`profile_id` is a bounded local identifier (`[a-z0-9_-]{1,32}`) validated at
+`profile_id` is a bounded local identifier (`[a-z0-9_]{1,32}`) validated at
 the API boundary. A profile may expose its
 administrator-visible IP/MAC through the authenticated local LuCI facade, but
 the default wire status must not leak device material to arbitrary callers.
@@ -73,7 +73,7 @@ the default wire status must not leak device material to arbitrary callers.
 
 | Method | Purpose |
 |---|---|
-| `system.status.get` | Unified Gateway/WLOC summary |
+| `system.status.get` | Unified WLOC service summary |
 | `profile.status.get` | One profile's state and reason |
 | `profile.status.list` | Paginated status for all profiles |
 | `diagnostics.health.get` | Detailed bounded health checks |
@@ -122,7 +122,7 @@ Each event uses a common envelope:
 ```
 
 The shipped runtime keeps the WLOC structured event file under 64 KiB and
-rejects individual events over 2 KiB. Gateway activity logs also enforce a
+rejects individual events over 2 KiB. WLOC activity logs also enforce a
 64 KiB default byte cap after the per-device record cap; deployments may lower
 that cap through the local OpenWrt runtime environment.
 

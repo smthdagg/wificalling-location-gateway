@@ -11,10 +11,14 @@ STOP=10
 
 SOCKET_DIR=/var/run/wloc-service
 SOCKET="$SOCKET_DIR/control.sock"
+SINGBOX_RUNTIME_HELPER=${WLOC_PROVIDER_HELPER:-/usr/libexec/wificalling-location-gateway/singbox-runtime.sh}
 
 start_service() {
 	mkdir -p "$SOCKET_DIR" /etc/wloc-service
 	chmod 0700 "$SOCKET_DIR"
+	SINGBOX_BIN=$("$SINGBOX_RUNTIME_HELPER" path 2>/dev/null) || SINGBOX_BIN=
+	SINGBOX_CONFIG=${WLOC_SINGBOX_CONFIG:-$(uci -q get wloc-service.main.singbox_config 2>/dev/null || true)}
+	[ -n "$SINGBOX_CONFIG" ] || SINGBOX_CONFIG=/var/run/wloc-service/sing-box.json
 
 	procd_open_instance
 	procd_set_param command /usr/sbin/wloc-service
@@ -22,9 +26,10 @@ start_service() {
 		"WLOC_CA_CERT=/etc/wloc-service/ca.pem" \
 		"WLOC_CA_KEY=/etc/wloc-service/ca.key" \
 		"WLOC_PROXY_PORT=8443" \
-		"WLOC_DUMP_DIR=/tmp/wloc-dump" \
+		"WLOC_SINGBOX_CONFIG=$SINGBOX_CONFIG" \
 		"WLOC_SUPERVISED=${WLOC_SUPERVISED:-0}" \
-		"WLOC_DEFER_REDIRECT=${WLOC_DEFER_REDIRECT:-0}"
+		"WLOC_DEFER_REDIRECT=${WLOC_DEFER_REDIRECT:-0}" \
+		"WLOC_SINGBOX_BIN=$SINGBOX_BIN"
 	if [ "${WLOC_SUPERVISED:-0}" != 1 ]; then
 		procd_set_param respawn
 	fi
@@ -32,7 +37,7 @@ start_service() {
 	procd_set_param stderr 1
 	procd_close_instance
 
-	# Keep the nftables redirect in sync with the gateway device policies.
+	# Keep the nftables redirect in sync with standalone WLOC device profiles.
 	# The unified supervisor owns this step and installs the redirect only
 	# after both children pass health checks. Legacy standalone startup keeps
 	# the old behavior for rollback compatibility.

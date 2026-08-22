@@ -356,8 +356,19 @@ fn https_get(host: &str, path: &str) -> Result<Vec<u8>, GeocodeError> {
     tls.write_all(request.as_bytes())
         .map_err(|_| GeocodeError::Unreachable)?;
     let mut raw = Vec::new();
-    tls.read_to_end(&mut raw)
-        .map_err(|_| GeocodeError::Unreachable)?;
+    let mut buffer = [0_u8; 4096];
+    loop {
+        let count = tls
+            .read(&mut buffer)
+            .map_err(|_| GeocodeError::Unreachable)?;
+        if count == 0 {
+            break;
+        }
+        raw.extend_from_slice(&buffer[..count]);
+        if raw.len() > MAX_RESPONSE_BYTES {
+            return Err(GeocodeError::InvalidData);
+        }
+    }
     let header_end = raw
         .windows(4)
         .position(|window| window == b"\r\n\r\n")

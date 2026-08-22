@@ -1,7 +1,7 @@
 #!/bin/sh
-# Sync the WLOC TPROXY rules with the Wi-Fi Calling device policies.
+# Sync the WLOC TPROXY rules with the standalone WLOC device profiles.
 #
-# Every device listed in the gateway device policy (source_ip) gets its
+# Every device listed in the WLOC device profile gets its
 # TCP 443 traffic to the approved Apple WLOC hosts passed to the local
 # wloc-service MITM proxy via TPROXY: the original destination address is
 # preserved, so iOS sees a normal connection to the Apple server (REDIRECT
@@ -24,21 +24,28 @@ PROFILE_HELPER=${WLOC_PROFILE_REDIRECT_HELPER:-/usr/sbin/wloc-profile-redirect.s
 multiple_profiles_configured() {
 	command -v uci >/dev/null 2>&1 || return 1
 	profiles=$(uci -q show wloc-service 2>/dev/null \
-		| sed -n 's/^wloc-service\.[a-z0-9_-]*=device$/x/p' \
+		| sed -n 's/^wloc-service\.[a-z0-9_]*=device$/x/p' \
 		| wc -l | tr -d ' ')
 	[ "${profiles:-0}" -gt 1 ] 2>/dev/null
 }
 
 withdraw_legacy_redirect() {
 	# Only remove the WLOC-owned table, policy route, and DNS marker. The
-	# stable Gateway 1.7 nftables table (and UDP 500/4500 handling) is never
-	# touched by this cleanup path.
+	# Tables outside the WLOC namespace are never touched by this cleanup.
+	# path.
 	"$NFT_BINARY" delete table inet "$TABLE" 2>/dev/null || true
 	"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
 	"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
-	for hosts_file in ${WLOC_HOSTS_FILES:-/etc/hosts\ /tmp/hosts/wloc-hosts}; do
-		sed -i '/# wloc-service DNS hijack (do not edit)/,/^# wloc-service end/d' "$hosts_file" 2>/dev/null || true
-	done
+	if [ -n "${WLOC_HOSTS_FILES:-}" ]; then
+		# shellcheck disable=SC2086 # test-only override is a space-separated file list
+		for hosts_file in $WLOC_HOSTS_FILES; do
+			sed -i '/# wloc-service DNS hijack (do not edit)/,/^# wloc-service end/d' "$hosts_file" 2>/dev/null || true
+		done
+	else
+		for hosts_file in /etc/hosts /tmp/hosts/wloc-hosts; do
+			sed -i '/# wloc-service DNS hijack (do not edit)/,/^# wloc-service end/d' "$hosts_file" 2>/dev/null || true
+		done
+	fi
 	}
 
 if [ "$action" = stop ] || [ "$action" = legacy-stop ]; then
@@ -60,13 +67,13 @@ if [ "$action" = start ] && multiple_profiles_configured; then
 	exit 0
 fi
 
-# Collect the LAN IPs of every device in the gateway device policy.
-ips=$(uci -q show wificalling-gateway \
-    | sed -n "s/.*\.source_ip=['\"]*\([0-9][0-9.]*\)['\"]*/\1/p" \
+# Collect the LAN IPs of every standalone WLOC device profile.
+ips=$(uci -q show wloc-service \
+    | sed -n "s/^wloc-service\.[a-z0-9_]*\.assigned_device=['\"]*\([0-9][0-9.]*\)['\"]*/\1/p" \
     | sort -u)
 
 [ -n "$ips" ] || {
-    echo "wloc-redirect-sync: no devices in the gateway device policy" >&2
+    echo "wloc-redirect-sync: no devices in the WLOC device profiles" >&2
     exit 1
 }
 
@@ -96,14 +103,25 @@ HOSTS_MARKER='# wloc-service DNS hijack (do not edit)'
 # dnsmasq reads addn-hosts from the /tmp/hosts directory on this build;
 # /etc/hosts is kept as a fallback.
 mkdir -p /tmp/hosts
-for hosts_file in ${WLOC_HOSTS_FILES:-/etc/hosts\ /tmp/hosts/wloc-hosts}; do
-    sed -i "/$HOSTS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
-    cat >> "$hosts_file" <<EOF
+write_hosts_file() {
+	hosts_file=$1
+	sed -i "/$HOSTS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
+	cat >> "$hosts_file" <<EOF
 $HOSTS_MARKER
 $ROUTER_IP gs-loc.apple.com gs-loc-cn.apple.com
 # wloc-service end
 EOF
-done
+}
+if [ -n "${WLOC_HOSTS_FILES:-}" ]; then
+	# shellcheck disable=SC2086 # test-only override is a space-separated file list
+	for hosts_file in $WLOC_HOSTS_FILES; do
+		write_hosts_file "$hosts_file"
+	done
+else
+	for hosts_file in /etc/hosts /tmp/hosts/wloc-hosts; do
+		write_hosts_file "$hosts_file"
+	done
+fi
 
 # TPROXY plumbing: marked packets are routed back to the local stack.
 "$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
@@ -113,7 +131,7 @@ done
 
 # Table + set + mangle prerouting chain (filter hook, before DNAT).
 "$NFT_BINARY" add table inet "$TABLE" 2>/dev/null || true
-"$NFT_BINARY" add set inet "$TABLE" apple_hosts '{ type ipv4_addr; }' 2>/dev/null || true
+"$NFT_BINARY" add set inet "$TABLE" apple_hosts '{ type ipv4_addr; flags timeout; timeout 30s; }' 2>/dev/null || true
 # The chain must be a filter/mangle chain for tproxy; drop a leftover
 # nat chain (from the old redirect scheme) first.
 "$NFT_BINARY" flush chain inet "$TABLE" "$CHAIN" 2>/dev/null || true

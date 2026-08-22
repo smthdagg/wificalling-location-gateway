@@ -5,11 +5,12 @@
 #   enabled          module on/off (also runtime control.enable/disable)
 #   geo_source       auto (follow the bound node exit) | manual (fixed preset)
 #   manual_lat/lon   coordinates used when geo_source=manual
-#   node_ref         sing-box node tag to follow (auto mode)
-#   assigned_device  LAN IP of the test device whose node binding is probed
+#   node_ref         sing-box node tag selected by the profile
+#   assigned_device  private LAN IPv4 address of the WLOC device profile
 #   probe_interval   max age of a probe observation before re-probing (seconds)
 #   geo_provider     http (ip-api.com) | stub (deterministic, for staging)
 #   probe_port       local HTTP proxy port used to observe the exit IP
+#   singbox_config   provider configuration path (optional)
 #
 # Presets below are saved manual locations managed from LuCI; selecting one
 # copies its coordinates into manual_lat/manual_lon and sets geo_source.
@@ -20,9 +21,7 @@ config wloc-service 'main'
 	option manual_lat '51.5074'
 	option manual_lon '-0.1278'
 	option node_ref 'default'
-	# assigned_device is chosen from LuCI (WLOC Settings > Follow device);
-	# when unset the daemon follows the first device policy of the
-	# wificalling-gateway config instead of any fixed example address.
+	option singbox_config '/var/run/wloc-service/sing-box.json'
 	option probe_interval '300'
 	option geo_provider 'http'
 	option probe_port '18080'
@@ -37,11 +36,9 @@ config preset 'hong_kong'
 	option latitude '22.3193'
 	option longitude '114.1694'
 
-# v2 migration example (disabled by default): one config device section is
-# the future unit for node binding, WLOC mode, service enablement, logs, and
-# monitoring. If any device sections are present, they take precedence over
-# the legacy singleton fields above. Keep addresses and locations local to
-# the router; they are never returned by the redacted status API.
+# v2 device profile: one section is the unit for node binding, WLOC mode,
+# service enablement, logs, and monitoring. Keep addresses and locations local
+# to the router; they are never returned by the redacted status API.
 #
 # config device 'phone'
 # 	option label 'Living room phone'

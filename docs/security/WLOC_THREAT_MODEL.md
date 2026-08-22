@@ -1,10 +1,19 @@
-# WLOC PoC 威胁模型
+# WLOC PoC 威胁模型（历史基线）
 
-- Status: Accepted for offline scaffolding only; parser, CA, MITM, and real-device access remain prohibited.  
-状态：**已接受为离线骨架安全边界；未批准 parser、CA、MITM 或真机接入**  
+> 本文保留为 Phase 0 历史安全证据。当前独立仓库产品以
+> `docs/adr/0004-integrated-gateway-wloc-product-boundary.md` 和
+> `DEVELOPMENT_TEST_PLAN.md` 的 V2 附录为准；当前产品同时包含 Gateway 与
+> WLOC，但不依赖、读取或管理外部 Gateway 1.7 项目。
+
+- Status: Historical Phase 0 baseline; the V2 implementation is covered by
+  the current Rust/OpenWrt tests and the redacted AX6S release evidence.
+  Real client WLOC traffic remains untested without an authorized fixture.
+状态：**Phase 0 历史基线；V2 实现已有当前 Rust/OpenWrt 测试和 AX6S 脱敏证据覆盖，未提供授权 fixture 时不进行真实客户端 WLOC 流量测试**
 评审记录：[Phase 0 review](../reviews/PHASE0_OFFLINE_SCAFFOLD_REVIEW.md)  
-适用范围：单台明确授权的测试 iPhone、Redmi AX6S/OpenWrt、独立 `wificalling_location` 数据面，以及两个精确目标 `gs-loc.apple.com` 和 `gs-loc-cn.apple.com`。  
-不适用范围：生产部署、多设备、全局 HTTPS 代理、运营商激活判断、GPS 替代、紧急呼叫位置保证。
+适用范围：最多 8 个设备档案、明确授权的 LAN、Redmi AX6S/OpenWrt、独立
+`wloc_service` 与 `wloc_profile_<id>` 数据面，以及两个精确目标
+`gs-loc.apple.com` 和 `gs-loc-cn.apple.com`。每个档案只绑定一个私有 IPv4。  
+不适用范围：生产部署、无界多设备、全局 HTTPS 代理、运营商激活判断、GPS 替代、紧急呼叫位置保证。
 
 本文只定义安全边界、失效行为和验证证据。它不描述、猜测或批准任何 Apple 私有协议字段；parser/patch 的语义只能来自已授权、脱敏且经评审的 fixture 与协议笔记。
 
@@ -14,7 +23,7 @@ PoC 的首要目标不是“始终返回修改后的位置”，而是把一次�
 
 必须始终成立：
 
-- 只有一台已授权测试设备访问两个精确 allowlist hostname 的 TCP 443 流量可进入 MITM。
+- 只有设备档案绑定的私有 IPv4 访问两个精确 allowlist hostname 的 TCP 443 流量可进入 MITM；最多 8 个档案分别受界限约束。
 - 普通 HTTPS、其他 LAN 设备、路由器管理面、sing-box 管理/健康检查以及 UDP 500/4500 不进入 WLOC 路径。
 - Apple 上游身份验证失败时不得关闭证书验证、接受未知 CA 或生成位置。
 - Geo 数据不可靠、协议未知或 parser/patch 失败时不得产生默认假坐标；能安全返回未经修改的已验证上游响应时才透传。
@@ -93,7 +102,7 @@ flowchart LR
 | S-01 / Spoofing | **Critical**：伪造 Apple 上游，诱使引擎接受攻击者证书或响应 | 使用系统/固定受控信任库验证完整链、有效期和请求 hostname；禁止 `InsecureSkipVerify`、自签回退和证书错误重试降级 | 无效链、过期、hostname 不匹配、未知 CA 测试均受控失败；代码/配置扫描证明无跳过验证 |
 | S-02 / Spoofing | **High**：伪造测试设备源地址进入 redirect | 单设备 lease 绑定固定地址与可用的二层身份；仅在受控测试 LAN 启用；记录 DHCP 变更并默认禁用不一致绑定 | 非测试设备、源地址伪造、DHCP 地址变化测试不进入 MITM；规则快照 |
 | S-03 / Spoofing | **High**：DNS 污染或共享 CDN IP 把非目标域流量导入候选集合 | dnsmasq 只维护两个精确域名的 A/AAAA set；MITM 再以 TLS SNI/目标 hostname 做二次 allowlist；非 allowlist 不签发 leaf、不代理 | DNS 地址变化、共享 IP、无 SNI/错误 SNI、普通 HTTPS 负向测试 |
-| T-01 / Tampering | **Critical**：修改 `wificalling_gateway` table 或 sing-box 运行配置导致现网行为改变 | 使用独立 `wificalling_location` table/chain；Exit Probe 使用隔离临时 outbound；对 Gateway 配置只读；安装/卸载有差异检查 | 启停前后 Gateway nft/config 哈希与规则语义一致；UDP 500/4500 未命中 WLOC 计数器 |
+| T-01 / Tampering | **Critical**：修改外部 nft table 或 sing-box 运行配置导致现网行为改变 | 只使用独立 `wloc_service` 与 `wloc_profile_<id>` table/chain；Exit Probe 使用隔离临时 outbound；外部配置只读；安装/卸载有差异检查 | 启停前后外部 nft/config 哈希与规则语义一致；UDP 500/4500 未命中 WLOC 计数器 |
 | T-02 / Tampering | **High**：未知/畸形协议被错误修改，或非目标字段受损 | 只处理已授权 fixture 覆盖并冻结的结构；未知、畸形、截断或不支持版本不 patch；保留未知字段；禁止默认坐标 | fixture 来源审批；round-trip/未知字段/字段顺序/截断/非目标消息测试；fuzz 无崩溃 |
 | T-03 / Tampering | **High**：Geo provider、缓存或时钟污染产生错误位置 | 严格 schema/range/timezone 校验；主备冲突标记 `geo_uncertain`；缓存绑定 `node_id + exit_ip` 并设 TTL；时钟异常不延长可信期 | 坏 JSON、越界、冲突、回拨时钟、过期、exit IP 变化测试均不生成新位置 |
 | T-04 / Tampering | **High**：Exit Probe 实际走 WAN 或错误节点 | 探测必须经指定 sing-box outbound；验证结果不是 WAN IP；节点材料最小化且临时文件清理 | WAN/代理出口对照、错误凭据、DNS、节点黑洞测试；无残留凭据 |
@@ -143,7 +152,7 @@ Parser 在授权 fixture 和许可证 ADR 关闭前不得实现。实现后仍�
 
 ## 10. nftables、DNS 与 IPv4/IPv6 隔离
 
-只允许创建和操作独立 `wificalling_location` table/chain/set。脚本必须按对象全名操作，禁止 flush 全局 ruleset、复用 `wificalling_gateway` chain，或修改 sing-box 的 TPROXY 规则。
+只允许创建和操作独立 `wloc_service`、`wloc_profile_<id>` table/chain/set。脚本必须按对象全名操作，禁止 flush 全局 ruleset、复用 `wificalling_gateway` chain，或修改 sing-box 的 TPROXY 规则。
 
 redirect 同时要求：测试设备身份/源地址、来自两个精确域名解析结果的目标 set、TCP 443。进入 MITM 后仍须校验请求 hostname；任一条件不匹配即不拦截。UDP 500/4500 必须有显式负向测试和零命中证据。
 
@@ -215,7 +224,7 @@ redirect 同时要求：测试设备身份/源地址、来自两个精确域名�
 - [ ] Apple 上游证书负向测试通过，配置/代码不存在验证绕过。
 - [ ] CA 权限、SAN allowlist、轮换、旧 leaf cache 清理、支持包排除和设备撤销流程通过自动化测试。
 - [ ] IPv6 已书面选择“完整双栈”或“精确 AAAA 抑制”，并通过双栈/仅 v6/普通 IPv6 隔离测试。
-- [ ] nftables 只创建 `wificalling_location` 对象；普通 HTTPS、其他设备、路由器管理、sing-box 管理和 UDP 500/4500 均有负向证据。
+- [ ] nftables 只创建 `wloc_service` 和 `wloc_profile_<id>` 对象；普通 HTTPS、其他设备、路由器管理、sing-box 管理和 UDP 500/4500 均有负向证据。
 - [ ] `kill -9`、OOM、启动失败、dnsmasq reload、反复崩溃、stop、rollback 和 reboot 测试证明不会留下 redirect/blackhole。
 - [ ] Geo provider 冲突/坏数据/超时、缓存过期、exit IP 变化和 WAN-IP 误探测测试均不产生默认假坐标。
 - [ ] 日志 ≤1MB 且日志/支持包 canary 脱敏测试覆盖正常、错误、debug 与崩溃路径。

@@ -1,15 +1,14 @@
-# WLOC 定位服务与 Wi-Fi Calling Gateway UI 集成方案
+# WiFi Calling Gateway + WLOC LuCI 管理方案
 
-Status: design draft (2026-08-12)
+Status: implementation contract and historical design record (2026-08-22)
 Target: ImmortalWrt 24.10 / LuCI JS。
-> 修正：**合并后的整体是一个独立项目**（独立 APK/IPK 插件），不是 WLOC 集成进
-> Wi-Fi Calling。两个模块（Wi-Fi Calling + WLOC 定位）**并列**，共享节点池与
-> 路由方法。插件名用项目名 `wificalling-location-gateway`。
+> 产品边界（2026-08-22）：**本项目是独立的 WiFi Calling Gateway + WLOC 项目**。
+> 两个模块在同一仓库、同一 IPK、同一统一生命周期和同一 LuCI 管理面中交付；不
+> 安装或依赖外部 Wi-Fi Calling Gateway 1.7 仓库。
 
 ## 1. 目标与范围
 
-在 AX6S 的 LuCI 管理界面中，把 `wloc-service`（路由器侧 WLOC 定位替换服务）
-集成进现有的 Wi-Fi Calling Gateway 界面，提供：
+在 AX6S 的 LuCI 管理界面中，为独立 `wloc-service` 提供完整管理面，提供：
 
 1. **证书获取**：通过 Safari 一键安装/重装 WLOC 根证书（mobileconfig）。
 2. **定位模式切换**：自动（跟随节点）/ 手动，随时可切。
@@ -18,8 +17,8 @@ Target: ImmortalWrt 24.10 / LuCI JS。
 5. **完整 GPS 数值**：管理员可见的当前坐标（lat/lon），隐私边界仅限本地管理员。
 6. **手动定位搜索与保存**：搜索地名（Nominatim 在线 geocode）或直接输入坐标，
    保存为手动预设（持久化，重启不丢）。
-7. **与 Wificalling 的 UI 集成**：两个模块并列在同一个独立项目的 LuCI 插件里，
-   共享节点选择与设备绑定。
+7. **独立设备档案**：节点、自动跟随、手动定位、启用、健康、监控和日志都归档
+   到同一个设备，不再与其他项目的设备页重复。
 8. **WLOC 使用日志**：最近的坐标替换事件（时间、目标位置、来源 auto/manual）。
 
 ## 2. 架构总览
@@ -90,19 +89,29 @@ ucode（以 root 运行）调用，权限由 LuCI ACL 控制。
   写 `manual_lat`/`manual_lon`），重启后仍生效。
 - 保存的预设列表：可保存多个（`wloc-service.@preset[n]`），一键选择应用。
 
-### 3.7 独立项目与两模块并列
-- **独立插件**：`luci-app-wificalling-location-gateway`（独立 IPK），菜单
-  `admin/services/wificalling-location-gateway`，顶层为合并项目。
-- **两模块并列**（不是子菜单关系）：
+### 3.7 独立项目与设备档案
+- **独立产品插件**：`luci-app-wificalling-location-gateway`（独立 IPK），菜单
+  `admin/services/wificalling-location-gateway` 同时管理本项目内的 Gateway 与 WLOC。
+- **页面结构**：
   ```
   admin/services/wificalling-location-gateway/
-    ├── Wi-Fi Calling     (Settings/Status/Activity Log 现有 1.7 页)
-    ├── WLOC Location     (本方案 8 项功能)
-    └── ...               (未来模块可继续并列)
+    ├── WCG Setting                 (Gateway 节点与设备设置)
+    ├── WCG Status & Logs           (合并 Gateway 状态与活动日志)
+    ├── WLOC Setting                (合并 Overview 与 Basic Settings)
+    ├── WLOC Devices                (每台设备的节点/定位/启用/状态/日志)
+    ├── WLOC Status & Logs
+    ├── WCG WLOC Service Monitor    (统一服务监控)
+    ├── Component Update
+    └── Help
   ```
-- **共享层**：同一个 sing-box 节点池、设备绑定列表、路由方法（nftables
-  TPROXY）。WLOC 模块读取现有 `sing-box.json` 的节点/绑定（SingBoxProbe 已
-  复用），UI 显示当前测试设备绑定的节点。
+- **共享层**：本项目自己的 Gateway 节点、WLOC 节点引用和设备档案共享 sing-box
+  provider；Gateway 与 WLOC 各自保留数据面，但由统一 supervisor、统一更新/回滚
+  和统一监控协调。
+- **设备语义**：`fixed` 是该设备档案明确绑定的 WLOC 节点；`auto` 跟随这个
+  节点出口；`manual` 把坐标保存到这个设备档案。不存在没有目标对象的
+  “Follow gateway” 或全局手动定位。
+- **组件更新**：独立页面负责上传前置的本地包、设备/固件/架构/包格式检查、签名
+  校验、空间检查、应用和回滚；健康页只显示运行状态。
 
 ### 3.8 WLOC 使用日志
 - 新日志：`wloc-service` 追加事件到 `/var/run/wloc-service/events.jsonl`
@@ -133,7 +142,7 @@ config wloc-service 'main'
     option geo_source 'auto'    # auto | manual
     option manual_lat '51.5074'
     option manual_lon '-0.1278'
-    option node_ref 'default'
+  option node_ref 'wloc_node_1'
     option probe_port '18080'
     option ca_path '/etc/wloc-service/ca.pem'
     option ca_key '/etc/wloc-service/ca.key'

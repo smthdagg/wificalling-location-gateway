@@ -20,15 +20,20 @@ done
 ./tests/scripts/test-agent-handoff-tools.sh
 ./tests/scripts/test-verify-rust-openwrt.sh
 ./tests/scripts/test-openwrt-release-packaging.sh
+python3 -m unittest tests.test_v2_security_contract
 ./tests/scripts/test-standalone-ax6s-package.sh
 ./tests/scripts/test-release-version.sh
 ./tests/scripts/test-unified-supervisor.sh
+./tests/scripts/test-singbox-runtime.sh
+./tests/scripts/test-ax6s-migration-contract.sh
 ./tests/scripts/test-profile-redirect.sh
+./tests/scripts/test-wloc-health.sh
 ./tests/scripts/test-profile-status.sh
 ./tests/scripts/test-structured-logs.sh
 ./tests/scripts/test-support-bundle.sh
 ./tests/scripts/test-component-update.sh
 ./tests/scripts/test-existing-ax6s-package.sh
+./tests/scripts/test-resource-budgets.sh
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 ./scripts/scan_secrets.py
 

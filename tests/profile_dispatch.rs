@@ -1,11 +1,9 @@
 use std::net::IpAddr;
 
 use wificalling_location_gateway::config::{
-    DeviceProfile, LocationMode, NodeSelectionMode, ProfileModel,
+    DeviceProfile, LocationMode, NodeSelectionMode, ProfileError, ProfileModel,
 };
-use wificalling_location_gateway::service::profile_dispatch::{
-    ProfilePatchRouter, ProfilePatchRouterError,
-};
+use wificalling_location_gateway::service::profile_dispatch::ProfilePatchRouter;
 use wificalling_location_gateway::wloc::PatchTarget;
 
 fn profile(id: &str, assigned_device: &str, enabled: bool) -> DeviceProfile {
@@ -89,11 +87,8 @@ fn manual_clear_withdraws_target_until_auto_refreshes() {
 
 #[test]
 fn invalid_source_and_unsupported_mac_never_fall_back() {
-    let model = ProfileModel::new(vec![profile("phone", "aa:bb:cc:dd:ee:ff", true)]).unwrap();
-    assert!(matches!(
-        ProfilePatchRouter::new(&model),
-        Err(ProfilePatchRouterError::UnsupportedDevice)
-    ));
+    let model = ProfileModel::new(vec![profile("phone", "aa:bb:cc:dd:ee:ff", true)]);
+    assert!(matches!(model, Err(ProfileError::InvalidDeviceAddress(_))));
 
     let model = ProfileModel::new(vec![profile("phone", "192.168.1.10", true)]).unwrap();
     let router = ProfilePatchRouter::new(&model).unwrap();
@@ -105,11 +100,8 @@ fn invalid_source_and_unsupported_mac_never_fall_back() {
 
 #[test]
 fn router_rejects_non_ipv4_runtime_binding_explicitly() {
-    let model = ProfileModel::new(vec![profile("phone", "fd00::10", true)]).unwrap();
-    assert!(matches!(
-        ProfilePatchRouter::new(&model),
-        Err(ProfilePatchRouterError::UnsupportedDevice)
-    ));
+    let model = ProfileModel::new(vec![profile("phone", "fd00::10", true)]);
+    assert!(matches!(model, Err(ProfileError::InvalidDeviceAddress(_))));
 }
 
 #[test]

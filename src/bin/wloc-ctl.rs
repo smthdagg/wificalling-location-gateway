@@ -10,6 +10,8 @@ use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use wificalling_location_gateway::service::api::MAX_CONTROL_FRAME_BYTES;
+
 fn main() {
     let code = run();
     std::process::exit(code);
@@ -24,7 +26,7 @@ fn run() -> i32 {
 
 fn run_with_args(args: &[String], socket_path: &str) -> i32 {
     if args.is_empty() {
-        eprintln!("用法: wloc-ctl <方法> [--query <地名> | --lat <纬度> --lon <经度>]");
+        eprintln!("用法: wloc-ctl <方法> [参数]");
         return 2;
     }
 
@@ -38,7 +40,13 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
     };
     let params = match method {
         "status" | "enable" | "disable" | "geo-clear" | "reload" | "refresh" => {
-            serde_json::json!({})
+            match parse_profile_selector(&args[1..]) {
+                Ok(params) => params,
+                Err(message) => {
+                    eprintln!("wloc-ctl: {message}");
+                    return 2;
+                }
+            }
         }
         "geo-search" => match parse_geo_set(&args[1..]) {
             Ok(params) => params,
@@ -54,11 +62,25 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
                 return 2;
             }
         },
+        "profile-list" | "profile-get" | "profile-create" | "profile-update" | "profile-delete" => {
+            match parse_profile_args(method, &args[1..]) {
+                Ok(params) => params,
+                Err(message) => {
+                    eprintln!("wloc-ctl: {message}");
+                    return 2;
+                }
+            }
+        }
         _ => unreachable!("unknown method returned earlier"),
     };
 
+    let api_version = if method.starts_with("profile-") {
+        "wloc.service/v2"
+    } else {
+        "wloc.service/v1"
+    };
     let request = serde_json::json!({
-        "api_version": "wloc.service/v1",
+        "api_version": api_version,
         "request_id": format!("ctl-{}", SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)),
         "method": wire_method,
         "params": params,
@@ -70,6 +92,10 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
             return 1;
         }
     };
+    if body.len() > MAX_CONTROL_FRAME_BYTES {
+        eprintln!("wloc-ctl: 请求超过控制帧上限");
+        return 1;
+    }
 
     let mut stream = match UnixStream::connect(socket_path) {
         Ok(stream) => stream,
@@ -95,6 +121,10 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
         return 1;
     }
     let length = u32::from_be_bytes(header) as usize;
+    if length == 0 || length > MAX_CONTROL_FRAME_BYTES {
+        eprintln!("wloc-ctl: 响应超过控制帧上限");
+        return 1;
+    }
     let mut response = vec![0_u8; length];
     if stream.read_exact(&mut response).is_err() {
         eprintln!("wloc-ctl: 响应不完整");
@@ -155,6 +185,111 @@ fn parse_geo_set(args: &[String]) -> Result<serde_json::Value, String> {
     }
 }
 
+fn parse_profile_selector(args: &[String]) -> Result<serde_json::Value, String> {
+    if args.is_empty() {
+        return Ok(serde_json::json!({}));
+    }
+    if args.len() == 2 && args[0] == "--profile" && !args[1].is_empty() {
+        return Ok(serde_json::json!({"profile_id": args[1]}));
+    }
+    Err("--profile <profile-id> 是唯一支持的附加参数".to_owned())
+}
+
+fn parse_profile_args(method: &str, args: &[String]) -> Result<serde_json::Value, String> {
+    match method {
+        "profile-list" if args.is_empty() => Ok(serde_json::json!({})),
+        "profile-get" | "profile-delete" => {
+            if args.len() != 1 || args[0].is_empty() {
+                return Err(format!("{method} 需要 <profile-id>"));
+            }
+            Ok(serde_json::json!({"profile_id": args[0]}))
+        }
+        "profile-create" => parse_profile_options(args, None, true),
+        "profile-update" => {
+            let profile_id = args
+                .first()
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "profile-update 需要 <profile-id>".to_owned())?;
+            parse_profile_options(&args[1..], Some(profile_id), false)
+        }
+        _ => Err(format!("{method} 不接受这些参数")),
+    }
+}
+
+fn parse_profile_options(
+    args: &[String],
+    profile_id: Option<&str>,
+    require_create_fields: bool,
+) -> Result<serde_json::Value, String> {
+    let mut params = serde_json::Map::new();
+    if let Some(profile_id) = profile_id {
+        params.insert("profile_id".to_owned(), serde_json::json!(profile_id));
+    }
+    let mut index = 0;
+    while index < args.len() {
+        let option = args[index].as_str();
+        match option {
+            "--enabled" => {
+                params.insert("enabled".to_owned(), serde_json::json!(true));
+            }
+            "--disabled" => {
+                params.insert("enabled".to_owned(), serde_json::json!(false));
+            }
+            "--id" | "--label" | "--device" | "--node-ref" | "--node-mode" | "--geo-source"
+            | "--location-ref" => {
+                index += 1;
+                let value = args
+                    .get(index)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| format!("{option} 需要一个值"))?;
+                let key = match option {
+                    "--id" => "profile_id",
+                    "--label" => "label",
+                    "--device" => "assigned_device",
+                    "--node-ref" => "node_ref",
+                    "--node-mode" => "node_mode",
+                    "--geo-source" => "geo_source",
+                    "--location-ref" => "manual_location_ref",
+                    _ => unreachable!(),
+                };
+                params.insert(key.to_owned(), serde_json::json!(value));
+            }
+            "--lat" | "--lon" => {
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| format!("{option} 需要一个数字"))?
+                    .parse::<f64>()
+                    .map_err(|_| format!("{option} 需要一个数字"))?;
+                let key = if option == "--lat" {
+                    "manual_lat"
+                } else {
+                    "manual_lon"
+                };
+                params.insert(key.to_owned(), serde_json::json!(value));
+            }
+            other => return Err(format!("unexpected argument: {other}")),
+        }
+        index += 1;
+    }
+    if require_create_fields {
+        for key in [
+            "profile_id",
+            "label",
+            "assigned_device",
+            "node_ref",
+            "node_mode",
+            "geo_source",
+            "enabled",
+        ] {
+            if !params.contains_key(key) {
+                return Err(format!("profile-create 缺少 {key}"));
+            }
+        }
+    }
+    Ok(serde_json::Value::Object(params))
+}
+
 /// Map a CLI method name to its wire method.
 fn map_wire_method(method: &str) -> Option<&'static str> {
     match method {
@@ -166,6 +301,11 @@ fn map_wire_method(method: &str) -> Option<&'static str> {
         "geo-clear" => Some("geo.clear"),
         "geo-search" => Some("geo.search"),
         "refresh" => Some("control.refresh"),
+        "profile-list" => Some("profile.list"),
+        "profile-get" => Some("profile.get"),
+        "profile-create" => Some("profile.create"),
+        "profile-update" => Some("profile.update"),
+        "profile-delete" => Some("profile.delete"),
         _ => None,
     }
 }
@@ -320,10 +460,62 @@ mod tests {
             ("geo-clear", "geo.clear"),
             ("geo-search", "geo.search"),
             ("refresh", "control.refresh"),
+            ("profile-list", "profile.list"),
+            ("profile-get", "profile.get"),
+            ("profile-create", "profile.create"),
+            ("profile-update", "profile.update"),
+            ("profile-delete", "profile.delete"),
         ];
         for (cli, wire) in cases {
             assert_eq!(map_wire_method(cli), Some(wire), "mapping for {cli}");
         }
         assert_eq!(map_wire_method("bogus"), None);
+    }
+
+    #[test]
+    fn profile_cli_parses_create_and_update_params() {
+        let create = parse_profile_args(
+            "profile-create",
+            &[
+                "--id".to_owned(),
+                "phone".to_owned(),
+                "--label".to_owned(),
+                "Phone".to_owned(),
+                "--device".to_owned(),
+                "192.168.1.10".to_owned(),
+                "--node-ref".to_owned(),
+                "node-a".to_owned(),
+                "--node-mode".to_owned(),
+                "fixed".to_owned(),
+                "--geo-source".to_owned(),
+                "auto".to_owned(),
+                "--enabled".to_owned(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(create["profile_id"], "phone");
+        assert_eq!(create["enabled"], true);
+
+        let update = parse_profile_args(
+            "profile-update",
+            &[
+                "phone".to_owned(),
+                "--label".to_owned(),
+                "Work phone".to_owned(),
+                "--disabled".to_owned(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(update["profile_id"], "phone");
+        assert_eq!(update["enabled"], false);
+    }
+
+    #[test]
+    fn refresh_cli_can_select_a_profile() {
+        assert_eq!(
+            parse_profile_selector(&["--profile".to_owned(), "phone".to_owned()]).unwrap(),
+            serde_json::json!({"profile_id": "phone"})
+        );
+        assert!(parse_profile_selector(&["phone".to_owned()]).is_err());
     }
 }

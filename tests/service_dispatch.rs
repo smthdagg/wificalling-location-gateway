@@ -5,8 +5,12 @@
 //! stable error envelopes; success wraps the result payload.
 
 use serde_json::{json, Value};
-use wificalling_location_gateway::service::api::{decode_request, RequestParams, SERVICE_API_ID};
-use wificalling_location_gateway::service::dispatch::{dispatch, DispatchError, ServiceDispatch};
+use wificalling_location_gateway::service::api::{
+    decode_request, decode_v2_profile_request, RequestParams, SERVICE_API_ID, SERVICE_API_V2_ID,
+};
+use wificalling_location_gateway::service::dispatch::{
+    dispatch, dispatch_v2, DispatchError, InMemoryProfileStore, ServiceDispatch,
+};
 
 struct RecordedDispatch {
     status_result: Result<Value, DispatchError>,
@@ -80,6 +84,20 @@ fn decoded(method: &str) -> wificalling_location_gateway::service::api::ApiReque
 
 fn parse(frame: &[u8]) -> Value {
     serde_json::from_slice(frame).unwrap()
+}
+
+fn decoded_v2(
+    method: &str,
+    params: Value,
+) -> wificalling_location_gateway::service::api::ApiV2ProfileRequest {
+    let frame = serde_json::to_vec(&json!({
+        "api_version": SERVICE_API_V2_ID,
+        "request_id": "profile-1",
+        "method": method,
+        "params": params
+    }))
+    .unwrap();
+    decode_v2_profile_request(&frame).unwrap()
 }
 
 #[test]
@@ -299,4 +317,96 @@ fn geo_set_unknown_params_are_rejected() {
         decode_request(&frame),
         Err(wificalling_location_gateway::service::api::ApiErrorCode::MalformedRequest)
     );
+}
+
+#[test]
+fn v2_profile_dispatch_supports_bounded_create_get_update_list_delete() {
+    let mut profiles = InMemoryProfileStore::new();
+    let create = decoded_v2(
+        "profile.create",
+        json!({
+            "profile_id": "phone",
+            "label": "Phone",
+            "assigned_device": "192.168.1.10",
+            "node_ref": "node-a",
+            "node_mode": "fixed",
+            "geo_source": "auto",
+            "enabled": true
+        }),
+    );
+    let created = parse(&dispatch_v2(&create, &mut profiles).unwrap());
+    assert_eq!(created["api_version"], SERVICE_API_V2_ID);
+    assert_eq!(created["result"]["profile_id"], "phone");
+
+    let listed =
+        parse(&dispatch_v2(&decoded_v2("profile.list", json!({})), &mut profiles).unwrap());
+    assert_eq!(listed["result"]["profiles"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["result"]["profiles"][0]["profile_id"], "phone");
+    assert!(listed["result"]["profiles"][0]
+        .get("assigned_device")
+        .is_none());
+
+    let fetched = parse(
+        &dispatch_v2(
+            &decoded_v2("profile.get", json!({"profile_id": "phone"})),
+            &mut profiles,
+        )
+        .unwrap(),
+    );
+    assert_eq!(fetched["result"]["profile"]["label"], "Phone");
+    assert!(fetched["result"]["profile"].get("node_ref").is_none());
+
+    let updated = parse(
+        &dispatch_v2(
+            &decoded_v2(
+                "profile.update",
+                json!({"profile_id": "phone", "label": "Work phone", "enabled": false}),
+            ),
+            &mut profiles,
+        )
+        .unwrap(),
+    );
+    assert_eq!(updated["result"]["profile_id"], "phone");
+    let fetched_after_update = parse(
+        &dispatch_v2(
+            &decoded_v2("profile.get", json!({"profile_id": "phone"})),
+            &mut profiles,
+        )
+        .unwrap(),
+    );
+    assert_eq!(
+        fetched_after_update["result"]["profile"]["label"],
+        "Work phone"
+    );
+    assert_eq!(fetched_after_update["result"]["profile"]["enabled"], false);
+
+    let deleted = parse(
+        &dispatch_v2(
+            &decoded_v2("profile.delete", json!({"profile_id": "phone"})),
+            &mut profiles,
+        )
+        .unwrap(),
+    );
+    assert_eq!(deleted["result"]["profile_id"], "phone");
+    let listed_empty =
+        parse(&dispatch_v2(&decoded_v2("profile.list", json!({})), &mut profiles).unwrap());
+    assert!(listed_empty["result"]["profiles"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn v2_profile_dispatch_maps_unknown_profile_to_v2_error_envelope() {
+    let mut profiles = InMemoryProfileStore::new();
+    let response = parse(
+        &dispatch_v2(
+            &decoded_v2("profile.get", json!({"profile_id": "missing"})),
+            &mut profiles,
+        )
+        .unwrap(),
+    );
+    assert_eq!(response["api_version"], SERVICE_API_V2_ID);
+    assert_eq!(response["error"]["code"], "profile_not_found");
+    assert!(response.get("result").is_none());
 }

@@ -49,6 +49,10 @@ impl ApiV2ErrorCode {
             Self::InvalidParams => "invalid_params",
         }
     }
+
+    pub const fn retryable(self) -> bool {
+        false
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -235,7 +239,7 @@ fn validate_v2_profile_params(params: &WireV2ProfileParams) -> Result<(), ApiV2E
         validate_node_ref(node_ref).map_err(|_| ApiV2ErrorCode::InvalidParams)?;
     }
     if let Some(node_mode) = params.node_mode.as_deref() {
-        if !matches!(node_mode, "fixed" | "gateway_default") {
+        if node_mode != "fixed" {
             return Err(ApiV2ErrorCode::InvalidParams);
         }
     }
@@ -339,6 +343,9 @@ impl ApiRequest {
 /// Parameters for a control-API request. Only `geo.set` consumes them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RequestParams {
+    /// Optional profile selected by the multi-device monitor. Omitted keeps
+    /// the v1 compatibility behavior and targets the deterministic default.
+    pub profile_id: Option<String>,
     /// A place query to geocode (e.g. `London, UK`).
     pub query: Option<String>,
     /// Explicit WGS84 coordinates for a manual preset.
@@ -360,6 +367,8 @@ struct WireRequest {
 #[serde(deny_unknown_fields)]
 struct WireParams {
     #[serde(default)]
+    profile_id: Option<String>,
+    #[serde(default)]
     query: Option<String>,
     #[serde(default)]
     latitude: Option<f64>,
@@ -370,6 +379,7 @@ struct WireParams {
 impl From<WireParams> for RequestParams {
     fn from(wire: WireParams) -> Self {
         Self {
+            profile_id: wire.profile_id,
             query: wire.query,
             latitude: wire.latitude,
             longitude: wire.longitude,
@@ -518,6 +528,24 @@ pub fn encode_v2_result_response(
     encode_versioned_result_response(SERVICE_API_V2_ID, request_id, result)
 }
 
+/// Encode a bounded v2 decoder error response.
+pub fn encode_v2_error_response(
+    request_id: &str,
+    code: ApiV2ErrorCode,
+) -> Result<Vec<u8>, ResponseEncodeError> {
+    encode_v2_error_parts(request_id, code.wire_code(), "service", code.retryable())
+}
+
+/// Encode a bounded v2 runtime error response.
+pub fn encode_v2_error_parts(
+    request_id: &str,
+    code: &str,
+    component: &str,
+    retryable: bool,
+) -> Result<Vec<u8>, ResponseEncodeError> {
+    encode_versioned_error_response(SERVICE_API_V2_ID, request_id, code, component, retryable)
+}
+
 fn encode_versioned_result_response(
     api_version: &str,
     request_id: &str,
@@ -527,6 +555,29 @@ fn encode_versioned_result_response(
         api_version,
         request_id: request_id.to_owned(),
         result: result.clone(),
+    };
+    let bytes = serde_json::to_vec(&response).map_err(|_| ResponseEncodeError::Oversized)?;
+    if bytes.len() > MAX_CONTROL_FRAME_BYTES {
+        return Err(ResponseEncodeError::Oversized);
+    }
+    Ok(bytes)
+}
+
+fn encode_versioned_error_response(
+    api_version: &str,
+    request_id: &str,
+    code: &str,
+    component: &str,
+    retryable: bool,
+) -> Result<Vec<u8>, ResponseEncodeError> {
+    let response = ErrorResponse {
+        api_version,
+        request_id: request_id.to_owned(),
+        error: ErrorBody {
+            code,
+            component,
+            retryable,
+        },
     };
     let bytes = serde_json::to_vec(&response).map_err(|_| ResponseEncodeError::Oversized)?;
     if bytes.len() > MAX_CONTROL_FRAME_BYTES {
