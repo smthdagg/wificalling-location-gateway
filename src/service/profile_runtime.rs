@@ -236,6 +236,17 @@ impl<R: ProfileRuntimeControl> ProfileRuntimeManager<R> {
             );
             return Err(ProfileRuntimeError::CleanupUnsafe);
         }
+        match self.runtime.profile_redirect_present(profile_id) {
+            Ok(true) | Err(_) => {
+                self.set_status(
+                    index,
+                    ProfileRuntimePhase::DegradedPassthrough,
+                    "cleanup_unsafe",
+                );
+                return Err(ProfileRuntimeError::CleanupUnsafe);
+            }
+            Ok(false) => {}
+        }
         self.set_status(
             index,
             ProfileRuntimePhase::DegradedPassthrough,

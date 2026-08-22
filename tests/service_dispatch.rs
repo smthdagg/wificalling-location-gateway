@@ -284,6 +284,166 @@ fn geo_set_with_coordinates_decodes_params() {
     assert_eq!(params.latitude, Some(51.5074));
     assert_eq!(params.longitude, Some(-0.1278));
     assert_eq!(params.query, None);
+    assert_eq!(params.profile_id, None);
+}
+
+struct ProfileAwareDispatch {
+    selected: Option<String>,
+    calls: Vec<&'static str>,
+}
+
+impl ServiceDispatch for ProfileAwareDispatch {
+    fn status(&mut self) -> Result<Value, DispatchError> {
+        Ok(json!({"service_phase": "default"}))
+    }
+
+    fn status_for(&mut self, profile_id: Option<&str>) -> Result<Value, DispatchError> {
+        self.selected = profile_id.map(str::to_owned);
+        self.calls.push("status");
+        Ok(json!({"service_phase": "profile"}))
+    }
+
+    fn enable(&mut self) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn enable_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        self.selected = profile_id.map(str::to_owned);
+        self.calls.push("enable");
+        Ok(())
+    }
+    fn disable(&mut self) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn disable_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        self.selected = profile_id.map(str::to_owned);
+        self.calls.push("disable");
+        Ok(())
+    }
+    fn reload(&mut self) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn reload_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        self.selected = profile_id.map(str::to_owned);
+        self.calls.push("reload");
+        Ok(())
+    }
+    fn set_manual_location(&mut self, _params: &RequestParams) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn clear_manual_location_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        self.selected = profile_id.map(str::to_owned);
+        self.calls.push("geo.clear");
+        Ok(())
+    }
+    fn search_location(&mut self, _query: &str) -> Result<Value, DispatchError> {
+        Ok(json!({"city": "test", "latitude": 1.0, "longitude": 2.0}))
+    }
+    fn search_location_for(
+        &mut self,
+        _query: &str,
+        profile_id: Option<&str>,
+    ) -> Result<Value, DispatchError> {
+        self.selected = profile_id.map(str::to_owned);
+        self.calls.push("geo.search");
+        Ok(json!({"city": "test", "latitude": 1.0, "longitude": 2.0}))
+    }
+    fn refresh_evidence_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        self.selected = profile_id.map(str::to_owned);
+        self.calls.push("refresh");
+        Ok(())
+    }
+}
+
+#[test]
+fn profile_id_is_routed_to_profile_aware_status_handler() {
+    let frame = serde_json::to_vec(&json!({
+        "api_version": SERVICE_API_ID,
+        "request_id": "profile-1",
+        "method": "status.get",
+        "params": {"profile_id": "phone"}
+    }))
+    .unwrap();
+    let request = decode_request(&frame).unwrap();
+    let mut service = ProfileAwareDispatch {
+        selected: None,
+        calls: Vec::new(),
+    };
+    let response = dispatch(&request, &mut service).unwrap();
+    assert_eq!(service.selected.as_deref(), Some("phone"));
+    assert_eq!(parse(&response)["result"]["service_phase"], "profile");
+}
+
+#[test]
+fn profile_id_routes_all_profile_scoped_operations() {
+    let mut service = ProfileAwareDispatch {
+        selected: None,
+        calls: Vec::new(),
+    };
+    for method in [
+        "control.enable",
+        "control.disable",
+        "control.reload",
+        "geo.clear",
+        "geo.search",
+        "control.refresh",
+    ] {
+        let params = if method == "geo.search" {
+            json!({"profile_id": "tablet", "query": "Tokyo"})
+        } else {
+            json!({"profile_id": "tablet"})
+        };
+        let frame = serde_json::to_vec(&json!({
+            "api_version": SERVICE_API_ID,
+            "request_id": "profile-op",
+            "method": method,
+            "params": params
+        }))
+        .unwrap();
+        let request = decode_request(&frame).unwrap();
+        dispatch(&request, &mut service).unwrap();
+        assert_eq!(service.selected.as_deref(), Some("tablet"));
+    }
+    assert_eq!(
+        service.calls,
+        vec![
+            "enable",
+            "disable",
+            "reload",
+            "geo.clear",
+            "geo.search",
+            "refresh"
+        ]
+    );
+}
+
+#[test]
+fn boxed_dispatch_forwards_legacy_and_profile_handlers() {
+    let mut service: Box<dyn ServiceDispatch> = Box::new(ProfileAwareDispatch {
+        selected: None,
+        calls: Vec::new(),
+    });
+    service.activate_profiles();
+    service.status().unwrap();
+    service.status_for(Some("phone")).unwrap();
+    service.enable().unwrap();
+    service.enable_for(Some("phone")).unwrap();
+    service.disable().unwrap();
+    service.disable_for(Some("phone")).unwrap();
+    service.reload().unwrap();
+    service.reload_for(Some("phone")).unwrap();
+    service
+        .set_manual_location(&RequestParams::default())
+        .unwrap();
+    service.clear_manual_location().unwrap();
+    service.clear_manual_location_for(Some("phone")).unwrap();
+    service.search_location("test").unwrap();
+    service.search_location_for("test", Some("phone")).unwrap();
+    service.refresh_periodic();
+    service.refresh_evidence().unwrap();
+    service.refresh_evidence_for(Some("phone")).unwrap();
 }
 
 #[test]

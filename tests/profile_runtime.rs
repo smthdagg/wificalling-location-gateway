@@ -46,6 +46,9 @@ impl ProfileRuntimeControl for FakeRuntime {
     ) -> Result<(), ProfileRuntimeError> {
         self.operations.push(format!("redirect.add:{}", profile.id));
         if self.fail_install_for.as_deref() == Some(profile.id.as_str()) {
+            if self.retain_failed_redirect {
+                self.redirects.push(profile.id.clone());
+            }
             return Err(ProfileRuntimeError::RedirectInstall);
         }
         self.redirects.push(profile.id.clone());

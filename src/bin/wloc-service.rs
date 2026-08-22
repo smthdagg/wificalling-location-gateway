@@ -483,8 +483,16 @@ impl ProfileServiceGroup {
     }
 
     fn default_handler(&mut self) -> Result<&mut BoxedProfileService, DispatchError> {
+        self.handler_for(None)
+    }
+
+    fn handler_for(
+        &mut self,
+        profile_id: Option<&str>,
+    ) -> Result<&mut BoxedProfileService, DispatchError> {
+        let selected = profile_id.unwrap_or(&self.default_profile_id).to_owned();
         self.handlers
-            .get_mut(&self.default_profile_id)
+            .get_mut(&selected)
             .ok_or(DispatchError::InvalidConfig)
     }
 }
@@ -498,28 +506,63 @@ impl ServiceDispatch for ProfileServiceGroup {
         self.default_handler()?.status()
     }
 
+    fn status_for(&mut self, profile_id: Option<&str>) -> Result<serde_json::Value, DispatchError> {
+        self.handler_for(profile_id)?.status()
+    }
+
     fn enable(&mut self) -> Result<(), DispatchError> {
         self.enable_profile(&self.default_profile_id.clone())
+    }
+
+    fn enable_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        let selected = profile_id
+            .map(str::to_owned)
+            .unwrap_or_else(|| self.default_profile_id.clone());
+        self.enable_profile(&selected)
     }
 
     fn disable(&mut self) -> Result<(), DispatchError> {
         self.disable_profile(&self.default_profile_id.clone())
     }
 
+    fn disable_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        let selected = profile_id
+            .map(str::to_owned)
+            .unwrap_or_else(|| self.default_profile_id.clone());
+        self.disable_profile(&selected)
+    }
+
     fn reload(&mut self) -> Result<(), DispatchError> {
         self.default_handler()?.reload()
     }
 
+    fn reload_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        self.handler_for(profile_id)?.reload()
+    }
+
     fn set_manual_location(&mut self, params: &RequestParams) -> Result<(), DispatchError> {
-        self.default_handler()?.set_manual_location(params)
+        self.handler_for(params.profile_id.as_deref())?
+            .set_manual_location(params)
     }
 
     fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
         self.default_handler()?.clear_manual_location()
     }
 
+    fn clear_manual_location_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        self.handler_for(profile_id)?.clear_manual_location()
+    }
+
     fn search_location(&mut self, query: &str) -> Result<serde_json::Value, DispatchError> {
         self.default_handler()?.search_location(query)
+    }
+
+    fn search_location_for(
+        &mut self,
+        query: &str,
+        profile_id: Option<&str>,
+    ) -> Result<serde_json::Value, DispatchError> {
+        self.handler_for(profile_id)?.search_location(query)
     }
 
     fn refresh_periodic(&mut self) {
@@ -530,6 +573,10 @@ impl ServiceDispatch for ProfileServiceGroup {
 
     fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
         self.default_handler()?.refresh_evidence()
+    }
+
+    fn refresh_evidence_for(&mut self, profile_id: Option<&str>) -> Result<(), DispatchError> {
+        self.handler_for(profile_id)?.refresh_evidence()
     }
 }
 
@@ -1113,39 +1160,6 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-/// Read the real Apple WLOC IPs from the nft apple_hosts set. The DNS
-/// hijack forces the devices to connect locally, but the proxy's own
-/// upstream connection must reach the real Apple server - resolving the
-/// hostname through dnsmasq would loop back to this router.
-fn upstream_apple_ips() -> Vec<String> {
-    let output = std::process::Command::new("nft")
-        .args(["list", "set", "inet", "wloc_service", "apple_hosts"])
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-        .unwrap_or_default();
-    let router_ip = lan_router_ip();
-    parse_apple_ips(&output)
-        .into_iter()
-        .filter(|ip| Some(ip.as_str()) != router_ip.as_deref())
-        .collect()
-}
-
-/// The router's own LAN IPv4 (`uci network.lan.ipaddr`), used to filter the
-/// hijacked address out of the upstream Apple IP set on any subnet.
-fn lan_router_ip() -> Option<String> {
-    let output = std::process::Command::new("uci")
-        .args(["-q", "get", "network.lan.ipaddr"])
-        .output()
-        .ok()?;
-    let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if ip.is_empty() {
-        None
-    } else {
-        Some(ip)
-    }
-}
-
 /// The first source IP of the Gateway device policy - the natural follow
 /// target when wloc-service has no assigned device configured.
 fn gateway_first_device_ip() -> Option<String> {
@@ -1162,6 +1176,7 @@ fn gateway_first_device_ip() -> Option<String> {
 }
 
 /// Extract IPv4 addresses from the `nft list set` output (elements line).
+#[cfg(test)]
 fn parse_apple_ips(output: &str) -> Vec<String> {
     output
         .lines()
@@ -1521,6 +1536,11 @@ mod tests {
         );
 
         assert_eq!(group.status().unwrap()["profile"], "mock");
+        assert_eq!(group.status_for(Some("tablet")).unwrap()["profile"], "mock");
+        group.enable_for(Some("tablet")).unwrap();
+        group.disable_for(Some("tablet")).unwrap();
+        group.enable_for(Some("tablet")).unwrap();
+        group.reload_for(Some("tablet")).unwrap();
         group.reload().unwrap();
         group
             .set_manual_location(&RequestParams {
@@ -1530,13 +1550,27 @@ mod tests {
                 longitude: Some(2.0),
             })
             .unwrap();
+        group
+            .set_manual_location(&RequestParams {
+                profile_id: Some("tablet".to_owned()),
+                query: None,
+                latitude: Some(3.0),
+                longitude: Some(4.0),
+            })
+            .unwrap();
         group.clear_manual_location().unwrap();
+        group.clear_manual_location_for(Some("tablet")).unwrap();
         assert_eq!(
             group.search_location("Singapore").unwrap()["query"],
             "Singapore"
         );
+        assert_eq!(
+            group.search_location_for("Tokyo", Some("tablet")).unwrap()["query"],
+            "Tokyo"
+        );
         group.refresh_periodic();
         group.refresh_evidence().unwrap();
+        group.refresh_evidence_for(Some("tablet")).unwrap();
 
         group.disable().unwrap();
         assert!(router.resolve_source("192.168.1.100").is_none());
