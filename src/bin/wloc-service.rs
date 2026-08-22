@@ -199,6 +199,7 @@ fn bind_tproxy_listener(port: u16) -> std::io::Result<tokio::net::TcpListener> {
     socket.bind(&addr.into())?;
     socket.listen(1024)?;
     let std_listener: std::net::TcpListener = socket.into();
+    std_listener.set_nonblocking(true)?;
     tokio::net::TcpListener::from_std(std_listener)
 }
 
