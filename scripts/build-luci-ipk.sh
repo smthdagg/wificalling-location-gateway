@@ -11,11 +11,15 @@ architecture=all
 output_package=$package
 description='Integrated WiFi Calling Gateway and WLOC LuCI service.'
 target=all
-if [ "$dependency_mode" = ax6s-standalone ]; then
+if [ "$dependency_mode" = ax6s-standalone ] || [ "$dependency_mode" = x86_64-full ]; then
 	architecture=aarch64_cortex-a53
 	output_package=wificalling-location-gateway
 	description='Integrated WiFi Calling Gateway and WLOC service with unified LuCI.'
 	target=mediatek/mt7622
+	if [ "$dependency_mode" = x86_64-full ]; then
+		architecture=x86_64
+		target=x86/64
+	fi
 fi
 out="$out_dir/${output_package}_${version}_${architecture}.ipk"
 stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-luci-ipk.XXXXXX")
@@ -65,7 +69,7 @@ case "$dependency_mode" in
 	production)
 		depends='luci-base, rpcd-mod-rpcsys'
 		;;
-	ax6s-existing|ax6s-full|ax6s-standalone)
+	ax6s-existing|ax6s-full|ax6s-standalone|x86_64-full)
 		cp -R "$source_dir/." "$stage/data/"
 		# AX6S keeps the in-repository Gateway module. The package is independent
 		# of the external Gateway 1.7 repository, but Gateway/WLOC are one product.
@@ -134,9 +138,14 @@ with open(path, "w", encoding="utf-8") as handle:
     json.dump(menu, handle, ensure_ascii=False, indent=2)
     handle.write("\n")
 PY
-		if [ "$dependency_mode" = ax6s-full ] || [ "$dependency_mode" = ax6s-standalone ]; then
-			service_bin=${WLOC_SERVICE_BIN:-$out_dir/wloc-service_aarch64-openwrt-linux-musl}
-			ctl_bin=${WLOC_CTL_BIN:-$out_dir/wloc-ctl_aarch64-openwrt-linux-musl}
+		if [ "$dependency_mode" = ax6s-full ] || [ "$dependency_mode" = ax6s-standalone ] || [ "$dependency_mode" = x86_64-full ]; then
+			if [ "$dependency_mode" = x86_64-full ]; then
+				service_bin=${WLOC_SERVICE_BIN:-$out_dir/runtime/x86_64/wloc-service}
+				ctl_bin=${WLOC_CTL_BIN:-$out_dir/runtime/x86_64/wloc-ctl}
+			else
+				service_bin=${WLOC_SERVICE_BIN:-$out_dir/wloc-service_aarch64-openwrt-linux-musl}
+				ctl_bin=${WLOC_CTL_BIN:-$out_dir/wloc-ctl_aarch64-openwrt-linux-musl}
+			fi
 			[ -x "$service_bin" ] || { echo "missing WLOC service binary: $service_bin" >&2; exit 2; }
 			[ -x "$ctl_bin" ] || { echo "missing WLOC control binary: $ctl_bin" >&2; exit 2; }
 			mkdir -p "$stage/data/etc/config" "$stage/data/etc/init.d" "$stage/data/usr/sbin"
