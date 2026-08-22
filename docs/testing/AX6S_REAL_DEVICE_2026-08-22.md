@@ -12,11 +12,11 @@ while remaining independent from the separate Gateway 1.7 repository.
   removed, with modified UCI conffiles and WLOC/CA state backed up on the
   router. PassWall's provider was retained; no duplicate provider binary was
   installed.
-- Package: `wificalling-location-gateway_2.0.0-31_aarch64_cortex-a53.ipk`
+- Package: `wificalling-location-gateway_2.0.0-34_aarch64_cortex-a53.ipk`
 - SHA-256:
 
   ```text
-  1e2e668e32f95c29995f9ac20c54f5ce151311626e708c10e91e0c0a5e5ad357
+  2ea44bed7bd20b97e5958d2b9cc6d6d39437865673241bd713aad6c497eebf91
   ```
 - Startup result: supervisor `intercepting/ready`, `gateway=1`, `wloc=1`,
   `provider=1`, `redirect=1`.
@@ -28,6 +28,9 @@ while remaining independent from the separate Gateway 1.7 repository.
   the WLOC table.
 - Scope result: the inspected ruleset contained no WLOC-owned UDP 500/4500
   interception. The Gateway nftables table remained Gateway-owned.
+- Direct upgrade result: both modified conffiles were preserved, and the
+  updater reported no stale transaction state after the integrated package
+  migration. A legacy WLOC-only rollback package is rejected by the updater.
 - Resource snapshot after restart: 242,260 KiB total memory, 8,004 KiB
   available, 15,680 KiB free on `/overlay`, and 16,824 KiB free in `/tmp`.
   This is a constrained but working AX6S baseline and should remain a release
@@ -193,7 +196,8 @@ directory. Both detached signatures returned exit code 0 with the published
 
 AX6S integrated Gateway + WLOC runtime, remove-first migration, resource,
 provider reuse, fail-open stop, unified restart, package target, UI/PO asset,
-and scoped nftables gates: **pass** for package `2.0.0-31`.
+scoped nftables, and legacy-rollback rejection gates: **pass** for package
+`2.0.0-34`.
 
 The component update/rollback flow remains covered by the host and historical
 AX6S transaction evidence below; it was not repeated during this package-only
