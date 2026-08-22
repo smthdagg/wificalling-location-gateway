@@ -1,5 +1,5 @@
 #!/bin/sh
-# Transactional updater for the standalone WLOC component.
+# Transactional updater for the integrated WiFi Calling Gateway + WLOC product.
 #
 # The package is validated before the first mutation. A known-good package and
 # configuration snapshot are retained until restart and health validation pass;
@@ -64,6 +64,11 @@ cleanup_lock() {
 health_check() {
 	health_report=$($HEALTH 2>/dev/null) || return 1
 	printf '%s\n' "$health_report" | grep -F '"wloc":{"running":1,"socket":1,"status_fresh":1' >/dev/null || return 1
+	case "$health_report" in
+		*'"gateway":{"enabled":1,"running":1,'*) ;;
+		*'"gateway":{"enabled":0,'*) ;;
+		*) return 1 ;;
+	esac
 	printf '%s\n' "$health_report" | grep -F '"provider":{"available":1,"valid":1,"config_present":1,"config_valid":1' >/dev/null || return 1
 	printf '%s\n' "$health_report" | grep -F '"redirect":{"table_present":1,"rules":1}' >/dev/null || return 1
 }
@@ -256,7 +261,7 @@ tar -xOzf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
 }
 
 restore_configs() {
-	for config in wloc-service; do
+	for config in wloc-service wificalling-gateway; do
 		if [ -f "$TXN/config.$config" ]; then
 			mkdir -p "$ROOT/etc/config"
 			cp -p "$TXN/config.$config" "$ROOT/etc/config/$config" || return 1
@@ -352,7 +357,7 @@ apply_update() {
 	printf '%s\n' "$current" > "$TXN/current.version"
 	cp -p "$rollback_package" "$TXN/rollback.ipk"
 	chmod 0600 "$TXN/rollback.ipk"
-	for config in wloc-service; do
+	for config in wloc-service wificalling-gateway; do
 		if [ -f "$ROOT/etc/config/$config" ]; then
 			cp -p "$ROOT/etc/config/$config" "$TXN/config.$config"
 			chmod 0600 "$TXN/config.$config"

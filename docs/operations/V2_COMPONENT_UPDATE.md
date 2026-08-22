@@ -22,10 +22,11 @@ Before `opkg install` is called, the helper validates:
 - a known-good rollback IPK.
 
 The install is never remove-first. The helper takes a persistent transaction
-snapshot of the Gateway/WLOC configuration and the previous package, invokes the
-package manager, restores configuration, restarts the integrated supervisor,
-and runs the bounded health command. Any install, restart, or
-health failure restores the known-good package and configuration. A simulated
+snapshot of both `/etc/config/wificalling-gateway` and
+`/etc/config/wloc-service`, plus the previous package, invokes the package
+manager, restores both configurations, restarts the integrated supervisor, and
+runs the bounded Gateway/WLOC health command. Any install, restart, or health
+failure restores the known-good package and both configurations. A simulated
 power loss or process interruption leaves the transaction marker; the LuCI
 Recover action calls `recover` to complete the rollback.
 
@@ -88,3 +89,8 @@ paths: 2.0.0-17 -> 2.0.0-18 commits only after WLOC, provider, and redirect
 health are all present; a deliberately failing 2.0.0-19 activation restores
 2.0.0-18 and removes the transaction directory. Hard power loss and flash-full
 recovery remain separate hardware tests.
+
+The host rollback contract additionally asserts that a failed integrated update
+restores the Gateway configuration alongside the WLOC configuration. A new
+AX6S signed-transaction run is still required before calling the integrated
+rollback path hardware-accepted.

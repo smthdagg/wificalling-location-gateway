@@ -8,6 +8,7 @@ root="$tmp/root"
 state="$tmp/state"
 mkdir -p "$root/etc/config" "$root/usr/share/wificalling-location-gateway" "$state" "$tmp/bin"
 printf 'old-config\n' > "$root/etc/config/wloc-service"
+printf 'old-gateway-config\n' > "$root/etc/config/wificalling-gateway"
 printf 'old-component\n' > "$root/usr/share/wificalling-location-gateway/component.txt"
 cat > "$root/etc/openwrt_release" <<'EOF'
 DISTRIB_RELEASE='24.10.5'
@@ -48,7 +49,7 @@ cat > "$tmp/bin/health" <<'EOF'
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = fail-always ] && exit 1
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = fail-once ] && { printf 'ok\n' > "$WLOC_UPDATE_HEALTH_STATE"; exit 1; }
 [ "$(cat "$WLOC_UPDATE_HEALTH_STATE")" = ok ] || exit 1
-printf '%s\n' '{"services":{"wloc":{"running":1,"socket":1,"status_fresh":1},"provider":{"available":1,"valid":1,"config_present":1,"config_valid":1},"redirect":{"table_present":1,"rules":1}}}'
+printf '%s\n' '{"services":{"wloc":{"running":1,"socket":1,"status_fresh":1},"gateway":{"enabled":1,"running":1,"phase":"intercepting"},"provider":{"available":1,"valid":1,"config_present":1,"config_valid":1},"redirect":{"table_present":1,"rules":1}}}'
 EOF
 chmod 0755 "$tmp/bin/opkg" "$tmp/bin/supervisor" "$tmp/bin/health"
 cat > "$tmp/bin/usign" <<'EOF'
@@ -78,6 +79,7 @@ X-WLOC-Package-Format: ipk
 EOF
     printf '%s\n' "$component" > "$package_dir/data/usr/share/wificalling-location-gateway/component.txt"
     printf 'new-config\n' > "$package_dir/data/etc/config/wloc-service"
+    printf 'new-gateway-config\n' > "$package_dir/data/etc/config/wificalling-gateway"
     (cd "$package_dir/control" && tar -czf "$package_dir/control.tar.gz" ./control)
     (cd "$package_dir/data" && tar -czf "$package_dir/data.tar.gz" ./etc ./usr)
     (cd "$package_dir" && tar -czf "$out" ./control.tar.gz ./data.tar.gz)
@@ -162,6 +164,7 @@ WLOC_UPDATE_CURRENT_PACKAGE="$old_package" sh "$script" apply "$new_package"
 grep '^install$' "$tmp/opkg.log" >/dev/null
 grep '^new-component$' "$root/usr/share/wificalling-location-gateway/component.txt" >/dev/null
 grep '^old-config$' "$root/etc/config/wloc-service" >/dev/null
+grep '^old-gateway-config$' "$root/etc/config/wificalling-gateway" >/dev/null
 grep '^1.1.0-1$' "$state/current.version" >/dev/null
 
 if sh "$script" apply "$bad_arch_package"; then
@@ -193,6 +196,7 @@ if WLOC_UPDATE_CURRENT_PACKAGE="$new_package" sh "$script" apply "$new_package";
 fi
 grep '^new-component$' "$root/usr/share/wificalling-location-gateway/component.txt" >/dev/null
 grep '^old-config$' "$root/etc/config/wloc-service" >/dev/null
+grep '^old-gateway-config$' "$root/etc/config/wificalling-gateway" >/dev/null
 grep 'rollback_failed' "$state/status.json" >/dev/null
 printf 'ok\n' > "$tmp/health"
 WLOC_UPDATE_CURRENT_PACKAGE="$new_package" sh "$script" recover
