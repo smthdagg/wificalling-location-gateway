@@ -27,6 +27,76 @@ class V2UiContractTests(unittest.TestCase):
                 menu_data,
             )
 
+    def test_navigation_matches_integrated_gateway_wloc_information_architecture(self):
+        expected = [
+            ("WCG Setting", "wificalling-gateway/overview", "Gateway node and device settings"),
+            ("WCG Status & Logs", "wificalling-gateway/status-logs", "Combined WiFi Calling status and activity logs"),
+            ("WLOC Setting", "wificalling-location-gateway/wloc-basic", "Combined WLOC overview and basic settings"),
+            ("WLOC Devices", "wificalling-location-gateway/wloc-devices", "One profile per authorized device"),
+            ("WLOC Status & Logs", "wificalling-location-gateway/wloc-monitor", "WLOC location status and bounded logs"),
+            ("WCG WLOC Service Monitor", "wificalling-location-gateway/wloc-health", "Integrated Gateway and WLOC health"),
+            ("Component Update", "wificalling-location-gateway/wloc-update", "Package update and recovery"),
+            ("Help", "wificalling-location-gateway/faq", "Operating help and recovery guidance"),
+        ]
+        for prefix in (
+            self.root / "openwrt/files",
+            self.root / "openwrt/luci-app-wificalling-location-gateway/files",
+        ):
+            menu = json.loads(
+                (prefix / "usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json").read_text(encoding="utf-8")
+            )
+            entries = [
+                value for key, value in menu.items()
+                if key != "admin/services/wificalling-location-gateway"
+            ]
+            entries.sort(key=lambda value: value["order"])
+            actual = [
+                (entry["title"], entry["action"]["path"], entry["description"])
+                for entry in entries
+            ]
+            self.assertEqual(expected, actual)
+            self.assertNotIn("admin/services/wificalling-location-gateway/overview", menu)
+            self.assertNotIn("admin/services/wificalling-location-gateway/gateway-status", menu)
+            self.assertNotIn("admin/services/wificalling-location-gateway/gateway-events", menu)
+            self.assertNotIn("admin/services/wificalling-location-gateway/basic", menu)
+
+    def test_combined_status_log_and_wloc_setting_pages_have_required_surfaces(self):
+        for prefix in (
+            self.root / "openwrt/files",
+            self.root / "openwrt/luci-app-wificalling-location-gateway/files",
+        ):
+            status_logs = (prefix / "www/luci-static/resources/view/wificalling-gateway/status-logs.js").read_text(encoding="utf-8")
+            setting = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-basic.js").read_text(encoding="utf-8")
+            for required in ("status.json", "events.log", "Wi-Fi Calling status", "Encrypted IMS activity log"):
+                self.assertIn(required, status_logs)
+            for required in (
+                "cert_info",
+                "regen_ca",
+                "verify_fingerprint",
+                "issued_at",
+                "expires_at",
+                "fingerprint",
+                "wloc-ca.mobileconfig",
+                "Install steps",
+            ):
+                self.assertIn(required, setting)
+
+    def test_component_update_explains_manual_cli_recovery(self):
+        for prefix in (
+            self.root / "openwrt/files",
+            self.root / "openwrt/luci-app-wificalling-location-gateway/files",
+        ):
+            source = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-update.js").read_text(encoding="utf-8")
+            for required in (
+                "Manual upgrade",
+                "/usr/sbin/wloc-component-update.sh preflight",
+                "/usr/sbin/wloc-component-update.sh apply",
+                "opkg",
+                "wificalling-location-gateway",
+                "Do not install a WLOC-only package",
+            ):
+                self.assertIn(required, source)
+
     def test_profile_page_sources_parse_as_javascript(self):
         for relative in (
             "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-devices.js",

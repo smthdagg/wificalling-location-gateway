@@ -64,7 +64,8 @@ class V2DiagnosticsContractTests(unittest.TestCase):
             "scripts/openwrt/build-release-packages.sh",
         ):
             source = (self.root / relative).read_text(encoding="utf-8")
-            self.assertIn("rm -f /var/lib/wificalling-location-gateway/update/status.json", source)
+            self.assertIn("update_state=/var/lib/wificalling-location-gateway/update", source)
+            self.assertIn("status.json", source)
 
     def test_component_update_is_installed_and_exposed_with_minimum_acl(self):
         makefile = (self.root / "openwrt/Makefile").read_text(encoding="utf-8")
