@@ -309,9 +309,7 @@ async fn upstream_connect_failure_is_reported_to_proxy_health() {
         proxy.handle_connection(stream, Some(&target)).await
     });
 
-    let client_tcp = TcpStream::connect(("127.0.0.1", proxy_port))
-        .await
-        .unwrap();
+    let client_tcp = TcpStream::connect(("127.0.0.1", proxy_port)).await.unwrap();
     let connector = TlsConnector::from(Arc::new(client_config(&mitm_ca)));
     let server_name = rustls::pki_types::ServerName::try_from("gs-loc.apple.com").unwrap();
     let client_tls = connector.connect(server_name, client_tcp).await.unwrap();
@@ -331,7 +329,10 @@ async fn upstream_connect_failure_is_reported_to_proxy_health() {
         .body(())
         .unwrap();
     let (response_future, _send) = send_request.send_request(request, true).unwrap();
-    assert!(response_future.await.is_err(), "the client connection must close");
+    assert!(
+        response_future.await.is_err(),
+        "the client connection must close"
+    );
 
     let result = tokio::time::timeout(std::time::Duration::from_secs(2), handler)
         .await
