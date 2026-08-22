@@ -134,7 +134,7 @@ impl MitmProxy {
                 }
                 Err(error) => {
                     eprintln!("wloc proxy: upstream failure: {error}");
-                    break;
+                    return Err(error);
                 }
             }
         }
