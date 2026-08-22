@@ -1,9 +1,41 @@
-# AX6S V2 real-device evidence (redacted)
+# AX6S V2 integrated real-device evidence (redacted)
 
 This is the redacted final AX6S evidence record. It contains no credentials,
 MAC/IP addresses, node names, CA material, raw traffic, or precise locations.
-The tested product is the standalone WLOC service; no Wi-Fi Calling Gateway
-package, UCI file, init script, or runtime dependency was installed.
+The current acceptance run tests the independent integrated product: the
+repository package contains both the WiFi Calling Gateway and WLOC modules,
+while remaining independent from the separate Gateway 1.7 repository.
+
+## Current integrated acceptance run
+
+- Before testing, the previously installed WLOC package was stopped and
+  removed, with modified UCI conffiles and WLOC/CA state backed up on the
+  router. PassWall's provider was retained; no duplicate provider binary was
+  installed.
+- Package: `wificalling-location-gateway_2.0.0-31_aarch64_cortex-a53.ipk`
+- SHA-256:
+
+  ```text
+  1e2e668e32f95c29995f9ac20c54f5ce151311626e708c10e91e0c0a5e5ad357
+  ```
+- Startup result: supervisor `intercepting/ready`, `gateway=1`, `wloc=1`,
+  `provider=1`, `redirect=1`.
+- Health result: Gateway and WLOC both running; provider configuration valid;
+  WLOC socket and redirect table/rule present; no WLOC error reported.
+- Stop result: unified stop removed the WLOC table and Gateway table, stopped
+  the in-repository Gateway monitor/sing-box and WLOC service, and left the
+  PassWall-owned provider process running. Restart restored both services and
+  the WLOC table.
+- Scope result: the inspected ruleset contained no WLOC-owned UDP 500/4500
+  interception. The Gateway nftables table remained Gateway-owned.
+- Resource snapshot after restart: 242,260 KiB total memory, 8,004 KiB
+  available, 15,680 KiB free on `/overlay`, and 16,824 KiB free in `/tmp`.
+  This is a constrained but working AX6S baseline and should remain a release
+  gate for package growth.
+
+The remaining sections retain the earlier WLOC-only baseline and regression
+evidence where useful; their historical package hashes are not the current
+integrated release acceptance hash.
 
 ## Platform and migration
 
@@ -17,7 +49,7 @@ package, UCI file, init script, or runtime dependency was installed.
   the package candidate beside it as `.opkg`.
 - Provider packages: system sing-box and PassWall were retained; no second
   full-size sing-box binary was installed.
-- Tested standalone package family: `wificalling-location-gateway`,
+- Historical standalone package family: `wificalling-location-gateway`,
   `aarch64_cortex-a53`, firmware target `mediatek/mt7622`. Transactional update
   evidence used 2.0.0-17 -> 2.0.0-18 and an injected health-failure target
   2.0.0-19 -> automatic rollback to 2.0.0-18. The final rebuilt package
@@ -157,11 +189,15 @@ The locally prepared V2 feed index was copied to a temporary AX6S verification
 directory. Both detached signatures returned exit code 0 with the published
 `wloc.pub`; no opkg source or installed package was changed by this check.
 
-## Acceptance status
+## Current acceptance status
 
-AX6S standalone runtime, migration, resource, provider, reboot, fail-open,
-mobileconfig, UI/PO asset, release-candidate installation, and transactional
-health-rollback gates: **pass**.
+AX6S integrated Gateway + WLOC runtime, remove-first migration, resource,
+provider reuse, fail-open stop, unified restart, package target, UI/PO asset,
+and scoped nftables gates: **pass** for package `2.0.0-31`.
+
+The component update/rollback flow remains covered by the host and historical
+AX6S transaction evidence below; it was not repeated during this package-only
+runtime rerun.
 
 The real-device WLOC client traffic path was not exercised because no test
 device/fixture was supplied during this run. That is a separate functional

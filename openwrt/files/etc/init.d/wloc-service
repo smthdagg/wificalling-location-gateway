@@ -17,7 +17,7 @@ start_service() {
 	mkdir -p "$SOCKET_DIR" /etc/wloc-service
 	chmod 0700 "$SOCKET_DIR"
 	SINGBOX_BIN=$("$SINGBOX_RUNTIME_HELPER" path 2>/dev/null) || SINGBOX_BIN=
-	SINGBOX_CONFIG=$(uci -q get wloc-service.main.singbox_config 2>/dev/null || true)
+	SINGBOX_CONFIG=${WLOC_SINGBOX_CONFIG:-$(uci -q get wloc-service.main.singbox_config 2>/dev/null || true)}
 	[ -n "$SINGBOX_CONFIG" ] || SINGBOX_CONFIG=/var/run/wloc-service/sing-box.json
 
 	procd_open_instance

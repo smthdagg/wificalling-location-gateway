@@ -116,7 +116,8 @@ run_case() {
 			"/packages/${package_path##*/}" >/dev/null
 	fi
 
-	# Exercise the shipped standalone lifecycle. The legacy wloc-service init
+	# Exercise the shipped integrated Gateway/WLOC lifecycle. The legacy
+	# wloc-service init
 	# facade must not be the matrix's primary startup path.
 	docker exec "$container" /etc/init.d/wificalling-location-gateway enable
 	docker exec "$container" /etc/init.d/wificalling-location-gateway restart

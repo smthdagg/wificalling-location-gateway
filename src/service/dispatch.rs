@@ -560,6 +560,10 @@ pub trait ServiceDispatch {
     fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
         Ok(())
     }
+    fn refresh_profile(&mut self, profile_id: &str) -> Result<(), DispatchError> {
+        let _ = profile_id;
+        self.refresh_evidence()
+    }
 }
 
 impl ServiceDispatch for Box<dyn ServiceDispatch> {
@@ -601,6 +605,10 @@ impl ServiceDispatch for Box<dyn ServiceDispatch> {
 
     fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
         (**self).refresh_evidence()
+    }
+
+    fn refresh_profile(&mut self, profile_id: &str) -> Result<(), DispatchError> {
+        (**self).refresh_profile(profile_id)
     }
 }
 
@@ -650,10 +658,16 @@ pub fn dispatch(
             }
             _ => encode_dispatch_error(request_id, DispatchError::InvalidLocation),
         },
-        ApiMethod::Refresh => match service.refresh_evidence() {
-            Ok(()) => empty(),
-            Err(error) => encode_dispatch_error(request_id, error),
-        },
+        ApiMethod::Refresh => {
+            let result = match request.params().profile_id.as_deref() {
+                Some(profile_id) => service.refresh_profile(profile_id),
+                None => service.refresh_evidence(),
+            };
+            match result {
+                Ok(()) => empty(),
+                Err(error) => encode_dispatch_error(request_id, error),
+            }
+        }
     }
 }
 

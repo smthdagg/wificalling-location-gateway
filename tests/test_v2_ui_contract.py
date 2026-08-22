@@ -130,7 +130,7 @@ class V2UiContractTests(unittest.TestCase):
             self.assertIn("method: 'restart_unified'", health)
             self.assertNotIn("restart_gateway", health)
 
-    def test_current_payload_has_standalone_translation_and_profile_export_contract(self):
+    def test_current_payload_has_integrated_translation_and_profile_export_contract(self):
         i18n_sources = []
         mobileconfig_sources = []
         for prefix in (
@@ -145,7 +145,7 @@ class V2UiContractTests(unittest.TestCase):
             mobileconfig_sources.append(mobileconfig_text)
             for stale in ("Wi-Fi Calling Settings", "Wi-Fi Calling status", "wfc settings", "wfc monitor", "restart the gateway"):
                 self.assertNotIn(stale, i18n_text)
-            self.assertIn("standalone WLOC location", mobileconfig_text)
+            self.assertIn("integrated WiFi Calling + WLOC service", mobileconfig_text)
             self.assertIn("CA_B64=$(mktemp /tmp/wloc-ca.XXXXXX)", mobileconfig_text)
             self.assertNotIn("/tmp/wloc-ca.b64", mobileconfig_text)
         self.assertEqual(i18n_sources[0], i18n_sources[1])

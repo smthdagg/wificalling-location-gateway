@@ -52,6 +52,8 @@ list)
 	json_close_object
 	json_add_object restart_service
 	json_close_object
+	json_add_object restart_gateway
+	json_close_object
 	json_add_object restart_unified
 	json_close_object
 	json_add_object clear_log
@@ -72,6 +74,8 @@ list)
 	json_close_object
 	json_add_object provider_test
 	json_close_object
+	json_add_object node_test
+	json_close_object
 	json_dump
 	json_cleanup
 	;;
@@ -84,10 +88,15 @@ call)
 		json_get_var query query
 		json_get_var lat lat
 		json_get_var lon lon
+		json_get_var profile_id profile_id
 
 		case "$method" in
 		status|disable|reload|geo-clear|refresh)
-			out="$("$CTL" "$method" 2>&1)"
+			if [ -n "$profile_id" ] && [ "$profile_id" != "null" ]; then
+				out="$("$CTL" "$method" --profile "$profile_id" 2>&1)"
+			else
+				out="$("$CTL" "$method" 2>&1)"
+			fi
 			;;
 		enable)
 			ctl_live enable
@@ -228,6 +237,15 @@ call)
 		echo '{"error":"unified WLOC restart failed"}'
 		exit 1
 		;;
+	restart_gateway)
+		if /etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1; then
+			sleep 2
+			echo '{"ok":true}'
+			exit 0
+		fi
+		echo '{"error":"unified Gateway/WLOC restart failed"}'
+		exit 1
+		;;
 	restart_unified)
 		if /etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1; then
 			sleep 2
@@ -279,6 +297,21 @@ call)
 			echo '{"state":"failed","reason":"provider_unavailable"}'
 		fi
 		exit 0
+		;;
+	node_test)
+		read -r input
+		json_load "$input"
+		json_get_var id id
+		if [ -z "$id" ] || [ "$id" = "null" ]; then
+			echo '{"state":"failed","reason":"no_node_id"}'
+			exit 0
+		fi
+		[ -x /usr/libexec/wificalling-gateway/node-test.sh ] || {
+			echo '{"state":"failed","reason":"no_test_helper"}'
+			exit 0
+		}
+		/usr/libexec/wificalling-gateway/node-test.sh "$id"
+		exit $?
 		;;
 	update_status)
 		[ -x "$UPDATE" ] || { echo '{"error":"component update helper is not installed"}'; exit 1; }

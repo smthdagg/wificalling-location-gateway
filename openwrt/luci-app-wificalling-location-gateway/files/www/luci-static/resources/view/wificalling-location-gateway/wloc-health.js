@@ -50,6 +50,7 @@ return view.extend({
 	render: function(data) {
 		wlocI18n.localizeTabs();
 		var health = data || {};
+		var gatewayBody = E('div', {}, []);
 		var wlocBody = E('div', {}, []);
 		var providerBody = E('div', {}, []);
 		var redirectBody = E('div', {}, []);
@@ -57,9 +58,16 @@ return view.extend({
 
 		function renderHealth(h) {
 			var services = h.services || {};
+			var gateway = services.gateway || {};
 			var wloc = services.wloc || {};
 			var provider = services.provider || {};
 			var redirect = services.redirect || {};
+			renderRows(gatewayBody, [
+				[wlocI18n.t('Enabled'), yesNo(gateway.enabled)],
+				[wlocI18n.t('Gateway daemon'), dot(!!gateway.running, gateway.running ? wlocI18n.t('Running') : wlocI18n.t('Stopped'))],
+				[wlocI18n.t('Gateway phase'), gateway.phase || '-'],
+				[wlocI18n.t('Gateway reason'), gateway.reason || '-']
+			]);
 			renderRows(wlocBody, [
 				[wlocI18n.t('Daemon'), dot(!!wloc.running, wloc.running ? wlocI18n.t('Running') : wlocI18n.t('Stopped'))],
 				[wlocI18n.t('Control socket'), yesNo(wloc.socket)],
@@ -113,7 +121,8 @@ return view.extend({
 
 		return E([], [
 			E('h2', {}, wlocI18n.t('WLOC Service Status')),
-			E('p', {}, wlocI18n.t('This page reports the standalone WLOC lifecycle, provider, redirect rules, and device profiles. Component updates are managed on the separate Component Update page.')),
+			E('p', {}, wlocI18n.t('This page reports the integrated Gateway/WLOC lifecycle, provider, redirect rules, and device profiles. Component updates are managed on the separate Component Update page.')),
+			E('div', { class: 'cbi-section' }, [E('h3', {}, wlocI18n.t('WiFi Calling Gateway')), gatewayBody]),
 			E('div', { class: 'cbi-section' }, [E('h3', {}, wlocI18n.t('WLOC service')), wlocBody]),
 			E('div', { class: 'cbi-section' }, [E('h3', {}, wlocI18n.t('Provider')), providerBody]),
 			E('div', { class: 'cbi-section' }, [E('h3', {}, wlocI18n.t('Redirect')), redirectBody]),
@@ -126,4 +135,3 @@ return view.extend({
 		]);
 	}
 });
-

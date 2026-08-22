@@ -1,7 +1,9 @@
-# WLOC Location Service
+# WiFi Calling + WLOC Gateway
 
-Standalone Apple WLOC location service for OpenWrt / ImmortalWrt. This project
-does not depend on, vendor, install, or manage Wi-Fi Calling Gateway.
+Integrated WiFi Calling Gateway and Apple WLOC location service for OpenWrt /
+ImmortalWrt. This repository is independent of the separate upstream Wi-Fi
+Calling Gateway 1.7 repository, but includes and manages its own Gateway and
+WLOC components as one product.
 
 [English guide](docs/WLOC_TUTORIAL_EN.md) · [中文指南](docs/WLOC_TUTORIAL_ZH.md) ·
 [Development and test plan](DEVELOPMENT_TEST_PLAN.md) ·
@@ -9,9 +11,11 @@ does not depend on, vendor, install, or manage Wi-Fi Calling Gateway.
 
 ## Scope
 
-The service provides:
+The product provides:
 
-- one standalone WLOC lifecycle supervisor and one root-only control socket;
+- one unified Gateway/WLOC lifecycle supervisor and root-only control plane;
+- the WiFi Calling Gateway node, DHCP, firewall, monitoring, and PassWall /
+  sing-box integration;
 - one independent UCI model at /etc/config/wloc-service;
 - one profile per authorized LAN device;
 - one explicit WLOC node reference per profile;
@@ -19,8 +23,8 @@ The service provides:
   same profile;
 - provider reuse through sing-box tiny/lite or an existing PassWall sing-box
   executable, without copying a second full binary;
-- unified Overview, Basic Settings, Devices, Logs & Monitoring, Service Status,
-  Component Update, and Help pages;
+- unified Gateway/WLOC Overview, Basic Settings, Devices, Logs & Monitoring,
+  Service Status, Component Update, and Help pages;
 - bounded, redacted logs and transactional signed component updates.
 
 Unknown protocol, invalid Geo data, provider failure, or service failure is
@@ -79,6 +83,6 @@ manifest before an update.
 
 ## Product boundary
 
-The historical Wi-Fi Calling integration documents and adapter code are not
-part of V2. ADR 0003 is authoritative:
-[standalone product boundary](docs/adr/0003-standalone-wloc-product-boundary.md).
+The current boundary is defined by [ADR 0004](docs/adr/0004-integrated-gateway-wloc-product-boundary.md):
+this repository is independent from the separate Gateway 1.7 repository, while
+including and managing its own WiFi Calling Gateway and WLOC modules.

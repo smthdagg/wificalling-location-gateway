@@ -343,6 +343,9 @@ impl ApiRequest {
 /// Parameters for a control-API request. Only `geo.set` consumes them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RequestParams {
+    /// Optional profile selected by the multi-device monitor. Omitted keeps
+    /// the v1 compatibility behavior and targets the deterministic default.
+    pub profile_id: Option<String>,
     /// A place query to geocode (e.g. `London, UK`).
     pub query: Option<String>,
     /// Explicit WGS84 coordinates for a manual preset.
@@ -364,6 +367,8 @@ struct WireRequest {
 #[serde(deny_unknown_fields)]
 struct WireParams {
     #[serde(default)]
+    profile_id: Option<String>,
+    #[serde(default)]
     query: Option<String>,
     #[serde(default)]
     latitude: Option<f64>,
@@ -374,6 +379,7 @@ struct WireParams {
 impl From<WireParams> for RequestParams {
     fn from(wire: WireParams) -> Self {
         Self {
+            profile_id: wire.profile_id,
             query: wire.query,
             latitude: wire.latitude,
             longitude: wire.longitude,

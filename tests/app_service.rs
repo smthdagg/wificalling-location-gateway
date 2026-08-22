@@ -110,6 +110,7 @@ fn manual_mode_fills_place_info_after_background_lookup() {
     .with_state_files(status_path.clone(), dir.join("wloc-test-fill-events.jsonl"));
 
     let params = RequestParams {
+        profile_id: None,
         query: None,
         latitude: Some(22.3193),
         longitude: Some(114.1694),
@@ -161,6 +162,7 @@ fn stale_lookup_result_is_discarded_after_coordinate_change() {
     );
 
     let set_a = RequestParams {
+        profile_id: None,
         query: None,
         latitude: Some(22.3193),
         longitude: Some(114.1694),
@@ -169,6 +171,7 @@ fn stale_lookup_result_is_discarded_after_coordinate_change() {
     let generation_a = service.manual_geo_generation();
 
     let set_b = RequestParams {
+        profile_id: None,
         query: None,
         latitude: Some(51.5074),
         longitude: Some(-0.1278),
@@ -209,6 +212,7 @@ fn failed_lookup_keeps_coordinates_without_place_info() {
     )
     .with_state_files(status_path.clone(), dir.join("wloc-test-fail-events.jsonl"));
     let params = RequestParams {
+        profile_id: None,
         query: None,
         latitude: Some(22.3193),
         longitude: Some(114.1694),
@@ -547,6 +551,32 @@ fn fresh_evidence_is_cached_and_stale_evidence_refreshes() {
 }
 
 #[test]
+fn failed_probe_withdraws_the_previous_patch_target() {
+    let now = 1_000_000;
+    let sink = Arc::new(Mutex::new(None));
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        SequenceProbe {
+            results: vec![Ok(EXIT_A), Err(ProbeFailure::Unreachable)],
+            index: 0,
+        },
+        SequenceGeo {
+            results: vec![Ok(Some((EXIT_A, record(now, 37.77, -122.41))))],
+            index: 0,
+        },
+    )
+    .with_patch_sink(Arc::clone(&sink));
+
+    service.status_at(now).unwrap();
+    assert!(sink.lock().unwrap().is_some());
+    service.status_at(now + 61).unwrap();
+    assert!(sink.lock().unwrap().is_none());
+}
+
+#[test]
 fn control_refresh_forces_an_immediate_reprobe_of_fresh_evidence() {
     // Regression: switching the followed device's node in the Gateway
     // settings must be reflected in the exit IP without waiting for the
@@ -736,6 +766,7 @@ fn manual_location_overrides_auto_patch_target() {
 
     // Set a manual preset by explicit coordinates; the sink now publishes it.
     let params = RequestParams {
+        profile_id: None,
         query: None,
         latitude: Some(51.5074),
         longitude: Some(-0.1278),
@@ -764,6 +795,7 @@ fn invalid_manual_location_is_rejected() {
     );
     // Latitude out of range must be rejected.
     let bad = RequestParams {
+        profile_id: None,
         query: None,
         latitude: Some(95.0),
         longitude: Some(0.0),
@@ -774,6 +806,7 @@ fn invalid_manual_location_is_rejected() {
     );
     // Neither a query nor coordinates is invalid.
     let empty = RequestParams {
+        profile_id: None,
         query: None,
         latitude: None,
         longitude: None,
@@ -806,6 +839,7 @@ fn status_file_and_target_events_are_written() {
     service.status_at(now).unwrap();
     // Manual location publishes a target_updated event.
     let params = RequestParams {
+        profile_id: None,
         query: None,
         latitude: Some(51.5074),
         longitude: Some(-0.1278),

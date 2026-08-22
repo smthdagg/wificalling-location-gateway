@@ -83,7 +83,7 @@ uuid2=$(cat /proc/sys/kernel/random/uuid)
     printf '%s\n' '    </dict>'
     printf '%s\n' '  </array>'
     printf '%s\n' '  <key>PayloadDescription</key>'
-    printf '%s\n' '  <string>Install the wloc-service root CA for standalone WLOC location</string>'
+    printf '%s\n' '  <string>Install the WLOC root CA for the integrated WiFi Calling + WLOC service</string>'
     printf '%s\n' '  <key>PayloadDisplayName</key>'
     printf '%s\n' '  <string>wloc-service root CA</string>'
     printf '%s\n' '  <key>PayloadIdentifier</key>'

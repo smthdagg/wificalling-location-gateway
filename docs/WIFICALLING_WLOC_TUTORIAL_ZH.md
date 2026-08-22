@@ -1,10 +1,8 @@
-> 历史文档，仅供参考。V2 是独立 WLOC 项目，请使用 [WLOC_TUTORIAL_ZH.md](WLOC_TUTORIAL_ZH.md)。
+# Wi‑Fi Calling + WLOC 一体化产品教程
 
-# 历史 Wi‑Fi Calling & WLOC 教程
-
-> 历史文档：本文描述早期 Gateway/WLOC 合并实验，仅作为历史记录保留，不是 v2 产品使用指南。当前项目是独立的 WLOC 服务，不应安装、配置或依据独立的 Wi‑Fi Calling Gateway 项目进行验证。当前流程请参阅 [`docs/WLOC_TUTORIAL_ZH.md`](WLOC_TUTORIAL_ZH.md)。
-
-本文适用于早期的 Wi‑Fi Calling Gateway 1.7 与路由器端 WLOC 合并实验。
+本文适用于当前独立仓库产品：本项目包含并管理自己的 Wi‑Fi Calling
+Gateway 与 WLOC 模块，但不安装或依赖外部 Gateway 1.7 仓库。简明流程请
+同时参阅 [`docs/WLOC_TUTORIAL_EN.md`](WLOC_TUTORIAL_EN.md)。
 
 [English tutorial](WIFICALLING_WLOC_TUTORIAL_EN.md)
 

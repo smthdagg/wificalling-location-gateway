@@ -1,17 +1,18 @@
 # V2 sing-box runtime provider
 
-V2 does not install a second full-size sing-box binary. The standalone WLOC
-supervisor resolves one executable from the following order:
+V2 does not install a second full-size sing-box binary. The integrated
+Gateway/WLOC supervisor resolves one executable from the following order:
 
 1. `WLOC_SINGBOX_BIN` supplied by the service lifecycle;
-2. `wloc-service.main.singbox_bin` in the standalone WLOC UCI section;
+2. `wloc-service.main.singbox_bin` in the WLOC UCI section;
 3. the first usable system provider: `sing-box-tiny`, `sing-box-lite`, a
    PassWall sing-box path, then the normal `/usr/bin/sing-box` fallback.
 
 “Usable” means an absolute executable path that successfully answers
-`version`. The selected binary is started and supervised only for standalone
-WLOC. Reusing the binary does not attach to or alter a PassWall-owned process
-or configuration.
+`version`. The selected binary is started and supervised by the integrated
+Gateway/WLOC lifecycle. When Gateway is enabled, WLOC reuses the Gateway
+generated configuration. Reusing a PassWall binary does not attach to or alter
+a PassWall-owned process or configuration.
 
 ## AX6S acceptance
 

@@ -42,7 +42,7 @@ var refreshingIp = false;
 var callCtl = rpc.declare({
 	object: 'luci.wloc',
 	method: 'ctl',
-	params: [ 'method', 'query', 'lat', 'lon' ]
+	params: [ 'method', 'query', 'lat', 'lon', 'profile_id' ]
 });
 
 function fmtTime(unix) {
@@ -112,7 +112,7 @@ return view.extend({
 					if (refreshingIp) return;
 					refreshingIp = true;
 					renderGeo(status);
-					callCtl('refresh', null, null, null).then(function() {
+					callCtl('refresh', null, null, null, selectedProfile).then(function() {
 						// The daemon re-probes and rewrites status.json
 						// before replying; read it once so the rows update
 						// immediately instead of on the next poll tick.

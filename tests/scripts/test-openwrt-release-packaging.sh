@@ -11,6 +11,8 @@ trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 [ -x "$builder" ] && [ -x "$matrix" ] && [ -x "$runtime_builder" ]
 grep -F 'external application UCI or package' "$builder" >/dev/null
 grep -F 'wloc-service' "$builder" >/dev/null
+grep -F 'wificalling-gateway' "$builder" >/dev/null
+grep -F 'wificalling-gateway/overview' "$repo_root/openwrt/files/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json" >/dev/null
 grep -F -- '--ax6s-package' "$builder" >/dev/null
 grep -F 'expected three integrated packages' "$builder" >/dev/null
 grep -F 'X-WLOC-Product' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null
@@ -64,4 +66,4 @@ printf '%s
 runtime_plan=$("$runtime_builder" --plan --out-dir "$tmp")
 printf '%s
 ' "$runtime_plan" | grep -F 'x86_64-unknown-linux-musl' >/dev/null
-echo 'standalone release packaging tests passed'
+echo 'integrated Gateway/WLOC release packaging tests passed'

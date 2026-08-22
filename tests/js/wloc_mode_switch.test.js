@@ -10,6 +10,6 @@ for (const prefix of ['openwrt/files', 'openwrt/luci-app-wificalling-location-ga
   assert(rpc.includes('mode-set'), prefix + ': runtime mode control must remain available');
   assert(devices.includes("['auto', wlocI18n.t('Auto follow selected node')]"), prefix + ': auto mode must be explicit');
   assert(devices.includes("['manual', wlocI18n.t('Manual location')]"), prefix + ': manual mode must be explicit');
-  assert(!rpc.includes('wificalling-gateway/node-test.sh'), prefix + ': runtime must not call Gateway helpers');
+  assert(rpc.includes('node_test'), prefix + ': integrated runtime must expose Gateway node diagnostics');
 }
-console.log('standalone WLOC device location mode contract passed');
+console.log('integrated WLOC device location mode contract passed');

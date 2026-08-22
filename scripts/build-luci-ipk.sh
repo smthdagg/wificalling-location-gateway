@@ -9,12 +9,12 @@ source_dir="$root/openwrt/$package/files"
 out_dir="$root/dist"
 architecture=all
 output_package=$package
-description='Standalone LuCI UI for the WLOC location service.'
+description='Integrated WiFi Calling Gateway and WLOC LuCI service.'
 target=all
 if [ "$dependency_mode" = ax6s-standalone ]; then
 	architecture=aarch64_cortex-a53
 	output_package=wificalling-location-gateway
-	description='Standalone WLOC location service with unified LuCI.'
+	description='Integrated WiFi Calling Gateway and WLOC service with unified LuCI.'
 	target=mediatek/mt7622
 fi
 out="$out_dir/${output_package}_${version}_${architecture}.ipk"
@@ -67,11 +67,10 @@ case "$dependency_mode" in
 		;;
 	ax6s-existing|ax6s-full|ax6s-standalone)
 		cp -R "$source_dir/." "$stage/data/"
-		rm -rf "$stage/data/usr/libexec/wificalling-gateway" \
-			"$stage/data/www/luci-static/resources/view/wificalling-gateway" \
-			"$stage/data/www/luci-static/resources/wificalling-gateway"
+		# AX6S keeps the in-repository Gateway module. The package is independent
+		# of the external Gateway 1.7 repository, but Gateway/WLOC are one product.
 		depends='luci-base, rpcd-mod-rpcsys, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full'
-		provides='wloc-service'
+		provides='wloc-service, wificalling-gateway'
 		replaces='luci-app-wificalling-location-gateway, wloc-service'
 		view_suffix=$(printf '%s' "$version" | tr '.-' '__')
 		basic_name="wloc_basic_fix_$view_suffix"
@@ -155,7 +154,7 @@ PY
 			cp "$service_bin" "$stage/data/usr/sbin/wloc-service"
 			cp "$ctl_bin" "$stage/data/usr/sbin/wloc-ctl"
 			chmod 0755 "$stage/data/etc/init.d/wloc-service" "$stage/data/usr/sbin/"*
-			printf '%s\n' '/etc/config/wloc-service' > "$stage/control/conffiles"
+			printf '%s\n' '/etc/config/wloc-service' '/etc/config/wificalling-gateway' > "$stage/control/conffiles"
 			cat > "$stage/control/postinst" <<'POSTINST'
 #!/bin/sh
 [ -n "${IPKG_INSTROOT:-}" ] && exit 0
@@ -164,6 +163,8 @@ PY
 rm -f /var/lib/wificalling-location-gateway/update/status.json
 /etc/init.d/wloc-service disable >/dev/null 2>&1 || true
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway disable >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-location-gateway enable >/dev/null 2>&1 || true
 if [ -x /usr/libexec/wificalling-location-gateway/singbox-runtime.sh ]; then
   /usr/libexec/wificalling-location-gateway/singbox-runtime.sh path >/dev/null 2>&1 || echo "wificalling-location-gateway: install sing-box tiny/lite or a PassWall sing-box provider" >&2
@@ -177,7 +178,7 @@ POSTINST
 		fi
 		if [ "$dependency_mode" = ax6s-existing ]; then
 			# The legacy AX6S mode reuses an already-installed WLOC binary,
-			# while exposing the same standalone V2 lifecycle helpers.
+			# while exposing the integrated Gateway/WLOC lifecycle helpers.
 			mkdir -p "$stage/data/usr/sbin" "$stage/data/etc/init.d" \
 				"$stage/data/usr/libexec/wificalling-location-gateway"
 			for helper in wloc-health.sh wloc-support-bundle.sh wloc-component-update.sh \

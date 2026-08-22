@@ -2,10 +2,12 @@
 
 ## Mission
 
-Build `wificalling-location-gateway` as an independent, fail-open OpenWrt WLOC
-component. This repository must not depend on, vendor, bundle, or manage the
-separate Wi-Fi Calling Gateway project. Historical Gateway adapter code is
-migration debt and is not a product dependency.
+Build `wificalling-location-gateway` as an independent, fail-open OpenWrt
+product containing both the Wi-Fi Calling Gateway and WLOC components. The
+repository must not depend on, vendor, or modify the separate upstream Wi-Fi
+Calling Gateway 1.7 repository. Its in-repository Gateway and WLOC modules
+share one lifecycle, LuCI management surface, logs, monitoring, update path,
+and rollback model.
 
 ## Source of truth
 
@@ -23,7 +25,7 @@ migration debt and is not a product dependency.
 | `role:network` | `internal/exitprobe/`, `internal/georesolver/`, `openwrt/` | Exit probing, Geo resolution, nftables/dnsmasq/procd |
 | `role:security` | `SECURITY.md`, `docs/security/`, `.github/` | Threat model, CA lifecycle, permissions, policy checks |
 | `role:test` | `tests/`, `scripts/ci/` | Test harness, fuzzing, packaging and resource gates |
-| `role:integration` | `docs/`, packaging metadata, standalone product contract | Product integration and release documentation |
+| `role:integration` | `docs/`, packaging metadata, product contract | Gateway/WLOC integration and release documentation |
 
 Issue-specific ownership overrides this table. Ownership is a time-limited lease, not permanent assignment. An Agent must not edit another active lease's paths unless it is performing a recorded takeover from an expired or released lease.
 
@@ -57,8 +59,9 @@ Use `scripts/agent-takeover.sh <issue> <agent> <slug> <capabilities> [ttl-minute
 - All parser and network inputs require size, time, concurrency, and schema limits.
 - Unknown protocol, invalid Geo data, or engine failure must not produce a default fake coordinate.
 - WLOC interception must remain limited to the assigned test device, two exact Apple hostnames, and TCP 443.
-- Never intercept UDP 500/4500 or modify an external Wi-Fi Calling Gateway
-  ruleset. WLOC owns only its explicitly named nftables objects.
+- Never intercept UDP 500/4500 for WLOC. The in-repository Wi-Fi Calling
+  Gateway retains ownership of its own data-plane rules; the unified product
+  supervisor must coordinate both namespaces without cross-component damage.
 - Changes under `internal/ca/`, `internal/proxy/`, `openwrt/`, or `.github/workflows/` require security review.
 
 ## Verification

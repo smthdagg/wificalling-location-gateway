@@ -11,5 +11,4 @@ for (const prefix of ['openwrt/files', 'openwrt/luci-app-wificalling-location-ga
   assert(devices.includes('manual_lat') && devices.includes('manual_lon'), prefix + ': manual location must be profile-scoped');
   assert(basic.includes("form.Map('wloc-service'"), prefix + ': basic settings must use WLOC UCI');
 }
-console.log('standalone WLOC profile/basic settings contract passed');
-
+console.log('integrated WLOC profile/basic settings contract passed');

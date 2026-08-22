@@ -5,12 +5,14 @@ OpenWrt/ImmortalWrt 24.10 firmware.
 
 ## 1. Record and back up the WLOC state
 
-The current product is standalone WLOC. It does not require, read, install, or
-manage another service package or UCI state.
+The current product is the integrated WiFi Calling Gateway + WLOC project. It
+is independent from the separate Gateway 1.7 repository, but this package
+contains and manages both in-repository modules and both UCI states.
 
 ~~~sh
 opkg list-installed | grep -E 'wificalling|wloc|sing-box|passwall' > /tmp/wloc-old-packages.txt || true
 cp -p /etc/config/wloc-service /tmp/wloc-service.backup 2>/dev/null || true
+cp -p /etc/config/wificalling-gateway /tmp/wificalling-gateway.backup 2>/dev/null || true
 cp -p /etc/wloc-service/ca.pem /tmp/wloc-ca.pem.backup 2>/dev/null || true
 cp -p /etc/wloc-service/ca.key /tmp/wloc-ca.key.backup 2>/dev/null || true
 sha256sum /etc/config/wloc-service 2>/dev/null || true
@@ -27,10 +29,12 @@ same time. Stop and disable only the old WLOC ownership, then recheck space.
 Do not remove sing-box tiny/lite or a PassWall-provided sing-box executable.
 
 ~~~sh
-/etc/init.d/wloc-service stop 2>/dev/null || true
 /etc/init.d/wificalling-location-gateway stop 2>/dev/null || true
+/etc/init.d/wificalling-gateway stop 2>/dev/null || true
+/etc/init.d/wloc-service stop 2>/dev/null || true
 /etc/init.d/wloc-service disable 2>/dev/null || true
-opkg remove luci-app-wificalling-location-gateway wloc-service wloc-ctl 2>/dev/null || true
+/etc/init.d/wificalling-gateway disable 2>/dev/null || true
+opkg remove luci-app-wificalling-location-gateway wificalling-location-gateway wloc-service wloc-ctl 2>/dev/null || true
 df -k /overlay /tmp
 ~~~
 
@@ -47,17 +51,19 @@ sha256sum -c /tmp/SHA256SUMS --ignore-missing
 opkg install /tmp/wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk
 ~~~
 
-The package owns only /etc/config/wloc-service as a conffile. It declares
-the WLOC API and OpenWrt release metadata and does not carry a Gateway package
-or configuration.
+The package owns /etc/config/wloc-service and
+/etc/config/wificalling-gateway as conffiles. It declares the integrated
+product metadata and carries the Gateway and WLOC runtime/UI payloads; it has
+no dependency on the separate Gateway 1.7 repository.
 
-## 4. Verify the standalone lifecycle
+## 4. Verify the integrated lifecycle
 
 ~~~sh
 opkg status wificalling-location-gateway
 /etc/init.d/wificalling-location-gateway status
 /etc/init.d/wloc-service status
 test -S /var/run/wloc-service/control.sock
+/etc/init.d/wificalling-gateway status
 /usr/sbin/wloc-ctl status
 /usr/libexec/wificalling-location-gateway/singbox-runtime.sh path
 /usr/libexec/wificalling-location-gateway/singbox-runtime.sh version
@@ -71,7 +77,7 @@ and must not install a duplicate full-size copy.
 
 ## 5. LuCI and authorized-device validation
 
-1. Open Services → WLOC Location Service.
+1. Open Services → WiFi Calling + WLOC Gateway.
 2. Confirm Overview, Basic Settings, Devices, Logs & Monitoring,
    Service Status, Component Update, and Help are present.
 3. Create one device profile with its private LAN address and explicit WLOC

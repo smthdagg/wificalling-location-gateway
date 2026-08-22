@@ -1,16 +1,16 @@
-# V2 standalone component update and rollback
+# V2 integrated component update and rollback
 
 ## Update contract
 
 The root-only `/usr/sbin/wloc-component-update.sh` is the single update
-boundary for the standalone WLOC package. LuCI may only reference an IPK
+boundary for the integrated Gateway/WLOC package. LuCI may only reference an IPK
 already staged under `/tmp/wloc-update/`; it cannot provide a URL or an
 arbitrary filesystem path.
 
 Before `opkg install` is called, the helper validates:
 
 - regular local IPK and safe `control.tar.gz`/`data.tar.gz` members;
-- standalone product identity, version, architecture, package format, and
+- integrated product identity, version, architecture, package format, and
   `wloc.service/v2` compatibility metadata;
 - current router architecture, OpenWrt release family, package manager, and
   required kernel/module capabilities;
@@ -22,15 +22,15 @@ Before `opkg install` is called, the helper validates:
 - a known-good rollback IPK.
 
 The install is never remove-first. The helper takes a persistent transaction
-snapshot of the WLOC configuration and the previous package, invokes the
-package manager, restores configuration, restarts only the standalone
-supervisor, and runs the bounded health command. Any install, restart, or
+snapshot of the Gateway/WLOC configuration and the previous package, invokes the
+package manager, restores configuration, restarts the integrated supervisor,
+and runs the bounded health command. Any install, restart, or
 health failure restores the known-good package and configuration. A simulated
 power loss or process interruption leaves the transaction marker; the LuCI
 Recover action calls `recover` to complete the rollback.
 
 The update path does not call `nft`, edit unrelated nftables rules, or disable
-UDP 500/4500. The standalone supervisor owns the fail-open withdrawal/restart
+UDP 500/4500. The integrated supervisor owns the fail-open withdrawal/restart
 boundary.
 
 ## State and resource policy

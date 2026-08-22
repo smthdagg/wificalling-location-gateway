@@ -114,6 +114,15 @@ class V2DiagnosticsContractTests(unittest.TestCase):
             monitor = (prefix / "www/luci-static/resources/view/wificalling-location-gateway/wloc-monitor.js").read_text(encoding="utf-8")
             self.assertIn("parseEvents", monitor)
 
+    def test_integrated_health_projection_exposes_gateway_and_wloc(self):
+        health = (self.root / "openwrt/files/usr/sbin/wloc-health.sh").read_text(encoding="utf-8")
+        ui = (self.root / "openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js").read_text(encoding="utf-8")
+        self.assertIn("wificalling-gateway.main.enabled", health)
+        self.assertIn('"gateway"', health)
+        self.assertIn("/var/run/wificalling-gateway/sing-box.json", health)
+        self.assertIn("services.gateway", ui)
+        self.assertIn("Gateway phase", ui)
+
     def test_support_bundle_shell_and_log_regression_scripts_pass(self):
         for name in (
             "test-support-bundle.sh",

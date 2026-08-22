@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
-LUCI_TITLE:=WLOC Location Service
-LUCI_DESCRIPTION:=Standalone LuCI administration UI for the WLOC location service.
+LUCI_TITLE:=WiFi Calling + WLOC Gateway
+LUCI_DESCRIPTION:=Unified LuCI administration UI for the in-repository WiFi Calling Gateway and WLOC service.
 LUCI_DEPENDS:=+wloc-service +luci-base +rpcd-mod-rpcsys
 LUCI_PKGARCH:=all
 PKG_VERSION:=2.0.0

@@ -199,6 +199,9 @@ msgstr "启用 WLOC 服务"
 msgid "Enable unified service"
 msgstr "启用 WLOC 服务"
 
+msgid "Enabled"
+msgstr "已启用"
+
 msgid "Enabled / state"
 msgstr "启用 / 状态"
 
@@ -403,8 +406,8 @@ msgstr "节点清单新鲜"
 msgid "Not observed"
 msgstr "尚未观测"
 
-msgid "Observe the standalone WLOC service, provider, redirect scope, and device profiles."
-msgstr "观察独立 WLOC 服务、提供程序、重定向范围和设备档案。"
+msgid "Observe the integrated Gateway/WLOC service, provider, redirect scope, and device profiles."
+msgstr "观察集成 Gateway/WLOC 服务、提供程序、重定向范围和设备档案。"
 
 msgid "Observed at"
 msgstr "观测时间"
@@ -664,8 +667,20 @@ msgstr "WLOC 定位跟随的设备：自动模式按其绑定节点的出口 IP 
 msgid "This clears the local history of WLOC location events. Location interception settings are not affected."
 msgstr "此操作将清空 WLOC 定位事件的本地历史记录。定位拦截设置不受影响。"
 
-msgid "This page reports the standalone WLOC lifecycle, provider, redirect rules, and device profiles. Component updates are managed on the separate Component Update page."
-msgstr "本页报告独立 WLOC 生命周期、提供程序、重定向规则和设备档案。组件更新在独立的组件更新页面管理。"
+msgid "This page reports the integrated Gateway/WLOC lifecycle, provider, redirect rules, and device profiles. Component updates are managed on the separate Component Update page."
+msgstr "本页报告集成 Gateway/WLOC 生命周期、提供程序、重定向规则和设备档案。组件更新在独立的组件更新页面管理。"
+
+msgid "WiFi Calling Gateway"
+msgstr "WiFi Calling Gateway"
+
+msgid "Gateway daemon"
+msgstr "Gateway 守护进程"
+
+msgid "Gateway phase"
+msgstr "Gateway 阶段"
+
+msgid "Gateway reason"
+msgstr "Gateway 原因"
 
 msgid "This replaces the root CA. All devices must reinstall the profile and enable full trust again."
 msgstr "这将更换根证书。所有设备都需要重新安装描述文件并再次开启完全信任。"

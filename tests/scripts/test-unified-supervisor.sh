@@ -11,6 +11,7 @@ sh -n "$supervisor" "$init" "$redirect" "$wloc_init"
 grep -F 'procd_set_param command "$SUPERVISOR" start' "$init" >/dev/null
 grep -F 'procd_set_param respawn 3600 5 3' "$init" >/dev/null
 grep -F 'procd_add_reload_trigger wloc-service' "$init" >/dev/null
+grep -F 'procd_add_reload_trigger wificalling-gateway' "$init" >/dev/null
 grep -F 'WLOC_SERVICE_PIDFILE' "$supervisor" >/dev/null
 grep -F 'service_pid_matches' "$supervisor" >/dev/null
 grep -F 'provider_health' "$supervisor" >/dev/null
@@ -21,6 +22,15 @@ grep -F '[ "${profiles:-0}" -gt 1 ]' "$supervisor" >/dev/null
 grep -F 'PROFILE_REDIRECT_HELPER' "$supervisor" >/dev/null
 grep -F 'health)' "$supervisor" >/dev/null
 grep -F 'wloc-service' "$supervisor" >/dev/null
+grep -F 'GATEWAY_INIT' "$supervisor" >/dev/null
+grep -F 'gateway_enabled' "$supervisor" >/dev/null
+grep -F 'start_gateway' "$supervisor" >/dev/null
+grep -F 'gateway_health' "$supervisor" >/dev/null
+grep -F 'case "$command" in' "$supervisor" >/dev/null
+grep -F 'cmdline' "$supervisor" >/dev/null
+grep -F 'wificalling-gateway' "$supervisor" >/dev/null
+grep -F 'kill -TERM "$existing_pid"' "$supervisor" >/dev/null
+grep -F 'Always ask both child init scripts to stop' "$supervisor" >/dev/null
 grep -F 'singbox-runtime.sh' "$supervisor" >/dev/null
 grep -F 'multiple_profiles_configured' "$redirect" >/dev/null
 grep -F 'flags timeout' "$redirect" "$repo_root/openwrt/files/usr/sbin/wloc-profile-redirect.sh" >/dev/null
@@ -29,8 +39,8 @@ if grep -E 'udp[[:space:]]+500|udp[[:space:]]+4500|nft[[:space:]]+(add|delete|fl
   echo 'WLOC must not own Gateway nftables or UDP 500/4500' >&2
   exit 1
 fi
-if grep -E 'GATEWAY_|wificalling-gateway' "$supervisor" "$redirect" "$init" "$wloc_init" >/dev/null; then
-  echo 'standalone supervisor contains a Gateway dependency' >&2
+if grep -E 'udp[[:space:]]+500|udp[[:space:]]+4500|nft[[:space:]]+(add|delete|flush|insert|replace).*wificalling_gateway' "$supervisor" "$redirect" "$init" "$wloc_init" >/dev/null; then
+  echo 'WLOC lifecycle must not intercept Gateway UDP or own Gateway nftables' >&2
   exit 1
 fi
-echo 'standalone supervisor shell tests passed'
+echo 'integrated Gateway/WLOC supervisor shell tests passed'

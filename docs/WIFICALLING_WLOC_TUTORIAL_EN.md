@@ -1,10 +1,9 @@
-> Historical document only. V2 is standalone WLOC; use [WLOC_TUTORIAL_EN.md](WLOC_TUTORIAL_EN.md).
+# Wi‑Fi Calling + WLOC integrated product guide
 
-# Historical Wi‑Fi Calling & WLOC Guide
-
-> Historical document: this tutorial describes the former combined Gateway/WLOC experiment and is retained only as a record. It is not the v2 product guide. The current project is a standalone WLOC service and must not be installed, configured, or validated against the separate Wi‑Fi Calling Gateway project. Use [`docs/WLOC_TUTORIAL_EN.md`](WLOC_TUTORIAL_EN.md) for the current workflow.
-
-This guide applies to the former combined Wi‑Fi Calling Gateway 1.7 and router-side WLOC experiment.
+This guide applies to the current independent repository product, which
+contains and manages its own Wi‑Fi Calling Gateway and WLOC modules. It does
+not install or depend on the separate Gateway 1.7 repository. For the concise
+current workflow, also see [`docs/WLOC_TUTORIAL_EN.md`](WLOC_TUTORIAL_EN.md).
 
 [中文教程](WIFICALLING_WLOC_TUTORIAL_ZH.md)
 

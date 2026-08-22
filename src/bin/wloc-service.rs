@@ -541,6 +541,13 @@ impl ServiceDispatch for ProfileServiceGroup {
     fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
         self.default_handler()?.refresh_evidence()
     }
+
+    fn refresh_profile(&mut self, profile_id: &str) -> Result<(), DispatchError> {
+        self.handlers
+            .get_mut(profile_id)
+            .ok_or(DispatchError::InvalidConfig)?
+            .refresh_evidence()
+    }
 }
 
 fn map_profile_runtime_error(error: ProfileRuntimeError) -> DispatchError {
@@ -698,6 +705,7 @@ fn build_profile_handler(
         };
         service
             .set_manual_location(&RequestParams {
+                profile_id: None,
                 query: None,
                 latitude: Some(latitude),
                 longitude: Some(longitude),
@@ -951,17 +959,9 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             std::env::var("WLOC_EVENTS_FILE")
                 .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into()),
         ));
-    // The upstream connection must use the real Apple IP (the DNS hijack
-    // would otherwise point it back at this router). Prefer the first
-    // nft-set address; fall back to DNS-only resolution when the set is
-    // empty (e.g. rules not yet installed).
-    let proxy = match upstream_apple_ips().into_iter().next() {
-        Some(apple_ip) => {
-            eprintln!("wloc-service: upstream apple ip override {apple_ip}:443");
-            proxy.with_upstream_override(apple_ip, 443)
-        }
-        None => proxy,
-    };
+    let upstream_ip_file = std::env::var("WLOC_UPSTREAM_IP_FILE")
+        .unwrap_or_else(|_| "/var/run/wloc-service/apple-upstream-ip".to_owned());
+    let proxy = proxy.with_upstream_ip_file(std::path::PathBuf::from(upstream_ip_file));
     let proxy = std::sync::Arc::new(proxy);
     let proxy_port: u16 = env_or("WLOC_PROXY_PORT", 8443_u16);
 
@@ -978,6 +978,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             runtime_profile.manual_longitude,
         ) {
             let params = RequestParams {
+                profile_id: None,
                 query: None,
                 latitude: Some(latitude),
                 longitude: Some(longitude),
@@ -1132,40 +1133,8 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-/// Read the real Apple WLOC IPs from the nft apple_hosts set. The DNS
-/// hijack forces the devices to connect locally, but the proxy's own
-/// upstream connection must reach the real Apple server - resolving the
-/// hostname through dnsmasq would loop back to this router.
-fn upstream_apple_ips() -> Vec<String> {
-    let output = std::process::Command::new("nft")
-        .args(["list", "set", "inet", "wloc_service", "apple_hosts"])
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-        .unwrap_or_default();
-    let router_ip = lan_router_ip();
-    parse_apple_ips(&output)
-        .into_iter()
-        .filter(|ip| Some(ip.as_str()) != router_ip.as_deref())
-        .collect()
-}
-
-/// The router's own LAN IPv4 (`uci network.lan.ipaddr`), used to filter the
-/// hijacked address out of the upstream Apple IP set on any subnet.
-fn lan_router_ip() -> Option<String> {
-    let output = std::process::Command::new("uci")
-        .args(["-q", "get", "network.lan.ipaddr"])
-        .output()
-        .ok()?;
-    let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if ip.is_empty() {
-        None
-    } else {
-        Some(ip)
-    }
-}
-
 /// Extract IPv4 addresses from the `nft list set` output (elements line).
+#[cfg(test)]
 fn parse_apple_ips(output: &str) -> Vec<String> {
     output
         .lines()
@@ -1529,6 +1498,7 @@ mod tests {
         group.reload().unwrap();
         group
             .set_manual_location(&RequestParams {
+                profile_id: None,
                 query: None,
                 latitude: Some(1.0),
                 longitude: Some(2.0),

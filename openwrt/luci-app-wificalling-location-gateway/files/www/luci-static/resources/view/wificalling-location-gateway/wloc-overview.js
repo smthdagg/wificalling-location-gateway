@@ -29,7 +29,6 @@ return view.extend({
     }
     draw(health);
     poll.add(function() { return L.resolveDefault(getHealth(), {}).then(draw); }, 10);
-    return E([], [E('h2', {}, i18n.t('WLOC Location Service')), E('p', {}, i18n.t('Observe the standalone WLOC service, provider, redirect scope, and device profiles.')), E('div', { class: 'cbi-section' }, [E('h3', {}, i18n.t('Current status')), body])]);
+    return E([], [E('h2', {}, i18n.t('WLOC Location Service')), E('p', {}, i18n.t('Observe the integrated Gateway/WLOC service, provider, redirect scope, and device profiles.')), E('div', { class: 'cbi-section' }, [E('h3', {}, i18n.t('Current status')), body])]);
   }
 });
-

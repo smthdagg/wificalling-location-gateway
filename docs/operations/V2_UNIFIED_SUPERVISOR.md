@@ -1,23 +1,26 @@
-# V2 standalone WLOC supervisor
+# V2 integrated Gateway/WLOC supervisor
 
 ## Ownership
 
 `/etc/init.d/wificalling-location-gateway` is the only enabled v2 entry point.
 Its single procd instance runs
 `/usr/libexec/wificalling-location-gateway/unified-supervisor.sh`, which owns
-the WLOC service, redirect lifecycle, and optional sing-box provider.
+the WiFi Calling Gateway, WLOC service, redirect lifecycle, and shared
+sing-box provider configuration.
 
 The legacy WLOC init script remains available for rollback but is disabled by
-the migration/post-install step. No Wi-Fi Calling Gateway init script, UCI
-file, package, or firewall table is part of the standalone steady state.
+the migration/post-install step. The Gateway init script and UCI file are part
+of this same package but are not independently enabled; the supervisor owns
+their lifecycle.
 
 ## Start ordering
 
 1. Create a root-only volatile runtime directory and acquire the supervisor
    lock.
-2. Stop any legacy WLOC instance and select/verify the configured sing-box
-   provider in passthrough mode.
-3. Start WLOC without its legacy redirect side effect and wait for its
+2. Stop any independently-started Gateway/WLOC child instances and select or
+   verify the configured sing-box provider in passthrough mode.
+3. Start the in-repository Gateway when enabled, then start WLOC without its
+   legacy redirect side effect and wait for its
    root-only Unix socket.
 4. Wait up to the bounded startup timeout for both child processes and the
    WLOC socket before enabling the WLOC redirect.

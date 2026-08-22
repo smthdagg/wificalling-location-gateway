@@ -1,5 +1,5 @@
 #!/bin/sh
-# Bounded standalone WLOC health projection for LuCI and the update gate.
+# Bounded integrated Gateway/WLOC health projection for LuCI and the update gate.
 
 set -eu
 
@@ -34,11 +34,33 @@ if [ -f "$wloc_status" ]; then
 	[ -n "$wloc_err" ] && wloc_error=$(json_escape "$wloc_err")
 fi
 
+UNIFIED_STATE=${WLOC_HEALTH_UNIFIED_STATE:-/var/run/wificalling-location-gateway/supervisor.json}
+gateway_enabled=0; gateway_running=0; gateway_phase=stopped; gateway_reason=not_enabled
+gateway_uci=$(uci -q get wificalling-gateway.main.enabled 2>/dev/null || true)
+case "$gateway_uci" in 1|true|on|yes) gateway_enabled=1 ;; esac
+if [ -f "$UNIFIED_STATE" ]; then
+	state_gateway=$(sed -n 's/.*"gateway"[[:space:]]*:[[:space:]]*\([01]\).*/\1/p' "$UNIFIED_STATE" | head -n 1)
+	case "$state_gateway" in 1) gateway_running=1 ;; esac
+	state_phase=$(sed -n 's/.*"phase"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$UNIFIED_STATE" | head -n 1)
+	state_reason=$(sed -n 's/.*"reason"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$UNIFIED_STATE" | head -n 1)
+	[ -n "$state_phase" ] && gateway_phase=$state_phase
+	[ -n "$state_reason" ] && gateway_reason=$(json_escape "$state_reason")
+elif [ "$gateway_enabled" -eq 1 ]; then
+	gateway_phase=unknown
+	gateway_reason=supervisor_state_missing
+fi
+
 HELPER=${WLOC_PROVIDER_HELPER:-/usr/libexec/wificalling-location-gateway/singbox-runtime.sh}
 provider_bin=$([ -x "$HELPER" ] && "$HELPER" path 2>/dev/null || true)
 provider_available=0; provider_valid=0
 [ -n "$provider_bin" ] && provider_available=1
-config_path=${WLOC_HEALTH_CONFIG_PATH:-$(uci -q get wloc-service.main.singbox_config 2>/dev/null || echo /var/run/wloc-service/sing-box.json)}
+if [ -n "${WLOC_HEALTH_CONFIG_PATH:-}" ]; then
+	config_path=$WLOC_HEALTH_CONFIG_PATH
+elif [ "$gateway_enabled" -eq 1 ] && [ -f /var/run/wificalling-gateway/sing-box.json ]; then
+	config_path=/var/run/wificalling-gateway/sing-box.json
+else
+	config_path=$(uci -q get wloc-service.main.singbox_config 2>/dev/null || echo /var/run/wloc-service/sing-box.json)
+fi
 config_present=0; config_valid=0; config_age=-1
 if [ -f "$config_path" ]; then
 	config_present=1; config_age=$(file_age "$config_path")
@@ -86,6 +108,8 @@ fi
 printf '{"generated_at":%s,' "$now"
 printf '"services":{"wloc":{"running":%s,"socket":%s,"status_fresh":%s,"phase":"%s","exit":"%s","geo":"%s","last_error":%s},' \
 	"$wloc_running" "$wloc_socket" "$wloc_status_fresh" "$wloc_phase" "$wloc_exit" "$wloc_geo" "$wloc_error"
+printf '"gateway":{"enabled":%s,"running":%s,"phase":"%s","reason":"%s"},' \
+	"$gateway_enabled" "$gateway_running" "$gateway_phase" "$gateway_reason"
 printf '"provider":{"available":%s,"valid":%s,"config_present":%s,"config_valid":%s,"config_age":%s},' \
 	"$provider_available" "$provider_valid" "$config_present" "$config_valid" "$config_age"
 printf '"redirect":{"table_present":%s,"rules":%s}},' "$nft_table_present" "$nft_rules"

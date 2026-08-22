@@ -10,6 +10,6 @@ for (const prefix of ['openwrt/files', 'openwrt/luci-app-wificalling-location-ga
   assert(health.includes("services.provider"), prefix + ': health page must use provider status');
   assert(update.includes("update_preflight"), prefix + ': component update must be separate');
   assert(!health.includes('update_apply'), prefix + ': health page must not apply updates');
-  assert(!health.includes('services.gateway'), prefix + ': health page must not expose Gateway state');
+  assert(health.includes('services.gateway'), prefix + ': health page must expose integrated Gateway state');
 }
-console.log('standalone WLOC status/update contract passed');
+console.log('integrated Gateway/WLOC status/update contract passed');

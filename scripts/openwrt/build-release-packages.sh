@@ -100,9 +100,6 @@ cp -R "$repo_root/openwrt/files/." "$package_dir/files/"
 
 # Overlay the integrated UI, then the architecture-specific WLOC runtime.
 cp -R "$repo_root/openwrt/luci-app-wificalling-location-gateway/files/." "$package_dir/files/"
-rm -rf "$package_dir/files/usr/libexec/wificalling-gateway" \
-	"$package_dir/files/www/luci-static/resources/view/wificalling-gateway" \
-	"$package_dir/files/www/luci-static/resources/wificalling-gateway"
 cat > "$package_dir/files/usr/share/wificalling-location-gateway/compatibility" <<'EOF'
 X-WLOC-Product: wificalling-location-gateway/v2
 X-WLOC-Api: wloc.service/v2
@@ -138,17 +135,19 @@ include \$(INCLUDE_DIR)/package.mk
 define Package/wificalling-location-gateway
   SECTION:=net
   CATEGORY:=Network
-  TITLE:=Standalone WLOC Location Gateway
+  TITLE:=WiFi Calling Gateway and WLOC unified service
   DEPENDS:=+luci-base +rpcd-mod-rpcsys +nftables +firewall4 +kmod-nft-tproxy +kmod-nft-socket +ip-full
-  PROVIDES:=wloc-service luci-app-wificalling-location-gateway
+  PROVIDES:=wloc-service wificalling-gateway luci-app-wificalling-location-gateway
 endef
 define Package/wificalling-location-gateway/description
-  Standalone WLOC service, control client, provider adapter, and LuCI UI.
+  Integrated WiFi Calling Gateway and WLOC service, control client, provider
+  adapter, shared lifecycle, and LuCI UI.
 endef
 define Build/Compile
 endef
 define Package/wificalling-location-gateway/conffiles
 /etc/config/wloc-service
+/etc/config/wificalling-gateway
 endef
 define Package/wificalling-location-gateway/install
 	\$(CP) ./files/. \$(1)/
@@ -160,6 +159,7 @@ define Package/wificalling-location-gateway/postinst
 # an older transaction result visible as if it described this package.
 rm -f /var/lib/wificalling-location-gateway/update/status.json
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 for required in /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd /usr/libexec/wificalling-location-gateway/singbox-runtime.sh; do
   [ -e "\$\$required" ] || echo "wificalling-location-gateway: prerequisite missing: \$\$required" >&2
 done
@@ -167,6 +167,7 @@ if [ -x /usr/libexec/wificalling-location-gateway/singbox-runtime.sh ]; then
   /usr/libexec/wificalling-location-gateway/singbox-runtime.sh path >/dev/null 2>&1 || echo "wificalling-location-gateway: install sing-box tiny/lite or a PassWall sing-box provider" >&2
 fi
 /etc/init.d/wloc-service disable >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway disable >/dev/null 2>&1 || true
 /etc/init.d/wificalling-location-gateway enable >/dev/null 2>&1 || true
 /etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1 || true
 rm -f /tmp/luci-indexcache.*
@@ -240,7 +241,7 @@ validate_ax6s_package() {
 	printf '%s\n' "$control" | grep -Fx 'Architecture: aarch64_cortex-a53' >/dev/null \
 		|| fail 'AX6S package must target aarch64_cortex-a53'
 	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Product: wificalling-location-gateway/v2' >/dev/null \
-		|| fail 'AX6S package is missing standalone product metadata'
+		|| fail 'AX6S package is missing integrated product metadata'
 	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Api: wloc.service/v2' >/dev/null \
 		|| fail 'AX6S package is missing WLOC API metadata'
 	printf '%s\n' "$control" | grep -Fx 'X-WLOC-OpenWrt: 24.10+' >/dev/null \
@@ -249,9 +250,8 @@ validate_ax6s_package() {
 		|| fail 'AX6S package has the wrong firmware target metadata'
 	printf '%s\n' "$control" | grep -Fx 'X-WLOC-Package-Format: ipk' >/dev/null \
 		|| fail 'AX6S package is missing package-format metadata'
-	if printf '%s\n' "$control" | grep -E 'Wi-Fi Calling Gateway|luci-app-wificalling-gateway|X-WFC' >/dev/null; then
-		fail 'AX6S package contains Gateway coupling metadata'
-	fi
+	printf '%s\n' "$control" | grep -F 'wificalling-gateway' >/dev/null \
+		|| fail 'AX6S package is missing integrated Gateway capability metadata'
 }
 
 validate_ax6s_package "$out_dir/$(basename "$ax6s_package")"

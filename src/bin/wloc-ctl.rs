@@ -40,7 +40,13 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
     };
     let params = match method {
         "status" | "enable" | "disable" | "geo-clear" | "reload" | "refresh" => {
-            serde_json::json!({})
+            match parse_profile_selector(&args[1..]) {
+                Ok(params) => params,
+                Err(message) => {
+                    eprintln!("wloc-ctl: {message}");
+                    return 2;
+                }
+            }
         }
         "geo-search" => match parse_geo_set(&args[1..]) {
             Ok(params) => params,
@@ -177,6 +183,16 @@ fn parse_geo_set(args: &[String]) -> Result<serde_json::Value, String> {
         (None, Some(lat), Some(lon)) => Ok(serde_json::json!({"latitude": lat, "longitude": lon})),
         _ => Err("geo-set 需要 --query \"地名\" 或 --lat <纬度> --lon <经度>".to_owned()),
     }
+}
+
+fn parse_profile_selector(args: &[String]) -> Result<serde_json::Value, String> {
+    if args.is_empty() {
+        return Ok(serde_json::json!({}));
+    }
+    if args.len() == 2 && args[0] == "--profile" && !args[1].is_empty() {
+        return Ok(serde_json::json!({"profile_id": args[1]}));
+    }
+    Err("--profile <profile-id> 是唯一支持的附加参数".to_owned())
 }
 
 fn parse_profile_args(method: &str, args: &[String]) -> Result<serde_json::Value, String> {
@@ -492,5 +508,14 @@ mod tests {
         .unwrap();
         assert_eq!(update["profile_id"], "phone");
         assert_eq!(update["enabled"], false);
+    }
+
+    #[test]
+    fn refresh_cli_can_select_a_profile() {
+        assert_eq!(
+            parse_profile_selector(&["--profile".to_owned(), "phone".to_owned()]).unwrap(),
+            serde_json::json!({"profile_id": "phone"})
+        );
+        assert!(parse_profile_selector(&["phone".to_owned()]).is_err());
     }
 }

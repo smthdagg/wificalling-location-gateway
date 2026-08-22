@@ -1,6 +1,6 @@
 {
   "luci-app-wificalling-location-gateway": {
-    "description": "Grant access to the standalone WLOC location service admin pages",
+    "description": "Grant access to the unified Wi-Fi Calling Gateway and WLOC admin pages",
     "read": {
       "ubus": {
         "luci.wloc": [
@@ -8,14 +8,17 @@
           "verify_fingerprint",
           "health",
           "provider_test",
-          "update_status"
+          "update_status",
+          "node_test"
         ],
         "file": [
           "read"
         ]
       },
       "uci": [
-        "wloc-service"
+        "wloc-service",
+        "wificalling-gateway",
+        "dhcp"
       ],
       "file": {
         "/var/run/wloc-service/status.json": [
@@ -35,6 +38,24 @@
         ],
         "/tmp/run/wloc-service/events.jsonl": [
           "read"
+        ],
+        "/var/run/wificalling-gateway/status.json": [
+          "read"
+        ],
+        "/var/run/wificalling-gateway/node-status.json": [
+          "read"
+        ],
+        "/var/run/wificalling-gateway/events.log": [
+          "read"
+        ],
+        "/tmp/run/wificalling-gateway/status.json": [
+          "read"
+        ],
+        "/tmp/run/wificalling-gateway/node-status.json": [
+          "read"
+        ],
+        "/tmp/run/wificalling-gateway/events.log": [
+          "read"
         ]
       }
     },
@@ -51,14 +72,17 @@
           "clear_log",
           "update_preflight",
           "update_apply",
-          "update_recover"
+          "update_recover",
+          "restart_gateway",
+          "node_test"
         ],
         "file": [
           "write"
         ]
       },
       "uci": [
-        "wloc-service"
+        "wloc-service",
+        "wificalling-gateway"
       ],
       "file": {
         "/var/run/wloc-service/events.jsonl": [

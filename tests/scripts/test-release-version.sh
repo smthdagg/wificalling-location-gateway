@@ -40,6 +40,6 @@ for expected in \
 done
 
 grep -F 'version=${1:-2.0.0-1}' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null ||
-	fail 'AX6S standalone builder default must be 2.0.0 release 1'
+	fail 'AX6S integrated builder default must be 2.0.0 release 1'
 
 printf '%s\n' 'release version tests passed'

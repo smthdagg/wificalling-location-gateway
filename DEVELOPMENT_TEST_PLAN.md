@@ -1,10 +1,10 @@
-# 独立 WLOC 路由器组件开发测试计划
+# Wi-Fi Calling + WLOC 一体化路由器项目开发测试计划
 
-> **边界修订（2026-08-22）**：本项目是独立的 WLOC 项目，不属于 Wi-Fi
-> Calling Gateway，也不依赖、打包、读取或管理 `luci-app-wificalling-gateway`
-> / `wificalling-gateway`。本文早期出现的 Gateway 1.7 内容仅为历史背景，
-> 不再是 V2 的产品依赖或发布门禁。以
-> [ADR 0003](docs/adr/0003-standalone-wloc-product-boundary.md) 为准。
+> **边界修订（2026-08-22）**：本项目是独立仓库内的 Wi-Fi Calling
+> Gateway + WLOC 一体化产品。它不依赖或修改外部的 Gateway 1.7 仓库；
+> 但本仓库必须包含并管理自己的 Gateway 与 WLOC 模块，共享生命周期、
+> LuCI 管理、日志监控、更新和回滚。此前 standalone-WLOC 的内容属于
+> 待迁移历史，不再作为当前产品边界。
 
 ## 1. 权威依据
 
@@ -23,9 +23,9 @@
 - 不需要手机端 Shadowrocket WLOC 模块；
 - iPhone 只需安装并信任一次网关 CA；
 - 第一阶段建立独立实验项目 `wificalling-location-gateway`；
-- V1 PoC 的拆分设想已由 V2 产品设计取代：独立 WLOC 只有一个
+- V1 PoC 的拆分设想已由 V2 产品设计取代：本项目只有一个
   `wificalling-location-gateway` 产品包、一个统一 supervisor、一个管理界面和
-  一套日志/监控/更新/回滚生命周期，不再把 Wi-Fi Calling Gateway 作为产品模块；
+  一套日志/监控/更新/回滚生命周期，内部同时管理 Wi-Fi Calling Gateway 与 WLOC；
 - `sing-box` 仍必须保留并复用，但 V2 不强制安装第二份完整二进制。优先复用
   AX6S 已实测的 `sing-box-tiny`/`sing-box-lite` 或 PassWall 提供的 sing-box，
   由运行时选择器验证路径和版本后交给统一 supervisor 管理；不接管 PassWall
@@ -40,9 +40,10 @@
 本文件早期章节保留了 Phase 0–2 PoC 的历史背景。以下 V2 约束覆盖其中与
 最终产品形态、运行时、打包和真机部署相冲突的旧建议：
 
-- **产品形态**：独立 WLOC 共用 `wificalling-location-gateway` 包名、一个
+- **产品形态**：独立项目共用 `wificalling-location-gateway` 包名、一个
   `wificalling-location-gateway` procd supervisor、一个管理界面和一套状态/日志/
-  更新模型；任何 Gateway init/配置入口都不是运行依赖，只能在迁移工具中短期识别。
+  更新模型；项目内 Gateway init/配置入口由统一 supervisor 管理，外部 Gateway
+  1.7 仓库不是运行依赖。
 - **设备模型**：每台设备有独立档案，包含本项目节点绑定、WLOC 自动跟随、手动
   定位、服务启用状态、健康状态、日志和监控；`fixed` 只表示绑定该档案明确选定
   的 WLOC 节点，`auto` 跟随该节点出口，`manual` 写入该档案自己的坐标；多档案
@@ -60,7 +61,7 @@
 
 ## 2. 当前基线
 
-### 2.1 历史 Gateway 参考（非本项目依赖）
+### 2.1 外部 Gateway 1.7 边界参考（非本项目依赖）
 
 仓库：`/Users/henry/Documents/Codex/2026-08-05/tiao`
 
@@ -270,7 +271,7 @@ CA 生命周期必须自动化验收：
 
 ## 5. 项目结构
 
-独立 WLOC 项目结构：
+独立 Gateway + WLOC 项目结构：
 
 ```text
 wificalling-location-gateway/
@@ -285,8 +286,9 @@ wificalling-location-gateway/
   README.md
 ```
 
-本项目不接受 Gateway payload，也不在构建阶段读取或补丁任何外部 Gateway
-IPK。sing-box 只作为可选 provider，在设备上运行时检测。
+本项目包含自己的 Gateway payload，同时不在构建阶段读取或补丁外部 Gateway
+IPK。sing-box 只作为可选 provider，在设备上运行时检测；两模块启用时 WLOC
+复用 Gateway 生成的配置。
 
 ## 6. 技术选型门禁
 
@@ -316,11 +318,11 @@ PoC：在线 provider + 本地缓存。
 
 ### 6.3 V2 包形态
 
-V2 正式交付一个架构相关的独立 WLOC 包：
+V2 正式交付一个架构相关的独立 Gateway + WLOC 集成包：
 
 ```text
 wificalling-location-gateway
-  wloc-service/wloc-ctl、独立 supervisor、LuCI、WLOC UCI、ACL、
+  Gateway 与 wloc-service/wloc-ctl、统一 supervisor、LuCI、两套 UCI、ACL、
   日志/诊断/更新/回滚脚本
 ```
 
@@ -478,10 +480,10 @@ V2-08 将上述目标固化为包内的
 - 不显示地图，不显示虚假的“Wi-Fi Calling 已激活”；
 - 一个架构相关集成 IPK/APK，旧组件入口仅作为迁移兼容层。
 
-### Phase 8：V2 独立 WLOC 统一生命周期
+### Phase 8：V2 Gateway + WLOC 统一生命周期
 
-- 独立 WLOC 的统一 supervisor 管理服务、provider 检查和 redirect；旧 WLOC
-  入口不得独立 respawn 或拥有 redirect，外部 Gateway 不属于运行时；
+- 统一 supervisor 管理 Gateway、WLOC、provider 检查和 redirect；旧子服务
+  入口不得独立 respawn 或拥有统一 redirect，外部 Gateway 不属于运行时；
 - feature flag 默认关闭；WLOC 故障必须回到安全 passthrough，不得扩大拦截范围；
 - 配置迁移保留 UCI/CA，空间不足、更新中断和回滚必须有明确失败路径；
 - 真机验收前不得发布，真实 AX6S 证据必须覆盖低内存、低存储、重启、升级和回滚。
@@ -597,7 +599,7 @@ V2 的代码、UI、迁移和真机验收按 GitHub Issue #41 的工作包和退
 
 ### V2 product path
 
-- 一个 `wificalling-location-gateway` 独立 WLOC 包和统一 supervisor；
+- 一个包含 Gateway 与 WLOC 的 `wificalling-location-gateway` 集成包和统一 supervisor；
 - feature flag 默认关闭，WLOC 失败时保持安全透传；
 - AX6S 安装前先停止、禁用并卸载旧 WLOC 应用包，保留选定的
   tiny/lite/PassWall sing-box provider；

@@ -13,6 +13,7 @@ set -eu
 TABLE=wloc_service
 SET=apple_hosts
 NFT_BINARY=${WLOC_NFT_BINARY:-nft}
+UPSTREAM_IP_FILE=${WLOC_UPSTREAM_IP_FILE:-/var/run/wloc-service/apple-upstream-ip}
 
 HOSTS="gs-loc.apple.com gs-loc-cn.apple.com"
 
@@ -45,17 +46,28 @@ collect() {
     done
 }
 
-ips=$(collect | grep -v "^$ROUTER_IP$" | sort -u | tr '
-' ',' | sed 's/,\$$//')
+ips=$(collect | grep -v "^$ROUTER_IP$" | sort -u | tr '\n' ',' | sed 's/,$//')
 [ -n "$ips" ] || {
+	rm -f "$UPSTREAM_IP_FILE"
 	echo "wloc-refresh-set: no A records resolved (DNS unavailable?)" >&2
 	exit 1
 }
 
+upstream_dir=${UPSTREAM_IP_FILE%/*}
+[ "$upstream_dir" = "$UPSTREAM_IP_FILE" ] || mkdir -p "$upstream_dir"
+printf '%s\n' "${ips%%,*}" > "$UPSTREAM_IP_FILE"
+chmod 0600 "$UPSTREAM_IP_FILE"
+
 # Elements expire when this component stops refreshing them. The rules remain
 # present but their destination set becomes empty, so a hard kill cannot leave
 # an indefinite interception path behind.
-timed_ips=$(printf '%s' "$ips" | sed 's/,/, timeout 30s, /g; s/$/ timeout 30s/')
+timed_ips=
+old_ifs=$IFS
+IFS=,
+for ip in $ips; do
+	timed_ips="${timed_ips}${timed_ips:+, }${ip} timeout 30s"
+done
+IFS=$old_ifs
 
 multiple_profiles_configured() {
 	command -v uci >/dev/null 2>&1 || return 1
