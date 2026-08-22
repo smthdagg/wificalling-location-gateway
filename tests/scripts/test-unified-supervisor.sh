@@ -31,6 +31,14 @@ grep -F 'wloc-service.main.enabled' "$supervisor" >/dev/null
 grep -F 'REFRESH_SET_HELPER' "$supervisor" >/dev/null
 grep -F 'UPSTREAM_IP_FILE' "$supervisor" >/dev/null
 grep -F 'PROFILE_READY_FILE' "$supervisor" >/dev/null
+if grep -F 'WLOC_HOSTS_FILES:-/etc/hosts\\ /tmp/hosts/wloc-hosts' "$redirect" >/dev/null; then
+	printf '%s\n' 'default WLOC host file list must split into two paths' >&2
+	exit 1
+fi
+if ! grep -F -- '-lt 8' "$redirect" >/dev/null; then
+	printf '%s\n' 'legacy redirect cleanup must converge duplicate policy rules' >&2
+	exit 1
+fi
 if grep -E 'pgrep[[:space:]]+-f' "$supervisor" >/dev/null; then
 	printf '%s\n' 'supervisor must not use global pgrep -f process matching' >&2
 	exit 1

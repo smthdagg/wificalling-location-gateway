@@ -74,15 +74,22 @@ stop_all_profiles() {
 }
 
 install_policy_route() {
-	"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
-	"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+	remove_policy_route
 	"$IP_BINARY" rule add fwmark "$FWMARK" lookup "$ROUTE_TABLE"
 	"$IP_BINARY" route add local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"
 }
 
 remove_policy_route() {
-	"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
-	"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+	attempt=0
+	while [ "$attempt" -lt 8 ]; do
+		"$IP_BINARY" rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || break
+		attempt=$((attempt + 1))
+	done
+	attempt=0
+	while [ "$attempt" -lt 8 ]; do
+		"$IP_BINARY" route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || break
+		attempt=$((attempt + 1))
+	done
 }
 
 action=${1:-}
