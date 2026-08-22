@@ -161,15 +161,7 @@ return view.extend({
 					notify(wlocI18n.t('Mode switch failed'), response.error);
 					return false;
 				}
-				// Persist the mode immediately. If this stays pending, a
-				// later "Follow device" save (uci.save on the whole
-				// wloc-service package) would carry this stale value over
-				// and flip the service back to the previous mode.
 				uci.set('wloc-service', 'main', 'geo_source', value);
-				return uci.save('wloc-service').then(function() {
-					return ui.changes.apply(true);
-				});
-			}).then(function() {
 				return true;
 			}).catch(function(e) {
 				notify(wlocI18n.t('Mode switch failed'), String(e));
