@@ -16,7 +16,7 @@ PATTERNS = {
     "AWS access key": re.compile(rb"\bAKIA[0-9A-Z]{16}\b"),
     "JWT": re.compile(rb"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
     "assigned secret": re.compile(
-        rb"(?i)(?:api[_ -]?key|access[_ -]?token|client[_ -]?secret|password)\s*[:=]\s*['\"]?[A-Za-z0-9_./+=-]{16,}"
+        rb"(?i)(?:api[_ -]?key|access[_ -]?token|client[_ -]?secret|password)\s*[:=]\s*['\"][A-Za-z0-9_./+=-]{16,}['\"]"
     ),
 }
 
