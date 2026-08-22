@@ -2,7 +2,7 @@
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
-version=${1:-1.2.0-1}
+version=${1:-2.0.0-rc1-1}
 dependency_mode=${2:-production}
 package=luci-app-wificalling-location-gateway
 source_dir="$root/openwrt/$package/files"
@@ -85,8 +85,9 @@ case "$dependency_mode" in
 				echo 'Gateway IPK has an unexpected package identity' >&2
 				exit 2
 			}
-			printf '%s\n' "$gateway_control" | grep -E '^Version: 1\.7\.[0-9]+-[0-9]+$' >/dev/null || {
-				echo 'Gateway IPK must be a validated 1.7.x release' >&2
+			gateway_version=$(printf '%s\n' "$gateway_control" | sed -n 's/^Version: //p')
+			printf '%s\n' "$gateway_version" | grep -E '^(1\.7|1\.2)\.[0-9]+-(r)?[0-9]+$' >/dev/null || {
+				echo 'Gateway IPK must be a validated 1.7.x or 1.2.x release' >&2
 				exit 2
 			}
 			archive_is_safe "$gateway_stage/package/data.tar.gz" || {
@@ -94,13 +95,23 @@ case "$dependency_mode" in
 				exit 2
 			}
 			tar -xzf "$gateway_stage/package/data.tar.gz" -C "$gateway_stage/data"
-			# The Gateway 1.7.x compiler has no WireGuard pre-shared key
-			# support; the patch adds it (fail-closed against future
-			# Gateway versions).
-			"$root/scripts/openwrt/patch-wireguard-psk.sh" "$gateway_stage/data"
-			"$root/scripts/openwrt/patch-wireguard-health.sh" "$gateway_stage/data"
-			"$root/scripts/openwrt/patch-node-status-compact.sh" "$gateway_stage/data"
-			"$root/scripts/openwrt/patch-gateway-device-guard.sh" "$gateway_stage/data"
+			case "$gateway_version" in
+				1.7.*)
+					# The Gateway 1.7.x compiler has no WireGuard pre-shared key
+					# support; the patch adds it (fail-closed against future
+					# Gateway versions).
+					"$root/scripts/openwrt/patch-wireguard-psk.sh" "$gateway_stage/data"
+					"$root/scripts/openwrt/patch-wireguard-health.sh" "$gateway_stage/data"
+					"$root/scripts/openwrt/patch-node-status-compact.sh" "$gateway_stage/data"
+					"$root/scripts/openwrt/patch-gateway-device-guard.sh" "$gateway_stage/data"
+					;;
+				1.2.*)
+					# The final 1.2.x integrated baseline already contains the
+					# maintained Gateway files. Overlay it so an older bundled
+					# payload cannot regress the WCG runtime during a v2 build.
+					cp -R "$root/openwrt/files/." "$gateway_stage/data/"
+					;;
+			esac
 			cp -R "$gateway_stage/data/." "$stage/data/"
 			# The integrated LuCI views intentionally replace the standalone
 			# Gateway views after the verified Gateway payload is merged.

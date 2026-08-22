@@ -11,17 +11,17 @@ fail() {
 }
 
 [ -f "$repo_root/VERSION" ] || fail 'missing canonical VERSION file'
-[ "$(cat "$repo_root/VERSION")" = 1.2.0 ] || fail 'canonical version must be 1.2.0'
-grep -Eq '^version = "1\.2\.0"$' "$repo_root/Cargo.toml" ||
-	fail 'Cargo package version must be 1.2.0'
+[ "$(cat "$repo_root/VERSION")" = 2.0.0-rc1 ] || fail 'canonical version must be 2.0.0-rc1'
+grep -Eq '^version = "2\.0\.0-rc1"$' "$repo_root/Cargo.toml" ||
+	fail 'Cargo package version must be 2.0.0-rc1'
 grep -F 'webpki-roots = "=1.0.9"' "$repo_root/Cargo.toml" >/dev/null ||
 	fail 'version bumps must not rewrite pinned dependency versions'
-grep -Fx 'PKG_VERSION:=1.2.0' "$repo_root/openwrt/Makefile" >/dev/null ||
-	fail 'OpenWrt runtime version must be 1.2.0'
+grep -Fx 'PKG_VERSION:=2.0.0-rc1' "$repo_root/openwrt/Makefile" >/dev/null ||
+	fail 'OpenWrt runtime version must be 2.0.0-rc1'
 grep -Fx 'PKG_RELEASE:=1' "$repo_root/openwrt/Makefile" >/dev/null ||
 	fail 'OpenWrt runtime release must reset to 1'
-grep -Fx 'PKG_VERSION:=1.2.0' "$repo_root/openwrt/luci-app-wificalling-location-gateway/Makefile" >/dev/null ||
-	fail 'LuCI package version must be 1.2.0'
+grep -Fx 'PKG_VERSION:=2.0.0-rc1' "$repo_root/openwrt/luci-app-wificalling-location-gateway/Makefile" >/dev/null ||
+	fail 'LuCI package version must be 2.0.0-rc1'
 grep -Fx 'PKG_RELEASE:=1' "$repo_root/openwrt/luci-app-wificalling-location-gateway/Makefile" >/dev/null ||
 	fail 'LuCI package release must reset to 1'
 
@@ -33,13 +33,13 @@ plan=$(
 		--arch x86_64 --service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl"
 )
 for expected in \
-	'wificalling-location-gateway_1.2.0-r1_x86_64.ipk' \
-	'wificalling-location-gateway-1.2.0-r1.apk'; do
+	'wificalling-location-gateway_2.0.0-rc1-r1_x86_64.ipk' \
+	'wificalling-location-gateway-2.0.0-rc1-r1.apk'; do
 	printf '%s\n' "$plan" | grep -F "$expected" >/dev/null ||
 		fail "release plan is missing $expected"
 done
 
-grep -F 'version=${1:-1.2.0-1}' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null ||
-	fail 'AX6S standalone builder default must be 1.2.0 release 1'
+grep -F 'version=${1:-2.0.0-rc1-1}' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null ||
+	fail 'AX6S standalone builder default must be 2.0.0-rc1 release 1'
 
 printf '%s\n' 'release version tests passed'

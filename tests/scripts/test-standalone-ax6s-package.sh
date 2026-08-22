@@ -215,4 +215,20 @@ fi
 grep -F 'Gateway IPK SHA-256 mismatch' "$tmp/err" >/dev/null ||
 	fail 'Gateway digest rejection must be explicit'
 
+# The final 1.2.x integrated baseline is also a supported Gateway source. It
+# must take the maintained-baseline path instead of the 1.7.x compatibility
+# patch path.
+perl -pi -e 's/^Version: 1\.7\.3-1$/Version: 1.2.2-r3/' "$tmp/gateway/control/control"
+(cd "$tmp/gateway/control" && tar -czf "$tmp/gateway/control.tar.gz" .)
+(cd "$tmp/gateway" && tar -czf "$tmp/gateway-12.ipk" debian-binary control.tar.gz data.tar.gz)
+gateway_12_sha=$(shasum -a 256 "$tmp/gateway-12.ipk" | awk '{print $1}')
+legacy_output=$(
+	WLOC_SERVICE_BIN="$tmp/wloc-service" \
+	WLOC_CTL_BIN="$tmp/wloc-ctl" \
+	GATEWAY_IPK="$tmp/gateway-12.ipk" \
+	GATEWAY_IPK_SHA256="$gateway_12_sha" \
+	"$builder" "$version-12-baseline" ax6s-standalone
+)
+[ -f "$legacy_output" ] || fail '1.2.x Gateway baseline must build a standalone package'
+
 printf '%s\n' 'standalone AX6S package tests passed'
