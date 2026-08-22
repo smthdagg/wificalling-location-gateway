@@ -28,8 +28,8 @@ per-profile `wloc_profile_<id>` tables and objects. It must never modify, reuse,
 provider management/health traffic, and every non-assigned LAN device remain
 outside the WLOC path. Wi-Fi Calling Gateway 1.7 is outside this project's
 source, package, UCI, lifecycle, and acceptance boundary; a system sing-box or
-PassWall provider is an optional capability selected by the standalone WLOC
-adapter, not a Gateway dependency.
+PassWall provider is an optional capability selected by the integrated WLOC
+adapter, not an external Gateway dependency.
 
 The primary security objective is containment and recovery, not guaranteed location modification. Unknown inputs and component failures preserve the original network path or the verified original response; they never expand trust or synthesize a plausible-looking result.
 

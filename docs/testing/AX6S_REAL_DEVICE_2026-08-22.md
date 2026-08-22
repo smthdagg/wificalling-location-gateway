@@ -203,17 +203,25 @@ test remains the evidence for that path.
 
 ## Host release evidence
 
-The three-package release build and Docker matrix passed on 2026-08-22. The
-matrix installed and started all four cases: AX6S/OpenWrt 24.10.5,
+The current three-package release candidate and Docker matrix passed on
+2026-08-22. The matrix started all four cases: AX6S/OpenWrt 24.10.5,
 OpenWrt 24.10.8 x86_64, OpenWrt 25.12.3 x86_64, and iStoreOS 24.10.5 x86_64.
-The exact host-side package hashes are recorded in the release staging
-directory's `SHA256SUMS`; the final AX6S package hash is
-`78c9a159a4e8da732ea7a8358b8f95eac2ed973ffa4dbd838e196fd5ff93479b` and was
-verified on the router before installation. The AArch64 binaries were the
-previously verified pinned-build outputs because the pinned cross-build image
-was not cached locally during this final shell/UI/package-only rebuild.
-Publication still requires
-the release signing key and explicit external release approval.
+The 25.12 minimal rootfs recorded `payload-extracted` because its APK
+dependency indexes are absent; it still created the control socket and returned
+valid status. The exact candidate hashes are recorded in the staging
+directory's `SHA256SUMS`:
+
+```text
+wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk  496a4d2743ba3d59843c18c04cf6c9303737ac0a51af36cb96d888a89edee240
+wificalling-location-gateway_2.0.0-1_x86_64.ipk              9b01024ab77bbbbe53e0be688bdd57bc545c4fab99d18fddb74742c112223000
+wificalling-location-gateway-2.0.0-r1.apk                    04c49dd074ca6ad5391b927f595ba2359c0e13985b192a707404de973a452a7d
+```
+
+Both IPK manifests have detached signatures verified with the pinned rootfs
+`usign` tool. The AArch64 runtime binary is the previously verified pinned
+cross-build output because the UI/package-only rebuild did not change Rust
+runtime sources. Signed feed-index publication, tag, and external release
+approval remain separate release-process actions.
 
 The locally prepared V2 feed index was copied to a temporary AX6S verification
 directory. Both detached signatures returned exit code 0 with the published

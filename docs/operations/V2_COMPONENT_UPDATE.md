@@ -93,6 +93,9 @@ health are all present; a deliberately failing 2.0.0-19 activation restores
 recovery remain separate hardware tests.
 
 The host rollback contract additionally asserts that a failed integrated update
-restores the Gateway configuration alongside the WLOC configuration. A new
-AX6S signed-transaction run is still required before calling the integrated
-rollback path hardware-accepted.
+restores the Gateway configuration alongside the WLOC configuration. AX6S
+already has signed transactional update and health-failure rollback evidence
+from the earlier 2.0.0-17 -> 2.0.0-18 run. The current 2.0.0-35 hardware run
+was intentionally limited to remove-first installation, UI alignment, restart,
+health, and resource checks; repeating a signed transaction on the live router
+after this UI-only rebuild requires an explicit operator instruction.

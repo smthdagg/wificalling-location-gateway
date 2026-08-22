@@ -12,7 +12,7 @@ in-repository Gateway module is part of the product and package.
 |---|---|---|---|
 | 1 | Component update is an independent page | PASS | Independent LuCI update asset/controller, package/update contract tests, and AX6S asset check. |
 | 2 | Update must match the device firmware | PASS | Updater validates package format, architecture, OpenWrt major version, and exact `DISTRIB_TARGET`; target mismatch is covered by `tests/scripts/test-component-update.sh`. Release builder emits `mediatek/mt7622` for AX6S and `x86/64` compatibility metadata for x86 packages. |
-| 3 | Fixed/Auto follow semantics are unambiguous | PASS | A profile owns its explicit node reference. Auto mode follows that profile node's exit; Fixed/manual mode stores the profile's own coordinates. There is no hidden global “follow another gateway” relationship. See ADR 0003 and the profile model tests. |
+| 3 | Fixed/Auto follow semantics are unambiguous | PASS | A profile owns its explicit node reference. Auto mode follows that profile node's exit; Fixed/manual mode stores the profile's own coordinates. There is no hidden global “follow another gateway” relationship. See ADR 0004 and the profile model tests. |
 | 4 | Manual WLOC writes to the selected device profile | PASS | Device profile CRUD and manual/auto/manual persistence tests exercise the same profile record; the device page is the ownership surface, while the basic page exposes global defaults/summary only. |
 | 5 | LuCI language policy is consistent | PASS | English is the source language for new UI strings; Chinese translations are provided through the formal `po/zh_Hans` catalog. Contract tests check both Gateway and WLOC page assets and the translation catalog. |
 | 6 | The service is truly unified | PASS | One supervisor, one package, shared diagnostics/update/rollback, and one management surface coordinate the in-repository Gateway and WLOC modules while preserving their scoped data planes. |
@@ -33,8 +33,9 @@ These are test-environment gaps, not accepted design shortcuts:
 - real iPhone WLOC traffic and packet capture;
 - hard power interruption during package replacement;
 - physical flash-full fault injection;
-- publication of the signed feed, tag, and external release approval.
+- signed feed-index publication, tag, and external release approval.
 
-The repository interruption-recovery test and AX6S transactional rollback test
-cover the software paths for the latter two update failure classes, but they do
-not replace physical fault injection.
+The repository interruption-recovery test and historical AX6S transactional
+rollback test cover the software paths for the latter two update failure
+classes, but they do not replace physical fault injection or authorize a new
+live-router downgrade.

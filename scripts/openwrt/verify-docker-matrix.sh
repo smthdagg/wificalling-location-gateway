@@ -81,6 +81,7 @@ run_case() {
 	package_path=$5
 	platform=$6
 	package_arch=$7
+	install_mode=installed
 	container="wloc-matrix-${name}-$$"
 	containers="$containers $container"
 	docker image inspect "$image" >/dev/null 2>&1 || fail "missing Docker image: $image"
@@ -112,14 +113,57 @@ run_case() {
 			"/packages/${package_path##*/}" >/dev/null
 	else
 		docker exec "$container" apk add --allow-untrusted --no-network \
-			--force-missing-repositories --repositories-file /dev/null \
+			--force-missing-repositories --force-broken-world \
+			--repositories-file /dev/null \
 			"/packages/${package_path##*/}" >/dev/null
+		if ! docker exec "$container" test -f /etc/init.d/wificalling-location-gateway; then
+			# The minimal rootfs has no APK repository indexes for the declared
+			# OpenWrt dependencies. If apk's solver leaves the package absent,
+			# extract the already-verified payload and continue the lifecycle
+			# smoke test; production firmware uses its populated APK indexes.
+			docker exec "$container" /bin/sh -c \
+				"cd / && apk extract --allow-untrusted /packages/${package_path##*/}" >/dev/null
+			install_mode=payload-extracted
+		fi
 	fi
+
+	# The minimal OpenWrt rootfs images intentionally do not include a
+	# sing-box provider.  Install a bounded smoke-test provider so this matrix
+	# exercises the integrated package lifecycle without downloading or
+	# embedding a second production sing-box binary.  AX6S production testing
+	# separately verifies the real tiny/lite/PassWall provider path.
+	docker exec "$container" /bin/sh -c '
+		mkdir -p /usr/bin /var/run/wloc-service
+		printf "%s\\n" "#!/bin/sh" \
+			"case \"\\\$1\" in" \
+			"  version) echo \"sing-box version 1.12.0\" ;;" \
+			"  check) [ \"\\\$2\" = -c ] && [ -f \"\\\$3\" ] ;;" \
+			"  run) while :; do sleep 60; done ;;" \
+			"  *) exit 0 ;;" \
+			"esac" > /usr/bin/sing-box
+		chmod 0755 /usr/bin/sing-box
+		ln -sf /usr/bin/sing-box /usr/bin/sing-box-tiny
+		rm -f /usr/bin/nslookup
+		printf "%s\\n" "#!/bin/sh" "echo Address: 17.0.0.1" > /usr/bin/nslookup
+		chmod 0755 /usr/bin/nslookup
+		printf "%s\\n" "{}" > /var/run/wloc-service/sing-box.json
+		uci -q set wloc-service.smoke=device || true
+		uci -q set wloc-service.smoke.label=matrix-smoke || true
+		uci -q set wloc-service.smoke.assigned_device=192.168.1.100 || true
+		uci -q set wloc-service.smoke.node_ref=default || true
+		uci -q set wloc-service.smoke.enabled=1 || true
+		uci -q commit wloc-service || true
+		uci -q set network.lan.ipaddr=192.168.1.1 || true
+		uci -q commit network || true
+	'
 
 	# Exercise the shipped integrated Gateway/WLOC lifecycle. The legacy
 	# wloc-service init
 	# facade must not be the matrix's primary startup path.
 	docker exec "$container" /etc/init.d/wificalling-location-gateway enable
+	# Wait for the minimal rootfs network/UCI bootstrap before the first
+	# provider/DNS readiness check; production procd performs this ordering.
+	sleep 3
 	docker exec "$container" /etc/init.d/wificalling-location-gateway restart
 	docker exec "$container" /etc/init.d/wificalling-location-gateway status >/dev/null
 	socket_ready=0
@@ -130,12 +174,16 @@ run_case() {
 		fi
 		sleep 1
 	done
-	[ "$socket_ready" -eq 1 ] || fail "$display did not create its control socket"
+	if [ "$socket_ready" -ne 1 ]; then
+		docker exec "$container" /bin/sh -c \
+			'cat /var/run/wificalling-location-gateway/supervisor.json 2>/dev/null || true; command -v nslookup || true; nslookup gs-loc.apple.com 223.5.5.5 2>&1 || true; uci -q get network.lan.ipaddr || true' >&2
+		fail "$display did not create its control socket"
+	fi
 	status=$(docker exec "$container" /usr/sbin/wloc-ctl status)
 	printf '%s\n' "$status" | grep -F '"api_version"' | grep -F 'wloc.service/v1' >/dev/null ||
 		fail "$display returned an invalid control response"
 	release=$(docker exec "$container" /bin/sh -c '. /etc/openwrt_release; printf "%s %s %s" "$DISTRIB_ID" "$DISTRIB_RELEASE" "$DISTRIB_ARCH"')
-	printf '%s|%s|installed|started|socket-ok|status-ok\n' "$display" "$release" >> "$tmp/report"
+	printf '%s|%s|%s|started|socket-ok|status-ok\n' "$display" "$release" "$install_mode" >> "$tmp/report"
 	docker rm -f "$container" >/dev/null
 	containers=$(printf '%s' "$containers" | sed "s/ $container//")
 }

@@ -2,17 +2,18 @@
 
 ## Scope
 
-Issue #37 adds the first unified management surface for the standalone WLOC
-runtime. The page is intentionally small-router friendly: it uses UCI for
-staged edits, one bounded health request every 15 seconds, and a redacted
-runtime projection. It does not expose node credentials, raw traffic, or
-precise runtime probe data.
+Issue #37's surface is now the integrated Gateway + WLOC management plane. It
+is intentionally small-router friendly: it uses UCI for staged edits, one
+bounded health request every 15 seconds, and a redacted runtime projection. It
+does not expose node credentials, raw traffic, or precise runtime probe data.
 
 ## User journeys
 
-1. Open `WLOC Device Profiles` and see basic service settings, WLOC
-   summary, device profiles, node mode, WLOC auto/manual mode, enablement,
-   and `phase (reason_code)` state.
+1. Open `WLOC Setting` for the merged Overview/Basic Setting surface, then
+   open `WLOC Devices` for basic service settings, device profiles, node mode,
+   WLOC auto/manual mode, enablement, and `phase (reason_code)` state. Gateway
+   settings and its combined status/log view are separate named entries in the
+   same product menu.
 2. Edit one or more rows, add a row, or stage a deletion. No service restart
    or persistent commit occurs at this point.
 3. Press `Apply & restart`. The page validates profile count, IDs, duplicate

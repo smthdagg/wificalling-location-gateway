@@ -78,25 +78,27 @@ the single integrated package, enables and restarts the procd service, checks th
 control socket, and requires a valid `wloc.service/v1` status response. The
 verifier first validates every package against the release `SHA256SUMS`, binding
 the Docker evidence to the exact files intended for upload. The
-rootfs images do not contain the full dependency feeds used by a router, so
-the isolated install test bypasses unresolved optional dependencies; it does
-not claim that sing-box, nftables interception, DNS behavior, Wi-Fi Calling,
-or an iPhone were exercised. Those remain AX6S/real-device gates. The V2
-candidate has these target assets:
+rootfs images do not contain the full dependency feeds used by a router. In
+the 25.12 case, the APK solver therefore falls back to extracting the exact
+verified payload after the dependency-free smoke install leaves it absent;
+this is recorded as `payload-extracted`, not as a production package-manager
+success. The isolated matrix also does not claim that sing-box, nftables
+interception, DNS behavior, Wi-Fi Calling, or an iPhone were exercised. Those
+remain AX6S/real-device gates. The V2 candidate has these target assets:
 
 - `wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk` for AX6S;
-- `wificalling-location-gateway_2.0.0-r1_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
+- `wificalling-location-gateway_2.0.0-1_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
 - `wificalling-location-gateway-2.0.0-r1.apk` for OpenWrt 25.x.
 
-The host-side release build, SHA-256 verification, and four-environment Docker
-install matrix passed on 2026-08-22. Each case installed the single integrated Gateway/WLOC
-package, enabled/restarted the service, created the control socket, and
-returned a valid `wloc.service/v1` status:
+The host-side release candidate, SHA-256 verification, and four-environment
+Docker lifecycle matrix passed on 2026-08-22. Each case installed or extracted
+the single integrated Gateway/WLOC payload, enabled/restarted the service,
+created the control socket, and returned a valid `wloc.service/v1` status:
 
 ```text
 Redmi AX6S / OpenWrt 24.10.5|OpenWrt 24.10.5 aarch64_generic|installed|started|socket-ok|status-ok
 OpenWrt 24.10.8|OpenWrt 24.10.8 x86_64|installed|started|socket-ok|status-ok
-OpenWrt 25.12.3|OpenWrt 25.12.3 x86_64|installed|started|socket-ok|status-ok
+OpenWrt 25.12.3|OpenWrt 25.12.3 x86_64|payload-extracted|started|socket-ok|status-ok
 iStoreOS 24.10.5|iStoreOS 24.10.5 x86_64|installed|started|socket-ok|status-ok
 ```
 
