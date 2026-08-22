@@ -350,13 +350,13 @@ preflight() {
 }
 
 apply_update() {
-	package=$1
+	target_package=$1
 	acquire_lock
 	[ ! -e "$TXN" ] || die 'an interrupted update must be recovered before another update'
 	mkdir -m 0700 -p "$STATE_DIR/incoming"
 	WORK=$(mktemp -d "${TMPDIR:-/tmp}/wloc-update-check.XXXXXX")
-	version=$(package_info "$package" "$WORK")
-	bytes=$(wc -c < "$package" | tr -d ' ')
+	version=$(package_info "$target_package" "$WORK")
+	bytes=$(wc -c < "$target_package" | tr -d ' ')
 	available=$(free_kb)
 	case "$available" in ''|*[!0-9]*) die 'free-space check is unavailable' ;; esac
 	required=$(( (bytes / 1024) + 2048 ))
@@ -386,7 +386,7 @@ apply_update() {
 		fi
 	done
 	write_status applying validating "$version" "$current"
-	"$OPKG" install "$package" >/dev/null 2>&1 || {
+	"$OPKG" install "$target_package" >/dev/null 2>&1 || {
 		rollback_transaction package_install_failed
 		exit 1
 	}
@@ -407,7 +407,7 @@ apply_update() {
 		rollback_transaction health_check_failed
 		exit 1
 	fi
-	if ! cp -p "$package" "$STATE_DIR/current.ipk" \
+	if ! cp -p "$target_package" "$STATE_DIR/current.ipk" \
 		|| ! chmod 0600 "$STATE_DIR/current.ipk" \
 		|| ! printf '%s\n' "$version" > "$STATE_DIR/current.version"; then
 		rollback_transaction state_commit_failed
