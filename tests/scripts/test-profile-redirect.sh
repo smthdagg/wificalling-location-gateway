@@ -6,6 +6,7 @@ helper="$repo_root/openwrt/files/usr/sbin/wloc-profile-redirect.sh"
 refresh="$repo_root/openwrt/files/usr/sbin/wloc-refresh-set.sh"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-profile-redirect.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+export WLOC_UPSTREAM_IP_FILE="$tmp/apple-upstream-ip"
 
 sh -n "$helper" "$refresh"
 mkdir -p "$tmp/bin"
@@ -68,6 +69,10 @@ grep -F 'ip route add local 0.0.0.0/0 dev lo table 100' "$tmp/commands.log" >/de
 PATH="$tmp/bin:$PATH" WLOC_TEST_LOG="$tmp/commands.log" "$refresh"
 grep -F 'nft delete table inet wloc_service' "$tmp/commands.log" >/dev/null
 grep -F 'nft flush set inet wloc_profile_phone apple_hosts' "$tmp/commands.log" >/dev/null
+if grep -E 'nft add element .*apple_hosts \{ .*,$' "$tmp/commands.log" >/dev/null; then
+  printf '%s\n' 'refresh set must not emit a trailing comma' >&2
+  exit 1
+fi
 grep -F 'nft delete table inet wloc_profile_tablet' "$tmp/commands.log" >/dev/null
 if grep -F 'nft flush set inet wloc_profile_tablet apple_hosts' "$tmp/commands.log" >/dev/null; then
   printf '%s\n' 'disabled profile tables must not be refreshed' >&2

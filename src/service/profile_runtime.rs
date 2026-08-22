@@ -169,7 +169,12 @@ impl<R: ProfileRuntimeControl> ProfileRuntimeManager<R> {
         if self.statuses[index].phase == ProfileRuntimePhase::Disabled {
             return Ok(());
         }
-        if self.runtime.remove_profile_redirect(profile_id).is_err() {
+        if self.runtime.remove_profile_redirect(profile_id).is_err()
+            || self
+                .runtime
+                .profile_redirect_present(profile_id)
+                .unwrap_or(true)
+        {
             self.set_status(
                 index,
                 ProfileRuntimePhase::DegradedPassthrough,

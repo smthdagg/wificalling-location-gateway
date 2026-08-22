@@ -26,6 +26,10 @@ grep -F 'legacy-stop' "$supervisor" "$redirect" >/dev/null
 grep -F 'multiple_profiles_configured' "$redirect" >/dev/null
 grep -F 'PROFILE_PROXY_READY_FILE' "$supervisor" >/dev/null
 grep -F 'PROFILE_ACTIVATE_FILE' "$supervisor" >/dev/null
+grep -F 'main_service_enabled' "$supervisor" >/dev/null
+grep -F 'wloc-service.main.enabled' "$supervisor" >/dev/null
+grep -F 'REFRESH_SET_HELPER' "$supervisor" >/dev/null
+grep -F 'UPSTREAM_IP_FILE' "$supervisor" >/dev/null
 grep -F 'PROFILE_READY_FILE' "$supervisor" >/dev/null
 if grep -E 'pgrep[[:space:]]+-f' "$supervisor" >/dev/null; then
 	printf '%s\n' 'supervisor must not use global pgrep -f process matching' >&2

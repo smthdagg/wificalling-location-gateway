@@ -253,6 +253,10 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                 self.exit_evidence = ExitEvidence::Unavailable;
                 self.geo_resolution = GeoResolution::Unavailable;
                 self.last_probe_error = Some(error.to_string());
+                // Withdraw the previous coordinate immediately. Keeping a
+                // stale sink target after a failed probe would let the MITM
+                // patch a device with an old node's location.
+                self.publish_patch_target();
             }
         }
     }

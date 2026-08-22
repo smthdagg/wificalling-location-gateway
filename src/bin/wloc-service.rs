@@ -685,6 +685,7 @@ fn build_profile_handler(
         };
         service
             .set_manual_location(&RequestParams {
+                profile_id: None,
                 query: None,
                 latitude: Some(latitude),
                 longitude: Some(longitude),
@@ -951,17 +952,9 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             std::env::var("WLOC_EVENTS_FILE")
                 .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into()),
         ));
-    // The upstream connection must use the real Apple IP (the DNS hijack
-    // would otherwise point it back at this router). Prefer the first
-    // nft-set address; fall back to DNS-only resolution when the set is
-    // empty (e.g. rules not yet installed).
-    let proxy = match upstream_apple_ips().into_iter().next() {
-        Some(apple_ip) => {
-            eprintln!("wloc-service: upstream apple ip override {apple_ip}:443");
-            proxy.with_upstream_override(apple_ip, 443)
-        }
-        None => proxy,
-    };
+    let upstream_ip_file = std::env::var("WLOC_UPSTREAM_IP_FILE")
+        .unwrap_or_else(|_| "/var/run/wloc-service/apple-upstream-ip".to_owned());
+    let proxy = proxy.with_upstream_ip_file(std::path::PathBuf::from(upstream_ip_file));
     let proxy = std::sync::Arc::new(proxy);
     let proxy_port: u16 = env_or("WLOC_PROXY_PORT", 8443_u16);
 
@@ -978,6 +971,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             runtime_profile.manual_longitude,
         ) {
             let params = RequestParams {
+                profile_id: None,
                 query: None,
                 latitude: Some(latitude),
                 longitude: Some(longitude),
@@ -1530,6 +1524,7 @@ mod tests {
         group.reload().unwrap();
         group
             .set_manual_location(&RequestParams {
+                profile_id: None,
                 query: None,
                 latitude: Some(1.0),
                 longitude: Some(2.0),

@@ -9,11 +9,14 @@
 
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use bytes::Bytes;
-use http::{HeaderValue, Request, Response};
+use http::{HeaderMap, HeaderValue, Request, Response, StatusCode};
 use tokio::net::TcpStream;
+use tokio::sync::Semaphore;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 use crate::diagnostics::append_json_line;
@@ -39,6 +42,11 @@ impl PatchTargetResolver for crate::service::profile_dispatch::ProfilePatchRoute
 const MAX_FORWARD_BODY_BYTES: usize = 512 * 1024;
 /// Concurrent upstream streams per client connection.
 const MAX_STREAMS: usize = 8;
+const MAX_CLIENT_CONNECTIONS: usize = 8;
+const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_millis(250);
+const CLIENT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+const UPSTREAM_IO_TIMEOUT: Duration = Duration::from_secs(20);
+const CONNECTION_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 /// Resource bounds for the per-client synthesis cache on small gateways.
 const MAX_SYNTHESIZED_CLIENTS: usize = 16;
 const MAX_SYNTHESIZED_CACHE_BYTES: usize = 64 * 1024;
@@ -53,6 +61,7 @@ pub struct MitmProxy {
     /// Test hook: override the TCP connect target while keeping the approved
     /// hostname for SNI and the Host header. Production uses hostname:443.
     upstream_override: Option<(String, u16)>,
+    upstream_ip_file: Option<PathBuf>,
     /// Append-only rewrite log (one JSON line per patched response).
     events_file: Option<std::path::PathBuf>,
     /// Per-client cache of the last synthesized BlockBSSIDApple payload
@@ -61,6 +70,7 @@ pub struct MitmProxy {
     /// an empty block - that is what makes older iOS accept the target on
     /// the first try instead of retrying for several refresh cycles.
     synthesized_payloads: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    connection_slots: Arc<Semaphore>,
 }
 
 impl MitmProxy {
@@ -92,8 +102,10 @@ impl MitmProxy {
             tls_config: Arc::new(server),
             upstream_connector: TlsConnector::from(Arc::new(client)),
             upstream_override: None,
+            upstream_ip_file: None,
             events_file: None,
             synthesized_payloads: Arc::new(Mutex::new(HashMap::new())),
+            connection_slots: Arc::new(Semaphore::new(MAX_CLIENT_CONNECTIONS)),
         })
     }
 
@@ -107,6 +119,12 @@ impl MitmProxy {
     /// approved hostname on 443. Test-only; SNI and Host stay approved.
     pub fn with_upstream_override(mut self, host: impl Into<String>, port: u16) -> Self {
         self.upstream_override = Some((host.into(), port));
+        self
+    }
+
+    /// Read a resolver result captured before the local DNS hijack.
+    pub fn with_upstream_ip_file(mut self, path: PathBuf) -> Self {
+        self.upstream_ip_file = Some(path);
         self
     }
 
@@ -140,45 +158,73 @@ impl MitmProxy {
         client_tcp: TcpStream,
         patch: Option<PatchTarget>,
     ) -> Result<(), MitmProxyError> {
+        let _permit = tokio::time::timeout(
+            CONNECTION_WAIT_TIMEOUT,
+            Arc::clone(&self.connection_slots).acquire_owned(),
+        )
+        .await
+        .map_err(|_| MitmProxyError::Upstream("client connection limit reached".into()))?
+        .map_err(|_| MitmProxyError::Upstream("client connection limiter closed".into()))?;
         let client_addr = client_tcp
             .peer_addr()
             .ok()
             .map(|addr| addr.ip().to_string())
             .unwrap_or_else(|| "-".to_owned());
-        let client_tls = TlsAcceptor::from(Arc::clone(&self.tls_config))
-            .accept(client_tcp)
-            .await
-            .map_err(|error| MitmProxyError::ClientTls(error.to_string()))?;
+        let client_tls = tokio::time::timeout(
+            CLIENT_HANDSHAKE_TIMEOUT,
+            TlsAcceptor::from(Arc::clone(&self.tls_config)).accept(client_tcp),
+        )
+        .await
+        .map_err(|_| MitmProxyError::ClientTls("client TLS handshake timed out".into()))?
+        .map_err(|error| MitmProxyError::ClientTls(error.to_string()))?;
 
-        let mut server = h2::server::Builder::new()
-            .initial_window_size(32 * 1024)
-            .max_frame_size(16 * 1024)
-            .max_concurrent_streams(MAX_STREAMS as u32)
-            .handshake::<_, Bytes>(client_tls)
-            .await
-            .map_err(|error| MitmProxyError::H2(error.to_string()))?;
+        let mut server = tokio::time::timeout(
+            CLIENT_HANDSHAKE_TIMEOUT,
+            h2::server::Builder::new()
+                .initial_window_size(32 * 1024)
+                .max_frame_size(16 * 1024)
+                .max_concurrent_streams(MAX_STREAMS as u32)
+                .handshake::<_, Bytes>(client_tls),
+        )
+        .await
+        .map_err(|_| MitmProxyError::H2("client HTTP/2 handshake timed out".into()))?
+        .map_err(|error| MitmProxyError::H2(error.to_string()))?;
 
-        while let Some(accepted) = server.accept().await {
+        loop {
+            let accepted =
+                match tokio::time::timeout(CONNECTION_IDLE_TIMEOUT, server.accept()).await {
+                    Ok(Some(value)) => value,
+                    Ok(None) | Err(_) => break,
+                };
             let request = match accepted {
                 Ok(request) => request,
                 Err(_) => break,
             };
             let (request, mut respond) = request;
-            match self
-                .forward_upstream(request, patch.as_ref(), &client_addr)
-                .await
+            match tokio::time::timeout(
+                UPSTREAM_IO_TIMEOUT,
+                self.forward_upstream(request, patch.as_ref(), &client_addr),
+            )
+            .await
             {
-                Ok((original_len, patched_body)) => {
+                Ok(Ok((status, headers, original_len, patched_body))) => {
                     self.append_rewrite_event(original_len, patched_body.len());
+                    let mut response = Response::new(());
+                    *response.status_mut() = status;
+                    copy_response_headers(&mut response, &headers, patched_body.len());
                     let mut send = respond
-                        .send_response(Response::new(()), patched_body.is_empty())
+                        .send_response(response, patched_body.is_empty())
                         .map_err(|error| MitmProxyError::H2(error.to_string()))?;
                     if !patched_body.is_empty() {
                         let _ = send.send_data(Bytes::from(patched_body), true);
                     }
                 }
-                Err(error) => {
+                Ok(Err(error)) => {
                     eprintln!("wloc proxy: upstream failure: {error}");
+                    break;
+                }
+                Err(_) => {
+                    eprintln!("wloc proxy: upstream timeout");
                     break;
                 }
             }
@@ -188,14 +234,13 @@ impl MitmProxy {
 
     /// Forward one client request to the real upstream over a fresh verified
     /// TLS + H2 connection, patching a `/clls/wloc` response body. Returns
-    /// only the (possibly patched) response body; headers are discarded so a
-    /// stale `content-length` never misleads the client.
+    /// the upstream status/headers and the (possibly patched) response body.
     async fn forward_upstream(
         &self,
         request: Request<h2::RecvStream>,
         patch: Option<&PatchTarget>,
         client_addr: &str,
-    ) -> Result<(usize, Vec<u8>), MitmProxyError> {
+    ) -> Result<(StatusCode, HeaderMap, usize, Vec<u8>), MitmProxyError> {
         let hostname = approved_host(&request)?;
         let is_wloc =
             request.uri().path() == WLOC_PATH || request.uri().path().ends_with("/clls/wloc");
@@ -248,7 +293,12 @@ impl MitmProxy {
                                     "wloc proxy: synthesized kind={kind} from cache -> {} bytes",
                                     out.len()
                                 );
-                                return Ok((request_body.len(), out));
+                                return Ok((
+                                    StatusCode::OK,
+                                    HeaderMap::new(),
+                                    request_body.len(),
+                                    out,
+                                ));
                             }
                         } else if let Ok(mut cache) = self.synthesized_payloads.lock() {
                             cache_synthesized_payload(&mut cache, client_addr, payload.to_vec());
@@ -258,7 +308,12 @@ impl MitmProxy {
                             request_body.len(),
                             patched.len()
                         );
-                        return Ok((request_body.len(), patched));
+                        return Ok((
+                            StatusCode::OK,
+                            HeaderMap::new(),
+                            request_body.len(),
+                            patched,
+                        ));
                     }
                     // Fail open: any synthesis error falls through to the
                     // upstream forwarding path below.
@@ -267,10 +322,7 @@ impl MitmProxy {
             }
         }
 
-        let (connect_host, connect_port) = match &self.upstream_override {
-            Some((host, port)) => (host.clone(), *port),
-            None => (hostname.clone(), 443),
-        };
+        let (connect_host, connect_port) = self.upstream_destination(&hostname);
         let connect = TcpStream::connect((connect_host.as_str(), connect_port))
             .await
             .map_err(|error| MitmProxyError::Upstream(error.to_string()))?;
@@ -286,7 +338,7 @@ impl MitmProxy {
         // fails with "frame with invalid size". Forward over HTTP/1.1 and
         // decode Content-Length / chunked bodies.
         let upstream_request = sanitized_forward_request(parts, &hostname)?;
-        let (_, _, body) =
+        let (status, headers, body) =
             crate::mitm::http1::forward_http1(upstream_tls, &upstream_request, &request_body)
                 .await?;
 
@@ -304,7 +356,27 @@ impl MitmProxy {
                 dump_wloc_samples(&dir, &hostname, client_addr, &request_body, &body, &patched);
             }
         }
-        Ok((body.len(), patched))
+        Ok((status, headers, body.len(), patched))
+    }
+
+    fn upstream_destination(&self, hostname: &str) -> (String, u16) {
+        if let Some((host, port)) = &self.upstream_override {
+            return (host.clone(), *port);
+        }
+        if let Some(path) = &self.upstream_ip_file {
+            if let Ok(value) = std::fs::read_to_string(path) {
+                if let Some(ip) = value.lines().find_map(|line| {
+                    let candidate = line.trim();
+                    candidate
+                        .parse::<std::net::Ipv4Addr>()
+                        .ok()
+                        .map(|_| candidate.to_owned())
+                }) {
+                    return (ip, 443);
+                }
+            }
+        }
+        (hostname.to_owned(), 443)
     }
 
     /// Append one rewrite event per patched WLOC response.
@@ -378,6 +450,26 @@ fn sanitized_forward_request(
         parts.headers.insert("host", value);
     }
     Ok(Request::from_parts(parts, ()))
+}
+
+fn copy_response_headers(response: &mut Response<()>, upstream: &HeaderMap, body_len: usize) {
+    for (name, value) in upstream {
+        if matches!(
+            name.as_str(),
+            "connection"
+                | "keep-alive"
+                | "proxy-connection"
+                | "transfer-encoding"
+                | "upgrade"
+                | "content-length"
+        ) {
+            continue;
+        }
+        response.headers_mut().append(name.clone(), value.clone());
+    }
+    if let Ok(value) = HeaderValue::from_str(&body_len.to_string()) {
+        response.headers_mut().insert("content-length", value);
+    }
 }
 
 /// Patch the response body if this is a `/clls/wloc` response; otherwise, or

@@ -26,6 +26,8 @@ GATEWAY_NFT_BINARY=${GATEWAY_NFT_BINARY:-nft}
 PROFILE_PROXY_READY_FILE=${WLOC_PROFILE_PROXY_READY_FILE:-/var/run/wloc-service/profiles/.proxy-ready}
 PROFILE_ACTIVATE_FILE=${WLOC_PROFILE_ACTIVATE_FILE:-/var/run/wloc-service/profiles/.activate}
 PROFILE_READY_FILE=${WLOC_PROFILE_READY_FILE:-/var/run/wloc-service/profiles/.ready}
+REFRESH_SET_HELPER=${WLOC_REFRESH_SET_HELPER:-/usr/sbin/wloc-refresh-set.sh}
+UPSTREAM_IP_FILE=${WLOC_UPSTREAM_IP_FILE:-/var/run/wloc-service/apple-upstream-ip}
 CHECK_INTERVAL=${WLOC_SUPERVISOR_HEALTH_INTERVAL:-10}
 MAX_RUNTIME_SECONDS=${WLOC_SUPERVISOR_MAX_RUNTIME:-0}
 START_TIMEOUT=${WLOC_SUPERVISOR_START_TIMEOUT:-30}
@@ -78,6 +80,15 @@ withdraw_redirect() {
 	[ -x "$REDIRECT_HELPER" ] && "$REDIRECT_HELPER" stop >/dev/null 2>&1 || true
 }
 
+main_service_enabled() {
+	command -v uci >/dev/null 2>&1 || return 0
+	enabled=$(uci -q get wloc-service.main.enabled 2>/dev/null || true)
+	case "$enabled" in
+		0|false|off|no) return 1 ;;
+		*) return 0 ;;
+	esac
+}
+
 withdraw_profile_redirects() {
 	[ -x "$PROFILE_REDIRECT_HELPER" ] && \
 		"$PROFILE_REDIRECT_HELPER" stop-all >/dev/null 2>&1 || true
@@ -109,12 +120,14 @@ install_redirect() {
 		deadline=$(( $(now) + START_TIMEOUT ))
 		while [ ! -f "$PROFILE_READY_FILE" ]; do
 			[ "$(now)" -lt "$deadline" ] || return 1
-			sleep 1
+			 sleep 1
 		done
+		"$REFRESH_SET_HELPER"
 		redirect_present=1
 		return 0
 	fi
 	"$REDIRECT_HELPER" start
+	"$REFRESH_SET_HELPER"
 }
 
 cleanup_runtime() {
@@ -204,6 +217,11 @@ start_supervisor() {
 	gateway_running=0
 	wloc_running=0
 	redirect_present=0
+	if ! main_service_enabled; then
+		cleanup_runtime disabled_by_configuration 1 stopped
+		rmdir "$LOCKDIR" 2>/dev/null || true
+		exit 0
+	fi
 	write_state starting passthrough
 
 	# Legacy children are used only as a one-release adapter. Disable their
@@ -212,11 +230,18 @@ start_supervisor() {
 	[ -x "$GATEWAY_INIT" ] && "$GATEWAY_INIT" disable >/dev/null 2>&1 || true
 	stop_child "$WLOC_INIT"
 	rm -f "$WLOC_SERVICE_PIDFILE" "$WLOC_SOCKET"
+	rm -f "$UPSTREAM_IP_FILE"
 	if profile_mode; then
 		# Remove all profile and legacy tables before either child becomes
 		# ready; startup must never inherit interception from the previous mode.
 		withdraw_profile_redirects
 		"$REDIRECT_HELPER" legacy-stop >/dev/null 2>&1 || true
+	fi
+	# Resolve the real upstream before DNS hijacking or the WLOC listener is
+	# active, otherwise the proxy can resolve its own hijacked hostname.
+	if ! "$REFRESH_SET_HELPER" >/dev/null 2>&1; then
+		cleanup_runtime upstream_resolution_failed 1 stopped
+		exit 1
 	fi
 
 	if ! gateway_healthy; then
@@ -250,6 +275,10 @@ start_supervisor() {
 
 	started=$(now)
 	while :; do
+		if ! main_service_enabled; then
+			cleanup_runtime disabled_by_configuration 1 stopped
+			exit 0
+		fi
 		if ! health_ok; then
 			cleanup_runtime health_failed 1
 			exit 1
