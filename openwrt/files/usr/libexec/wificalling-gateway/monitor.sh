@@ -103,6 +103,7 @@ END {
 ' "$clients" "$state" "$conntrack" > "$tmp"
 
 cat "$event_tmp" >> "$events"
+rm -f "$event_tmp"
 awk -F '|' -v limit="$max_events" '
 FNR==NR { count[$2 FS $3]++; next }
 { key=$2 FS $3; seen[key]++; if (seen[key] > count[key]-limit) print }

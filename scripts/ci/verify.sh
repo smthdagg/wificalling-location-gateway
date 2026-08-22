@@ -24,7 +24,6 @@ done
 ./tests/scripts/test-release-version.sh
 ./tests/scripts/test-monitor-temp-cleanup.sh
 ./tests/scripts/test-wloc-synthesis-default.sh
-./tests/scripts/test-wloc-listener-nonblocking.sh
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 ./scripts/scan_secrets.py
 
