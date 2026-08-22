@@ -58,7 +58,6 @@ class V2UiContractTests(unittest.TestCase):
             self.assertNotIn("admin/services/wificalling-location-gateway/overview", menu)
             self.assertNotIn("admin/services/wificalling-location-gateway/gateway-status", menu)
             self.assertNotIn("admin/services/wificalling-location-gateway/gateway-events", menu)
-            self.assertNotIn("admin/services/wificalling-location-gateway/basic", menu)
 
     def test_combined_status_log_and_wloc_setting_pages_have_required_surfaces(self):
         for prefix in (
@@ -124,7 +123,7 @@ class V2UiContractTests(unittest.TestCase):
             "openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/wloc-basic.js",
         ):
             source = (self.root / relative).read_text(encoding="utf-8")
-            self.assertIn("Basic Settings", source)
+            self.assertIn("WLOC Setting", source)
             self.assertIn("probe_interval", source)
 
     def test_basic_settings_load_is_read_only_and_profile_regeneration_is_explicit(self):

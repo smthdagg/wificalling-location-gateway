@@ -1,10 +1,10 @@
-# 独立 WLOC 服务 LuCI 管理方案
+# WiFi Calling Gateway + WLOC LuCI 管理方案
 
 Status: implementation contract and historical design record (2026-08-22)
 Target: ImmortalWrt 24.10 / LuCI JS。
-> 边界修正（2026-08-22）：**本项目是独立 WLOC 项目**，不是 WLOC 集成进
-> Wi-Fi Calling，也不读取或依赖 Wi-Fi Calling Gateway 的服务、UCI、页面或
-> 版本。插件名保留为 `wificalling-location-gateway` 仅用于历史包名兼容。
+> 产品边界（2026-08-22）：**本项目是独立的 WiFi Calling Gateway + WLOC 项目**。
+> 两个模块在同一仓库、同一 IPK、同一统一生命周期和同一 LuCI 管理面中交付；不
+> 安装或依赖外部 Wi-Fi Calling Gateway 1.7 仓库。
 
 ## 1. 目标与范围
 
@@ -90,21 +90,23 @@ ucode（以 root 运行）调用，权限由 LuCI ACL 控制。
 - 保存的预设列表：可保存多个（`wloc-service.@preset[n]`），一键选择应用。
 
 ### 3.7 独立项目与设备档案
-- **独立插件**：`luci-app-wificalling-location-gateway`（独立 IPK），菜单
-  `admin/services/wificalling-location-gateway`，顶层只管理 WLOC。
+- **独立产品插件**：`luci-app-wificalling-location-gateway`（独立 IPK），菜单
+  `admin/services/wificalling-location-gateway` 同时管理本项目内的 Gateway 与 WLOC。
 - **页面结构**：
   ```
   admin/services/wificalling-location-gateway/
-    ├── Overview
-    ├── Basic Settings
-    ├── Devices           (每台设备的节点/定位/启用/状态/日志)
-    ├── Nodes / Provider
-    ├── Logs & Monitoring
+    ├── WCG Setting                 (Gateway 节点与设备设置)
+    ├── WCG Status & Logs           (合并 Gateway 状态与活动日志)
+    ├── WLOC Setting                (合并 Overview 与 Basic Settings)
+    ├── WLOC Devices                (每台设备的节点/定位/启用/状态/日志)
+    ├── WLOC Status & Logs
+    ├── WCG WLOC Service Monitor    (统一服务监控)
     ├── Component Update
     └── Help
   ```
-- **共享层**：本项目自己的节点引用和设备档案共享 sing-box provider；不读取
-  `wificalling-gateway` UCI，不调用其 init，不依赖其包或版本。
+- **共享层**：本项目自己的 Gateway 节点、WLOC 节点引用和设备档案共享 sing-box
+  provider；Gateway 与 WLOC 各自保留数据面，但由统一 supervisor、统一更新/回滚
+  和统一监控协调。
 - **设备语义**：`fixed` 是该设备档案明确绑定的 WLOC 节点；`auto` 跟随这个
   节点出口；`manual` 把坐标保存到这个设备档案。不存在没有目标对象的
   “Follow gateway” 或全局手动定位。

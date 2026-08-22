@@ -96,8 +96,9 @@ and must not install a duplicate full-size copy.
 ## 5. LuCI and authorized-device validation
 
 1. Open Services → WiFi Calling + WLOC Gateway.
-2. Confirm Overview, Basic Settings, Devices, Logs & Monitoring,
-   Service Status, Component Update, and Help are present.
+2. Confirm WCG Setting, WCG Status & Logs, WLOC Setting, WLOC Devices,
+   WLOC Status & Logs, WCG WLOC Service Monitor, Component Update, and Help
+   are present.
 3. Create one device profile with its private LAN address and explicit WLOC
    node reference.
 4. Test Auto follow selected node, then Manual location. Manual coordinates

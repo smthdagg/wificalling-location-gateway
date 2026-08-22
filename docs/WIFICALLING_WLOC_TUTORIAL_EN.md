@@ -23,9 +23,9 @@ Before starting, confirm that:
 
 Wi‑Fi Calling is sensitive to packet loss and jitter. Prefer a TCP-based node such as **AnyTLS, VLESS, VMess, or Trojan**. Hysteria2 and TUIC may establish a tunnel but can drop calls under public-network jitter.
 
-## 2. Open Wi‑Fi Calling Settings
+## 2. Open WCG Setting
 
-In LuCI, open **Services → WifiCalling&Wloc Gateway → Wi‑Fi Calling Settings**.
+In LuCI, open **Services → WiFi Calling + WLOC Gateway → WCG Setting**.
 
 ![Wi‑Fi Calling settings](images/wificalling-wloc/01-wifi-calling-settings.png)
 
@@ -125,7 +125,7 @@ Router-side WLOC does not require a Cloudflare Worker, WLOC Plus website, TOKEN,
 
 ## 9. Get the WLOC certificate from the router
 
-Open **WLOC Settings** and scroll to **Certificate (Safari install)**.
+Open **WLOC Setting** and scroll to **Certificate (Safari install)**.
 
 ![Saved locations and certificate section](images/wificalling-wloc/07-wloc-saved-certificate.png)
 
@@ -138,7 +138,7 @@ Open **WLOC Settings** and scroll to **Certificate (Safari install)**.
 
 ### 10.1 Open the URL in Safari
 
-Enter the complete URL shown in WLOC Settings in Safari on the test iPhone.
+Enter the complete URL shown in WLOC Setting in Safari on the test iPhone.
 
 ![Enter the WLOC profile URL in Safari](images/iphone/01-wloc-profile-url.jpg)
 
@@ -170,11 +170,11 @@ After installing the profile:
 
 ![Enable full trust for wloc-service root CA](images/iphone/05-wloc-certificate-trust.jpg)
 
-Back in WLOC Settings, the fingerprint shown in the iPhone profile may be pasted under **Verify iPhone certificate**. Select **Verify** and confirm that it matches the router CA.
+Back in WLOC Setting, the fingerprint shown in the iPhone profile may be pasted under **Verify iPhone certificate**. Select **Verify** and confirm that it matches the router CA.
 
 ## 12. Configure Auto or Manual location
 
-Return to **WLOC Settings**.
+Return to **WLOC Setting**.
 
 ![WLOC module, location mode, and manual search](images/wificalling-wloc/04-wloc-settings.png)
 
@@ -212,9 +212,9 @@ After switching mode or target, use one of the FAQ methods:
 
 Location requests are triggered by iPhone apps, and Apple location services may cache results. Wait briefly and trigger again if the first attempt does not refresh.
 
-## 14. Check WLOC Monitor & Log
+## 14. Check WLOC Status & Logs
 
-Open **WLOC Monitor & Log**.
+Open **WLOC Status & Logs**.
 
 ![WLOC current location and usage log](images/wificalling-wloc/05-wloc-monitor.png)
 

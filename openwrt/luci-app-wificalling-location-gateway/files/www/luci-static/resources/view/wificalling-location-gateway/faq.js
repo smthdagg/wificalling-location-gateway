@@ -4,15 +4,14 @@
 
 var sections = [
   ['Getting started', [
-    'Open Basic Settings and confirm the standalone WLOC service and provider configuration.',
-    'Open Devices to create one profile per LAN device. Each profile owns one WLOC node, one device address, and its Auto or Manual location mode.',
+    'Open WCG Setting to configure Gateway nodes, then open WLOC Setting to confirm the integrated WLOC service and provider configuration.',
+    'Open WLOC Devices to create one profile per LAN device. Each profile owns one WLOC node, one device address, and its Auto or Manual location mode.',
     'Use Auto to follow the selected node exit. Use Manual to write latitude and longitude to the same device profile.',
     'Install the local WLOC CA profile only on the authorized test device, then enable trust for that certificate.'
   ]],
   ['Operations', [
-    'Overview and Service Status show the daemon, provider, socket, redirect, and profile state.',
-    'Logs & Monitoring shows bounded WLOC events. Raw WLOC responses, credentials, and precise device identifiers are not stored in support bundles.',
-    'Component Update is an independent page. Stage a signed local package under /tmp/wloc-update and run preflight before applying it.',
+    'WCG Status & Logs, WLOC Status & Logs, and WCG WLOC Service Monitor show the integrated service state and bounded activity logs.',
+    'The Component Update page is independent. Stage a signed local package under /tmp/wloc-update and run preflight before applying it. If LuCI fails, use the manual SSH commands shown on that page.',
     'The package checks this router architecture, OpenWrt release family, package format, free space, and WLOC API metadata before installation.'
   ]],
   ['Small-router guidance', [
@@ -26,8 +25,8 @@ return view.extend({
   render: function() {
     wlocI18n.localizeTabs();
     return E([], [
-      E('h2', {}, wlocI18n.t('Help (FAQ)')),
-      E('p', {}, wlocI18n.t('Standalone WLOC operating guidance.')),
+      E('h2', {}, wlocI18n.t('Help')),
+      E('p', {}, wlocI18n.t('Integrated WiFi Calling Gateway and WLOC operating guidance.')),
       sections.map(function(section) {
         return E('div', { class: 'cbi-section' }, [
           E('h3', {}, wlocI18n.t(section[0])),

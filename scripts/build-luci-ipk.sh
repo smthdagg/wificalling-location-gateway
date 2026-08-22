@@ -76,6 +76,7 @@ case "$dependency_mode" in
 		basic_name="wloc_basic_fix_$view_suffix"
 		overview_name="wloc_overview_fix_$view_suffix"
 		monitor_name="wloc_monitor_fix_$view_suffix"
+		status_logs_name="gateway_status_logs_fix_$view_suffix"
 		faq_name="wloc_faq_fix_$view_suffix"
 		update_name="wloc_update_fix_$view_suffix"
 		health_name="wloc_health_fix_$view_suffix"
@@ -85,6 +86,8 @@ case "$dependency_mode" in
 		# clear.
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/wloc-basic.js" \
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$basic_name.js"
+		cp "$stage/data/www/luci-static/resources/view/wificalling-gateway/status-logs.js" \
+			"$stage/data/www/luci-static/resources/view/wificalling-gateway/$status_logs_name.js"
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/wloc-overview.js" \
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$overview_name.js"
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/wloc-monitor.js" \
@@ -95,7 +98,7 @@ case "$dependency_mode" in
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$update_name.js"
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js" \
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$health_name.js"
-		python3 - "$stage/data/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json" "$basic_name" "$overview_name" "$monitor_name" "$faq_name" "$update_name" "$health_name" <<'PY'
+		python3 - "$stage/data/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json" "$basic_name" "$overview_name" "$monitor_name" "$status_logs_name" "$faq_name" "$update_name" "$health_name" <<'PY'
 import json
 import sys
 
@@ -103,16 +106,17 @@ path = sys.argv[1]
 basic_name = sys.argv[2]
 overview_name = sys.argv[3]
 monitor_name = sys.argv[4]
-faq_name = sys.argv[5]
-update_name = sys.argv[6]
-health_name = sys.argv[7]
+status_logs_name = sys.argv[5]
+faq_name = sys.argv[6]
+update_name = sys.argv[7]
+health_name = sys.argv[8]
 with open(path, encoding="utf-8") as handle:
     menu = json.load(handle)
 menu["admin/services/wificalling-location-gateway/basic"]["action"]["path"] = (
     f"wificalling-location-gateway/{basic_name}"
 )
-menu["admin/services/wificalling-location-gateway/overview"]["action"]["path"] = (
-    f"wificalling-location-gateway/{overview_name}"
+menu["admin/services/wificalling-location-gateway/gateway-status-logs"]["action"]["path"] = (
+    f"wificalling-gateway/{status_logs_name}"
 )
 menu["admin/services/wificalling-location-gateway/monitor"]["action"]["path"] = (
     f"wificalling-location-gateway/{monitor_name}"

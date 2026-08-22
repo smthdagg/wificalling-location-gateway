@@ -882,3 +882,45 @@ msgstr "已停止"
 
 msgid "unavailable"
 msgstr "不可用"
+
+msgid "Certificate version"
+msgstr "证书版本"
+
+msgid "WLOC root CA"
+msgstr "WLOC 根证书"
+
+msgid "Profile version"
+msgstr "描述文件版本"
+
+msgid "Apple configuration profile"
+msgstr "Apple 配置描述文件"
+
+msgid "WLOC Setting"
+msgstr "WLOC 设置"
+
+msgid "Configure WLOC and view the integrated Gateway/WLOC status from one page. Device-specific node and location settings are managed on WLOC Devices."
+msgstr "在同一页面配置 WLOC 并查看集成 Gateway/WLOC 状态。设备专属节点和定位设置在 WLOC 设备页面管理。"
+
+msgid "WLOC settings and the quick integrated service overview are combined here."
+msgstr "WLOC 设置与集成服务快速概览已合并在此处。"
+
+msgid "Help"
+msgstr "帮助"
+
+msgid "Integrated WiFi Calling Gateway and WLOC operating guidance."
+msgstr "集成 WiFi Calling Gateway 与 WLOC 操作指南。"
+
+msgid "Install the WLOC CA only on the authorized test device. The values below identify the exact CA and profile version currently served by this router."
+msgstr "仅在授权测试设备上安装 WLOC 根证书。下方信息用于确认本路由器当前提供的准确证书和描述文件版本。"
+
+msgid "Manual upgrade"
+msgstr "手动升级"
+
+msgid "If the LuCI update action fails or is unavailable, copy the same signed integrated package and its manifest/signature to /tmp/wloc-update, then run the transactional helper over SSH:"
+msgstr "如果 LuCI 更新失败或不可用，请将相同的集成软件包及其清单/签名复制到 /tmp/wloc-update，然后通过 SSH 运行事务更新脚本："
+
+msgid "After the command completes, verify the unified health output:"
+msgstr "命令完成后，请检查统一健康状态输出："
+
+msgid "Do not install a WLOC-only package. This project package contains both WiFi Calling Gateway and WLOC. Use direct opkg only as a last resort when the transactional helper is unavailable, then restart wificalling-location-gateway and run the health check."
+msgstr "不要安装只有 WLOC 的软件包。本项目软件包同时包含 WiFi Calling Gateway 和 WLOC。只有事务更新脚本不可用时才将 opkg 作为最后手段，完成后重启 wificalling-location-gateway 并执行健康检查。"

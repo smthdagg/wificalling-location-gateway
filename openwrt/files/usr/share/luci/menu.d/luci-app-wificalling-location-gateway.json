@@ -5,54 +5,52 @@
     "action": { "type": "firstchild" },
     "depends": { "acl": ["luci-app-wificalling-location-gateway"] }
   },
-  "admin/services/wificalling-location-gateway/overview": {
-    "title": "Overview",
-    "order": 10,
-    "action": { "type": "view", "path": "wificalling-location-gateway/wloc-overview" }
-  },
   "admin/services/wificalling-location-gateway/gateway": {
-    "title": "WiFi Calling Gateway",
-    "order": 5,
+    "title": "WCG Setting",
+    "description": "Gateway node and device settings",
+    "order": 10,
     "action": { "type": "view", "path": "wificalling-gateway/overview" }
   },
-  "admin/services/wificalling-location-gateway/gateway-status": {
-    "title": "Gateway Status",
-    "order": 6,
-    "action": { "type": "view", "path": "wificalling-gateway/status" }
-  },
-  "admin/services/wificalling-location-gateway/gateway-events": {
-    "title": "Gateway Events",
-    "order": 7,
-    "action": { "type": "view", "path": "wificalling-gateway/events" }
+  "admin/services/wificalling-location-gateway/gateway-status-logs": {
+    "title": "WCG Status & Logs",
+    "description": "Combined WiFi Calling status and activity logs",
+    "order": 20,
+    "action": { "type": "view", "path": "wificalling-gateway/status-logs" }
   },
   "admin/services/wificalling-location-gateway/basic": {
-    "title": "Basic Settings",
-    "order": 20,
+    "title": "WLOC Setting",
+    "description": "Combined WLOC overview and basic settings",
+    "order": 30,
     "action": { "type": "view", "path": "wificalling-location-gateway/wloc-basic" }
   },
   "admin/services/wificalling-location-gateway/devices": {
-    "title": "Devices",
-    "order": 30,
+    "title": "WLOC Devices",
+    "description": "One profile per authorized device",
+    "order": 40,
     "action": { "type": "view", "path": "wificalling-location-gateway/wloc-devices" }
   },
   "admin/services/wificalling-location-gateway/monitor": {
-    "title": "Logs & Monitoring",
-    "order": 40,
+    "title": "WLOC Status & Logs",
+    "description": "WLOC location status and bounded logs",
+    "order": 50,
     "action": { "type": "view", "path": "wificalling-location-gateway/wloc-monitor" }
   },
   "admin/services/wificalling-location-gateway/health": {
-    "title": "Service Status",
-    "order": 45,
+    "title": "WCG WLOC Service Monitor",
+    "description": "Integrated Gateway and WLOC health",
+    "order": 60,
     "action": { "type": "view", "path": "wificalling-location-gateway/wloc-health" }
   },
   "admin/services/wificalling-location-gateway/update": {
     "title": "Component Update",
-    "order": 50,
+    "description": "Package update and recovery",
+    "order": 70,
     "action": { "type": "view", "path": "wificalling-location-gateway/wloc-update" }
   },
   "admin/services/wificalling-location-gateway/faq": {
-    "title": "Help (FAQ)",
-    "order": 60,
+    "title": "Help",
+    "description": "Operating help and recovery guidance",
+    "order": 80,
     "action": { "type": "view", "path": "wificalling-location-gateway/faq" }
   }
 }

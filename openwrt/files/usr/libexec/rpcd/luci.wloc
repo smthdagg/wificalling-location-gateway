@@ -176,7 +176,7 @@ call)
 	regen_profile)
 		if [ ! -x "$EXPORT" ]; then
 			json_init
-			json_add_string error "export-mobileconfig.sh 未安装"
+			json_add_string error "export-mobileconfig.sh is not installed"
 			json_dump
 			exit 1
 		fi
@@ -202,7 +202,7 @@ call)
 		if [ -f /etc/wloc-service/ca.info.json ]; then
 			cat /etc/wloc-service/ca.info.json
 		else
-			echo '{"error":"CA 信息文件不存在，请先启动 wloc-service"}'
+			echo '{"error":"CA information is unavailable; start wloc-service first"}'
 		fi
 		exit 0
 		;;
@@ -211,11 +211,11 @@ call)
 		json_load "$input"
 		json_get_var fingerprint fingerprint
 		if [ -z "$fingerprint" ] || [ "$fingerprint" = "null" ]; then
-			echo '{"error":"请粘贴 iPhone 上显示的证书指纹"}'
+			echo '{"error":"paste the certificate fingerprint shown on the iPhone"}'
 			exit 1
 		fi
 		if [ ! -f /etc/wloc-service/ca.info.json ]; then
-			echo '{"error":"CA 信息文件不存在，请先启动 wloc-service"}'
+			echo '{"error":"CA information is unavailable; start wloc-service first"}'
 			exit 1
 		fi
 		gw="$(jsonfilter -i /etc/wloc-service/ca.info.json -e '@.fingerprint')"
@@ -258,7 +258,7 @@ call)
 	health)
 		if [ ! -x /usr/sbin/wloc-health.sh ]; then
 			json_init
-			json_add_string error "wloc-health.sh 未安装"
+			json_add_string error "wloc-health.sh is not installed"
 			json_dump
 			exit 1
 		fi
@@ -359,7 +359,7 @@ call)
 		sleep 3
 		if [ ! -f /etc/wloc-service/ca.info.json ]; then
 			json_init
-			json_add_string error "重新生成证书失败，请检查 wloc-service 状态"
+			json_add_string error "CA regeneration failed; check wloc-service status"
 			json_dump
 			exit 1
 		fi

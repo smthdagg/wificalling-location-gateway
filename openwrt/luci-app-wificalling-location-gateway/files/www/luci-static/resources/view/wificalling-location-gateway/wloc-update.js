@@ -33,7 +33,14 @@ return view.extend({
         E('button', { class: 'cbi-button', click: function() { recoverRpc().then(show).catch(function(e) { show({ error: String(e) }); }); } }, i18n.t('Recover interrupted update'))
       ]),
       report
+    ]), E('div', { class: 'cbi-section' }, [
+      E('h3', {}, i18n.t('Manual upgrade')),
+      E('p', {}, i18n.t('If the LuCI update action fails or is unavailable, copy the same signed integrated package and its manifest/signature to /tmp/wloc-update, then run the transactional helper over SSH:')),
+      E('pre', { style: 'white-space:pre-wrap;overflow:auto' }, '/usr/sbin/wloc-component-update.sh preflight /tmp/wloc-update/<integrated-package>.ipk\n/usr/sbin/wloc-component-update.sh apply /tmp/wloc-update/<integrated-package>.ipk\n/usr/sbin/wloc-component-update.sh status'),
+      E('p', {}, i18n.t('After the command completes, verify the unified health output:')),
+      E('pre', { style: 'white-space:pre-wrap;overflow:auto' }, '/usr/sbin/wloc-health.sh'),
+      E('p', { class: 'alert-message warning' }, i18n.t('Do not install a WLOC-only package. This project package contains both WiFi Calling Gateway and WLOC. Use direct opkg only as a last resort when the transactional helper is unavailable, then restart wificalling-location-gateway and run the health check.')),
+      E('pre', { style: 'white-space:pre-wrap;overflow:auto' }, 'opkg install --force-reinstall /tmp/wloc-update/<integrated-package>.ipk\n/etc/init.d/wificalling-location-gateway restart\n/usr/sbin/wloc-health.sh')
     ])]);
   }
 });
-
