@@ -29,9 +29,9 @@
 <text x="789.1" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-23</text>
 <line x1="48" y1="304" x2="842" y2="304" stroke="#d0d7de"/>
 <line x1="48" y1="18" x2="48" y2="304" stroke="#d0d7de"/>
-<path d="M48 304 L206.8 304.0 L259.7 295.4 L312.7 139.6 L365.6 83.8 L418.5 76.6 L471.5 72.3 L524.4 65.2 L577.3 53.8 L630.3 42.3 L683.2 39.4 L683.2 304 Z" fill="#ddf4ff"/>
-<path d="M206.8 304.0 L259.7 295.4 L312.7 139.6 L365.6 83.8 L418.5 76.6 L471.5 72.3 L524.4 65.2 L577.3 53.8 L630.3 42.3 L683.2 39.4" fill="none" stroke="#0969da" stroke-width="2"/>
-<circle cx="683.2" cy="39.4" r="3.5" fill="#0969da"/>
-<text x="692.2" y="33.4" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">185</text>
-<text x="692.2" y="49.4" font-size="11" fill="#1f2328" text-anchor="start">stars</text>
+<path d="M48 304 L206.8 304.0 L259.7 295.4 L312.7 139.6 L365.6 83.8 L418.5 76.6 L471.5 72.3 L524.4 65.2 L577.3 53.8 L630.3 42.3 L683.2 36.6 L683.2 304 Z" fill="#ddf4ff"/>
+<path d="M206.8 304.0 L259.7 295.4 L312.7 139.6 L365.6 83.8 L418.5 76.6 L471.5 72.3 L524.4 65.2 L577.3 53.8 L630.3 42.3 L683.2 36.6" fill="none" stroke="#0969da" stroke-width="2"/>
+<circle cx="683.2" cy="36.6" r="3.5" fill="#0969da"/>
+<text x="692.2" y="30.6" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">187</text>
+<text x="692.2" y="46.6" font-size="11" fill="#1f2328" text-anchor="start">stars</text>
 </svg>
