@@ -66,9 +66,16 @@ done
 
 mkdir -p "$download_dir" "$output_dir"
 
-if ! docker image inspect "$RUST_IMAGE" >/dev/null 2>&1 || \
-   ! docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$RUST_IMAGE" \
+RUST_RUNTIME_IMAGE=
+if docker image inspect "$RUST_IMAGE" >/dev/null 2>&1 && \
+   docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$RUST_IMAGE" \
        | grep -Fx "$RUST_IMAGE_DIGEST" >/dev/null 2>&1; then
+	RUST_RUNTIME_IMAGE=$RUST_IMAGE
+elif docker image inspect "$RUST_IMAGE_DIGEST" >/dev/null 2>&1; then
+	# CI pulls by digest, which need not create the human-readable tag in the
+	# local Docker image store. The digest reference is already content-pinned.
+	RUST_RUNTIME_IMAGE=$RUST_IMAGE_DIGEST
+else
     fail "pinned build image is missing or has the wrong digest; fetch it explicitly with: docker pull --platform linux/amd64 $RUST_IMAGE_DIGEST"
 fi
 
@@ -97,7 +104,7 @@ docker run --rm --pull never --platform linux/amd64 \
     -v "$repo_root:/src:ro" \
     -v "$cache_dir:/state" \
     -w /src \
-    "$RUST_IMAGE" \
+    "$RUST_RUNTIME_IMAGE" \
     sh -ec '
         apt-get update
         apt-get install -y --no-install-recommends zstd
@@ -126,7 +133,7 @@ docker run --rm --pull never --platform linux/amd64 --network none \
     -v "$repo_root:/src:ro" \
     -v "$cache_dir:/state" \
     -w /src \
-    "$RUST_IMAGE" \
+    "$RUST_RUNTIME_IMAGE" \
     sh -ec '
         rustlib=/usr/local/rustup/toolchains/'"$RUST_TOOLCHAIN"'-x86_64-unknown-linux-gnu/lib/rustlib/'"$RUST_TARGET"'
         cp -a /state/rust-target/. "$rustlib/"

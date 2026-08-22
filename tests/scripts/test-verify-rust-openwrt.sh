@@ -54,7 +54,10 @@ set -eu
 printf 'docker %s\n' "$*" | tr '\n\t' '  ' | tr -s ' ' >>"$OPENWRT_CROSS_TEST_LOG"
 if [ "$1" = image ] && [ "$2" = inspect ]; then
     printf '%s\n' 'rust@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9'
-    exit "${OPENWRT_CROSS_TEST_IMAGE_STATUS:-0}"
+    case " $* " in
+        *" rust@sha256:"*) exit "${OPENWRT_CROSS_TEST_DIGEST_STATUS:-${OPENWRT_CROSS_TEST_IMAGE_STATUS:-0}}" ;;
+        *) exit "${OPENWRT_CROSS_TEST_TAG_STATUS:-${OPENWRT_CROSS_TEST_IMAGE_STATUS:-0}}" ;;
+    esac
 fi
 if [ "$1" = run ]; then
     case " $* " in
@@ -144,6 +147,10 @@ assert_contains "$tmpdir/missing-image.out" "docker pull --platform linux/amd64 
 if grep -F 'docker run' "$tmpdir/missing-image.calls" >/dev/null; then
     fail "Docker must not run when the pinned image is missing"
 fi
+
+run_case digest-only env OPENWRT_CROSS_TEST_TAG_STATUS=1
+assert_contains "$tmpdir/digest-only.calls" "docker run --rm --pull never --platform linux/amd64 -v"
+assert_contains "$tmpdir/digest-only.calls" "rust@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9"
 
 if run_case oversize env OPENWRT_CROSS_TEST_OVERSIZE=1; then
     fail "an artifact larger than 8 MiB must fail"
