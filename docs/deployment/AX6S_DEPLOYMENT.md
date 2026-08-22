@@ -56,6 +56,24 @@ The package owns /etc/config/wloc-service and
 product metadata and carries the Gateway and WLOC runtime/UI payloads; it has
 no dependency on the separate Gateway 1.7 repository.
 
+A direct `opkg` migration deliberately invalidates any older transactional
+rollback IPK whose version does not match the newly installed package. This
+prevents a WLOC-only package from becoming the rollback target of the
+integrated product. After verifying the installed package, stage that exact
+known-good IPK and its signed manifest for future component updates, then
+initialize the updater record before using LuCI Component Update:
+
+~~~sh
+mkdir -p /var/lib/wificalling-location-gateway/update
+cp -p /tmp/wificalling-location-gateway_2.0.0-1_aarch64_cortex-a53.ipk \
+  /var/lib/wificalling-location-gateway/update/current.ipk
+chmod 0600 /var/lib/wificalling-location-gateway/update/current.ipk
+printf '%s\n' 2.0.0-1 > /var/lib/wificalling-location-gateway/update/current.version
+~~~
+
+Use the actual installed version and verified package filename; do not copy an
+older WLOC-only artifact into this baseline.
+
 ## 4. Verify the integrated lifecycle
 
 ~~~sh

@@ -19,7 +19,9 @@ Before `opkg install` is called, the helper validates:
   `/etc/wificalling-location-gateway/update.pub` `usign` key;
 - free space for the package plus a bounded transaction reserve;
 - current-version ordering, including explicit authorization for downgrade;
-- a known-good rollback IPK.
+- a known-good rollback IPK that contains the Gateway configuration and both
+  integrated lifecycle init scripts. A legacy WLOC-only IPK is rejected before
+  any package mutation.
 
 The install is never remove-first. The helper takes a persistent transaction
 snapshot of both `/etc/config/wificalling-gateway` and

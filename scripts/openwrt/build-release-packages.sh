@@ -157,7 +157,18 @@ define Package/wificalling-location-gateway/postinst
 [ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
 # A direct package install is outside the transactional updater. Do not leave
 # an older transaction result visible as if it described this package.
-rm -f /var/lib/wificalling-location-gateway/update/status.json
+update_state=/var/lib/wificalling-location-gateway/update
+rm -f "\$\$update_state/status.json"
+opkg_bin=\$\$(command -v opkg 2>/dev/null || true)
+if [ -n "\$\$opkg_bin" ]; then
+  installed_version=\$\$("\$\$opkg_bin" status wificalling-location-gateway 2>/dev/null | sed -n 's/^Version:[[:space:]]*//p' | head -n 1)
+  recorded_version=\$\$(cat "\$\$update_state/current.version" 2>/dev/null || true)
+  if [ -n "\$\$installed_version" ] && [ "\$\$installed_version" != "\$\$recorded_version" ]; then
+    # A direct install may have replaced the package behind the updater's
+    # back. Never retain an older (possibly WLOC-only) rollback IPK.
+    rm -f "\$\$update_state/current.ipk" "\$\$update_state/current.version"
+  fi
+fi
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 for required in /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd /usr/libexec/wificalling-location-gateway/singbox-runtime.sh; do

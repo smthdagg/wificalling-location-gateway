@@ -64,6 +64,7 @@ make_ipk() {
     out=$3
     architecture=${4:-all}
     target=${5:-mediatek/mt7622}
+    integrated=${6:-1}
     package_dir="$tmp/package-$version-$component"
     rm -rf "$package_dir"
     mkdir -p "$package_dir/control" "$package_dir/data/etc/config" "$package_dir/data/usr/share/wificalling-location-gateway"
@@ -79,7 +80,12 @@ X-WLOC-Package-Format: ipk
 EOF
     printf '%s\n' "$component" > "$package_dir/data/usr/share/wificalling-location-gateway/component.txt"
     printf 'new-config\n' > "$package_dir/data/etc/config/wloc-service"
-    printf 'new-gateway-config\n' > "$package_dir/data/etc/config/wificalling-gateway"
+    if [ "$integrated" = 1 ]; then
+        printf 'new-gateway-config\n' > "$package_dir/data/etc/config/wificalling-gateway"
+        mkdir -p "$package_dir/data/etc/init.d"
+        : > "$package_dir/data/etc/init.d/wificalling-gateway"
+        : > "$package_dir/data/etc/init.d/wificalling-location-gateway"
+    fi
     (cd "$package_dir/control" && tar -czf "$package_dir/control.tar.gz" ./control)
     (cd "$package_dir/data" && tar -czf "$package_dir/data.tar.gz" ./etc ./usr)
     (cd "$package_dir" && tar -czf "$out" ./control.tar.gz ./data.tar.gz)
@@ -103,10 +109,12 @@ make_manifest() {
 
 old_package="$tmp/old.ipk"
 new_package="$tmp/new.ipk"
+legacy_package="$tmp/legacy.ipk"
 bad_arch_package="$tmp/bad-arch.ipk"
 bad_target_package="$tmp/bad-target.ipk"
 make_ipk 1.0.0-1 old-component "$old_package"
 make_ipk 1.1.0-1 new-component "$new_package"
+make_ipk 1.0.0-1 legacy-component "$legacy_package" all mediatek/mt7622 0
 make_ipk 1.1.0-1 bad-component "$bad_arch_package" mipsel
 make_ipk 1.1.0-1 bad-target "$bad_target_package" all x86/64
 make_manifest "$old_package"
@@ -145,6 +153,11 @@ printf 'ok\n' > "$tmp/health"
 : > "$tmp/supervisor.log"
 
 script="$repo_root/openwrt/files/usr/sbin/wloc-component-update.sh"
+
+if WLOC_UPDATE_CURRENT_PACKAGE="$legacy_package" sh "$script" apply "$new_package"; then
+    echo 'WLOC-only rollback package was accepted for the integrated product' >&2
+    exit 1
+fi
 
 cp "$new_package" "$tmp/unsigned.ipk"
 if sh "$script" preflight "$tmp/unsigned.ipk"; then

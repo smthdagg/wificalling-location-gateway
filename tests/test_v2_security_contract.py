@@ -68,6 +68,8 @@ class V2SecurityContractTests(unittest.TestCase):
             source = (ROOT / relative).read_text(encoding="utf-8")
             self.assertNotIn("killall -q wloc-service", source)
             self.assertIn("/etc/init.d/wloc-service stop", source)
+            self.assertIn("current.ipk", source)
+            self.assertIn("current.version", source)
 
 
 if __name__ == "__main__":

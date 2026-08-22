@@ -160,7 +160,18 @@ PY
 [ -n "${IPKG_INSTROOT:-}" ] && exit 0
 # A direct opkg install is outside the transactional updater. Do not leave a
 # previous transaction result visible as if it described this package.
-rm -f /var/lib/wificalling-location-gateway/update/status.json
+update_state=/var/lib/wificalling-location-gateway/update
+rm -f "$update_state/status.json"
+opkg_bin=$(command -v opkg 2>/dev/null || true)
+if [ -n "$opkg_bin" ]; then
+  installed_version=$("$opkg_bin" status wificalling-location-gateway 2>/dev/null | sed -n 's/^Version:[[:space:]]*//p' | head -n 1)
+  recorded_version=$(cat "$update_state/current.version" 2>/dev/null || true)
+  if [ -n "$installed_version" ] && [ "$installed_version" != "$recorded_version" ]; then
+    # A direct install may have replaced the package behind the updater's
+    # back. Never retain an older (possibly WLOC-only) rollback IPK.
+    rm -f "$update_state/current.ipk" "$update_state/current.version"
+  fi
+fi
 /etc/init.d/wloc-service disable >/dev/null 2>&1 || true
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway disable >/dev/null 2>&1 || true

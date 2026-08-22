@@ -260,6 +260,24 @@ tar -xOzf "$package" control.tar.gz > "$work/control.tar.gz" 2>/dev/null \
 	printf '%s\n' "$version"
 }
 
+rollback_package_is_integrated() {
+	package=$1
+	work_dir=$2
+	rollback_data="$work_dir/rollback-data.tar.gz"
+	tar -xOzf "$package" data.tar.gz > "$rollback_data" 2>/dev/null \
+		|| tar -xOzf "$package" ./data.tar.gz > "$rollback_data" 2>/dev/null \
+		|| return 1
+	archive_safe "$rollback_data" || return 1
+	for required in \
+		'etc/config/wificalling-gateway' \
+		'etc/init.d/wificalling-gateway' \
+		'etc/init.d/wificalling-location-gateway'; do
+		tar -tzf "$rollback_data" | awk -v required="$required" \
+			'$0 == required || $0 == "./" required { found=1 } END { exit found ? 0 : 1 }' \
+			|| return 1
+	done
+}
+
 restore_configs() {
 	for config in wloc-service wificalling-gateway; do
 		if [ -f "$TXN/config.$config" ]; then
@@ -351,6 +369,8 @@ apply_update() {
 	fi
 	rollback_package=${WLOC_UPDATE_CURRENT_PACKAGE:-$STATE_DIR/current.ipk}
 	[ -f "$rollback_package" ] && [ ! -L "$rollback_package" ] || die 'known-good rollback package is required'
+	rollback_package_is_integrated "$rollback_package" "$WORK" \
+		|| die 'known-good rollback package is not an integrated Gateway/WLOC package'
 	mkdir -m 0700 -p "$TXN"
 	chmod 0700 "$TXN"
 	printf '%s\n' "$version" > "$TXN/target.version"
