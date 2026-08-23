@@ -39,6 +39,10 @@ if grep -F 'shasum -a 256 ./wificalling-location-gateway' "$builder" >/dev/null;
 fi
 grep -F 'luci-app-wificalling-gateway.json' "$builder" >/dev/null ||
 	fail 'integrated release builder must remove the standalone Gateway LuCI menu'
+grep -F "Package: wificalling-location-gateway" "$builder" >/dev/null ||
+	fail 'release builder must accept a hash-pinned stable integrated package as its 1.2.x base'
+grep -F "1\\.2\\.[0-9]+-(r)?[0-9]+" "$builder" >/dev/null ||
+	fail 'release builder must accept the stable 1.2.x rN revision format'
 
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"
