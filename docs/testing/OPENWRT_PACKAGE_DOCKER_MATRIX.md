@@ -50,11 +50,11 @@ Then build the release packages:
 The builder uses immutable official OpenWrt SDK containers for 24.10.8 and
 25.12.3. Product packaging runs with networking disabled and `--pull never`.
 Images therefore must be fetched explicitly once. The output includes one IPK,
-one native APK v3 package, and `SHA256SUMS`. The Gateway input is rejected
-unless its package identity is either the legacy stable Gateway package or the
-stable integrated `wificalling-location-gateway` package, its version is an
-approved 1.7.x/1.2.x form, its archive paths are safe, and its digest matches
-the explicit pin.
+one native APK v3 package, and `SHA256SUMS`. The baseline input is rejected
+unless its package identity is the stable integrated
+`wificalling-location-gateway` package, its version is a 1.2.x release
+revision, its archive paths are safe, and its digest matches the explicit pin.
+Retired standalone package lines are never valid inputs.
 
 ## Every release asset: four-environment Docker verification
 

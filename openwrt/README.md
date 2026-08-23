@@ -24,7 +24,7 @@ End users install one architecture-specific package named
 uses the integrated IPK and 25.x uses the native APK v3. Both UCI paths are
 declared as conffiles, so direct upgrade/reinstall preserves configuration.
 
-The release builder composes a pinned, verified Gateway 1.7 IPK at build time;
+The release builder composes a pinned, verified stable integrated 1.2.x IPK at build time;
 the source repository remains isolated and does not vendor the Gateway source.
 
 ## Hard gates

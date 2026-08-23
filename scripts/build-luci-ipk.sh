@@ -81,13 +81,12 @@ case "$dependency_mode" in
 			mkdir -p "$gateway_stage/package" "$gateway_stage/data"
 			tar -xf "$gateway_ipk" -C "$gateway_stage/package"
 			gateway_control=$(tar -xOf "$gateway_stage/package/control.tar.gz" ./control)
-			if ! printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null &&
-				! printf '%s\n' "$gateway_control" | grep -Fx 'Package: wificalling-location-gateway' >/dev/null; then
-				echo 'Gateway IPK has an unexpected package identity' >&2
+			if ! printf '%s\n' "$gateway_control" | grep -Fx 'Package: wificalling-location-gateway' >/dev/null; then
+				echo 'Gateway IPK must be a stable integrated 1.2.x release' >&2
 				exit 2
 			fi
-			printf '%s\n' "$gateway_control" | grep -E '^Version: (1\.7\.[0-9]+-[0-9]+|1\.2\.[0-9]+-(r)?[0-9]+)$' >/dev/null || {
-				echo 'Gateway IPK must be a validated 1.7.x or stable 1.2.x release' >&2
+			printf '%s\n' "$gateway_control" | grep -E '^Version: 1\.2\.[0-9]+-(r)?[0-9]+$' >/dev/null || {
+				echo 'Gateway IPK must be a stable integrated 1.2.x release' >&2
 				exit 2
 			}
 			archive_is_safe "$gateway_stage/package/data.tar.gz" || {
@@ -95,21 +94,9 @@ case "$dependency_mode" in
 				exit 2
 			}
 			tar -xzf "$gateway_stage/package/data.tar.gz" -C "$gateway_stage/data"
-			gateway_version=$(printf '%s\n' "$gateway_control" | sed -n 's/^Version: //p')
-			case "$gateway_version" in
-				1.7.*)
-					"$root/scripts/openwrt/patch-wireguard-psk.sh" "$gateway_stage/data"
-					"$root/scripts/openwrt/patch-wireguard-health.sh" "$gateway_stage/data"
-					"$root/scripts/openwrt/patch-node-status-compact.sh" "$gateway_stage/data"
-					"$root/scripts/openwrt/patch-gateway-device-guard.sh" "$gateway_stage/data"
-					;;
-				1.2.*)
-					# Stable integrated packages already contain those fixes. Overlay
-					# the current maintained baseline after extraction so an upgrade
-					# cannot resurrect older scripts or LuCI assets.
-					cp -R "$root/openwrt/files/." "$gateway_stage/data/"
-					;;
-			esac
+			# Overlay the current maintained baseline after extraction so an
+			# incremental upgrade cannot resurrect older scripts or LuCI assets.
+			cp -R "$root/openwrt/files/." "$gateway_stage/data/"
 			cp -R "$gateway_stage/data/." "$stage/data/"
 			# The integrated LuCI views intentionally replace the standalone
 			# Gateway views after the verified Gateway payload is merged.

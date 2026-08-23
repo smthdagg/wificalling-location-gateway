@@ -25,7 +25,7 @@ As an AX6S administrator, I can install one architecture-specific IPK that resto
 | The complete product package is named `wificalling-location-gateway`, matching the project instead of looking like a LuCI-only component | Filename and control package-name assertions |
 | The output identifies the AX6S runtime as `aarch64_cortex-a53`, not `all` | Package filename and control metadata assertions |
 | The integrated package has no dependency on separate Gateway or WLOC packages | Exact `Depends` and negative dependency assertions |
-| Gateway 1.7.x input has the expected identity and pinned SHA-256 | Identity/version and digest rejection tests |
+| Stable integrated 1.2.x input has the expected identity and pinned SHA-256 | Identity/version, retired-line, and digest rejection tests |
 | Both UCI files survive reinstall/upgrade | Exact `conffiles` assertions for both paths |
 | Gateway init/config, WLOC init/config, service and control client are all present | Required payload member assertions |
 | A mismatched Gateway package digest stops the build | Negative SHA-256 test |
