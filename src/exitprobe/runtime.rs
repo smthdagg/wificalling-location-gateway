@@ -15,6 +15,10 @@ use super::{validate_observation, ExitObservation, ExitProbeError, NodeRef, Prob
 /// [`ExitProbeError::RuntimeFailure`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProbeFailure {
+    /// The followed device or its bound node is absent from the current
+    /// Gateway configuration. Selecting another node would publish a false
+    /// location, so this condition is always fail-closed.
+    BoundNodeMissing,
     /// The probe target or exit path is unreachable.
     Unreachable,
     /// The probe exceeded its bounded deadline.
@@ -29,6 +33,9 @@ impl ProbeFailure {
     /// User-facing reason, shown in the monitor when the exit IP is unknown.
     pub fn message(self) -> &'static str {
         match self {
+            ProbeFailure::BoundNodeMissing => {
+                "followed device node is missing; select and apply a WCG node"
+            }
             ProbeFailure::Unreachable => "node unreachable",
             ProbeFailure::Timeout => "node connection timed out",
             ProbeFailure::InvalidData => "invalid probe response",

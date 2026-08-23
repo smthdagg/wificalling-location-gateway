@@ -1,8 +1,13 @@
 # Multi-agent development contract
 
-## Mission
+## Mission and release boundary
 
-Build `wificalling-location-gateway` as an isolated, fail-open OpenWrt component. Do not modify or vendor the stable Wi-Fi Calling Gateway 1.7 repository from this repository.
+Maintain `wificalling-location-gateway` as the stable, integrated Wi-Fi Calling + WLOC OpenWrt product. Preserve its fail-open WLOC behavior and the proven 1.2.x implementation; incremental releases extend that baseline instead of redesigning it.
+
+- `1.2.x` stable integrated releases are the only permitted build/package baseline.
+- Retired standalone Wi-Fi Calling Gateway packages, including every 1.7.x package, must be rejected as build inputs and must not be copied back into this repository.
+- The multi-device/2.0 Beta line is maintained only in the separate Beta repository. It is outside this repository's architecture, source, issues, branches, releases, documentation, packaging, and test scope; do not import or recreate it here.
+- The `2.0` value in an IPK `debian-binary` member is an archive-format marker, not a project version, and remains required for valid IPK output.
 
 ## Source of truth
 
@@ -54,7 +59,7 @@ Use `scripts/agent-takeover.sh <issue> <agent> <slug> <capabilities> [ttl-minute
 - All parser and network inputs require size, time, concurrency, and schema limits.
 - Unknown protocol, invalid Geo data, or engine failure must not produce a default fake coordinate.
 - WLOC interception must remain limited to the assigned test device, two exact Apple hostnames, and TCP 443.
-- Never intercept UDP 500/4500 or modify the Gateway 1.7 nftables table.
+- Never intercept UDP 500/4500 or modify the integrated WCG nftables table.
 - Changes under `internal/ca/`, `internal/proxy/`, `openwrt/`, or `.github/workflows/` require security review.
 
 ## Verification

@@ -2,6 +2,47 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.2.2-r4] - 2026-08-23
+
+Stable deleted-node fail-closed hotfix and release-baseline isolation.
+
+### Fixed
+
+- **No arbitrary node fallback**: auto-follow now requires the selected WCG
+  device and its bound node to exist in the current UCI configuration. A
+  deleted binding can no longer fall through to the first sing-box outbound,
+  endpoint, or a stale generated route.
+- **No stale location after binding loss**: when the followed node is missing,
+  the runtime clears the exit IP and Geo result and reports an actionable
+  error instead of retaining a previous country, city, or coordinate.
+- **Visible refresh result**: the WLOC monitor refresh action now waits for the
+  daemon result and reports changed, unchanged, or unavailable exit state.
+  The new messages and missing-node reason include Chinese translations.
+
+### Release boundary and verification
+
+- Both formal package builders now accept only SHA-256-pinned stable integrated
+  `wificalling-location-gateway` 1.2.x packages as their baseline. Retired
+  standalone package lines are rejected.
+- Project rules exclude the independently maintained multi-device/2.0 Beta
+  line from this repository. The IPK `debian-binary` value `2.0` remains only
+  as the required archive-format marker.
+- Built and verified the AX6S AArch64 IPK, OpenWrt/iStoreOS 24.x x86_64 IPK,
+  and OpenWrt 25.12 x86_64 native APK across four pinned rootfs environments.
+- Installed the exact AArch64 R4 asset on Redmi AX6S after removing R3 to fit
+  the constrained overlay. Both UCI files were preserved. A temporary missing
+  binding produced unavailable exit/Geo state with no unrelated fallback;
+  restoring the configuration returned the exit state to verified.
+
+### 中文说明
+
+- 修复自动跟随设备的原绑定节点被删除后，程序错误选择首个可用节点的问题。
+- 绑定节点不存在时立即清除旧出口 IP 与旧地理信息，并提示重新选择、应用 WCG
+  节点；刷新按钮现在明确显示出口已变化、未变化或不可用。
+- 正式构建基线严格限制为已校验哈希的 1.2.x 稳定整合包，拒绝 1.7 等退役独立包。
+- 多设备/2.0 Beta 已从本项目范围移除并由独立项目维护；IPK 内的 `2.0` 仅为包格式。
+- 三个平台包与四环境 Docker 矩阵通过，R4 已在 AX6S 按低存储流程安装并完成回归。
+
 ## [1.2.2-r3] - 2026-08-23
 
 Stable runtime hotfix and completion of the three-platform release set.

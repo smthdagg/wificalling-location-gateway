@@ -96,40 +96,18 @@ chmod 0777 "$stage/output"
 
 tar -xf "$gateway_ipk" -C "$stage/gateway"
 gateway_control=$(tar -xOf "$stage/gateway/control.tar.gz" ./control)
-if ! printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null &&
-	! printf '%s\n' "$gateway_control" | grep -Fx 'Package: wificalling-location-gateway' >/dev/null; then
-	fail 'Gateway IPK has an unexpected package identity'
-fi
-printf '%s\n' "$gateway_control" | grep -E '^Version: (1\.7\.[0-9]+-[0-9]+|1\.2\.[0-9]+-(r)?[0-9]+)$' >/dev/null ||
-	fail 'Gateway IPK must be a validated 1.7.x or stable 1.2.x release'
+printf '%s\n' "$gateway_control" | grep -Fx 'Package: wificalling-location-gateway' >/dev/null ||
+	fail 'Gateway IPK must be a stable integrated 1.2.x release'
+printf '%s\n' "$gateway_control" | grep -E '^Version: 1\.2\.[0-9]+-(r)?[0-9]+$' >/dev/null ||
+	fail 'Gateway IPK must be a stable integrated 1.2.x release'
 tar -tzf "$stage/gateway/data.tar.gz" | while IFS= read -r member; do
 	case "$member" in /*|../*|*/../*|*/..) fail 'Gateway IPK contains an unsafe path' ;; esac
 done
 tar -xzf "$stage/gateway/data.tar.gz" -C "$package_dir/files"
 
-# Gateway 1.2.x already includes WireGuard PSK, device-guard, node-status,
-# and health-check features; only apply compatibility patches for 1.7.x.
-gw_version=$(printf '%s\n' "$gateway_control" | sed -n 's/^Version: //p')
-case "$gw_version" in
-  1.7.*)
-    "$repo_root/scripts/openwrt/patch-wireguard-psk.sh" "$package_dir/files"
-    "$repo_root/scripts/openwrt/patch-wireguard-health.sh" "$package_dir/files"
-    "$repo_root/scripts/openwrt/patch-node-status-compact.sh" "$package_dir/files"
-    "$repo_root/scripts/openwrt/patch-gateway-device-guard.sh" "$package_dir/files"
-    ;;
-  1.2.*)
-    echo "build-release-packages: gateway $gw_version — skipping 1.7.x patches"
-    # The 1.2.x gateway IPK ships an OLDER gateway baseline (older
-    # compiler/init.d/monitor/node-health/config/LuCI). The project's
-    # openwrt/files/ carries the maintained 1.2.0 baseline (plus the
-    # memory-optimization compiler patch); overlay it wholesale so the
-    # integrated package never regresses to the older gateway files.
-    cp -R "$repo_root/openwrt/files/." "$package_dir/files/"
-    ;;
-  *)
-    fail "unexpected gateway version: $gw_version"
-    ;;
-esac
+# Overlay the current maintained baseline wholesale so an incremental release
+# cannot regress Gateway/WLOC scripts, monitoring, configuration, or LuCI.
+cp -R "$repo_root/openwrt/files/." "$package_dir/files/"
 
 # Overlay the integrated UI, then the architecture-specific WLOC runtime.
 cp -R "$repo_root/openwrt/luci-app-wificalling-location-gateway/files/." "$package_dir/files/"

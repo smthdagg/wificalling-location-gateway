@@ -16,6 +16,12 @@ fail() {
 [ -x "$builder" ] || fail "missing executable $builder"
 [ -x "$matrix" ] || fail "missing executable $matrix"
 [ -x "$runtime_builder" ] || fail "missing executable $runtime_builder"
+grep -F '`1.2.x` stable integrated releases are the only permitted build/package baseline.' \
+	"$repo_root/AGENTS.md" >/dev/null ||
+	fail 'project rules must pin the sole stable integrated 1.2.x baseline'
+grep -F 'The multi-device/2.0 Beta line is maintained only in the separate Beta repository' \
+	"$repo_root/AGENTS.md" >/dev/null ||
+	fail 'project rules must exclude the independently maintained Beta line'
 
 grep -F '\$\$required' "$builder" >/dev/null ||
 	fail 'package post-install must preserve the full prerequisite path through Make'
@@ -43,6 +49,9 @@ grep -F "Package: wificalling-location-gateway" "$builder" >/dev/null ||
 	fail 'release builder must accept a hash-pinned stable integrated package as its 1.2.x base'
 grep -F "1\\.2\\.[0-9]+-(r)?[0-9]+" "$builder" >/dev/null ||
 	fail 'release builder must accept the stable 1.2.x rN revision format'
+if grep -F '1\.7' "$builder" >/dev/null; then
+	fail 'release builder must not accept the retired standalone 1.7 baseline'
+fi
 
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"

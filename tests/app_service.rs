@@ -269,6 +269,44 @@ fn probe_failure_reason_is_exposed_in_the_status_file() {
     let _ = std::fs::remove_file(&status_path);
 }
 
+#[test]
+fn deleted_followed_node_is_exposed_and_clears_stale_location() {
+    let now = 1_000_000;
+    let dir = std::env::temp_dir();
+    let status_path = dir.join(format!(
+        "wloc-test-missing-node-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&status_path);
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        SequenceProbe {
+            results: vec![Err(ProbeFailure::BoundNodeMissing)],
+            index: 0,
+        },
+        fresh_geo(now),
+    )
+    .with_state_files(
+        status_path.clone(),
+        dir.join("wloc-test-missing-node-events.jsonl"),
+    );
+
+    service.status().unwrap();
+    let status = read_status_json(&status_path);
+    assert_eq!(status["exit"]["state"], "unavailable");
+    assert_eq!(status["exit"]["ip"], serde_json::Value::Null);
+    assert_eq!(status["geo"]["state"], "unavailable");
+    assert_eq!(status["geo"]["latitude"], serde_json::Value::Null);
+    assert_eq!(
+        status["exit"]["last_error"],
+        "followed device node is missing; select and apply a WCG node"
+    );
+    let _ = std::fs::remove_file(&status_path);
+}
+
 fn limits() -> ProbeLimits {
     ProbeLimits {
         max_observation_age: Duration::from_secs(60),

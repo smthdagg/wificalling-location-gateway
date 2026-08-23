@@ -38,7 +38,7 @@ Then build the release packages:
 ```sh
 ./scripts/openwrt/build-release-packages.sh \
   --version 1.2.2 \
-  --release 3 \
+  --release 4 \
   --arch x86_64 \
   --service-bin /absolute/path/wloc-service \
   --ctl-bin /absolute/path/wloc-ctl \
@@ -50,11 +50,11 @@ Then build the release packages:
 The builder uses immutable official OpenWrt SDK containers for 24.10.8 and
 25.12.3. Product packaging runs with networking disabled and `--pull never`.
 Images therefore must be fetched explicitly once. The output includes one IPK,
-one native APK v3 package, and `SHA256SUMS`. The Gateway input is rejected
-unless its package identity is either the legacy stable Gateway package or the
-stable integrated `wificalling-location-gateway` package, its version is an
-approved 1.7.x/1.2.x form, its archive paths are safe, and its digest matches
-the explicit pin.
+one native APK v3 package, and `SHA256SUMS`. The baseline input is rejected
+unless its package identity is the stable integrated
+`wificalling-location-gateway` package, its version is a 1.2.x release
+revision, its archive paths are safe, and its digest matches the explicit pin.
+Retired standalone package lines are never valid inputs.
 
 ## Every release asset: four-environment Docker verification
 
@@ -69,7 +69,7 @@ Run:
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir /absolute/path/dist/wloc-openwrt-release-r3
+  --dist-dir /absolute/path/dist/wloc-openwrt-release-r4
 ```
 
 For each environment the verifier boots `/sbin/init`, waits for ubus, installs
@@ -81,13 +81,13 @@ rootfs images do not contain the full dependency feeds used by a router, so
 the isolated install test bypasses unresolved optional dependencies; it does
 not claim that sing-box, nftables interception, DNS behavior, Wi-Fi Calling,
 or an iPhone were exercised. Those remain AX6S/real-device gates. Release
-`v1.2.2-r3` has these exact assets:
+`v1.2.2-r4` has these exact assets:
 
-- `wificalling-location-gateway_1.2.2-r3_aarch64_cortex-a53.ipk` for AX6S;
-- `wificalling-location-gateway_1.2.2-r3_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
-- `wificalling-location-gateway-1.2.2-r3.apk` for OpenWrt 25.12.
+- `wificalling-location-gateway_1.2.2-r4_aarch64_cortex-a53.ipk` for AX6S;
+- `wificalling-location-gateway_1.2.2-r4_x86_64.ipk` for OpenWrt/iStoreOS 24.x;
+- `wificalling-location-gateway-1.2.2-r4.apk` for OpenWrt 25.12.
 
-The `v1.2.2-r3` verification result was:
+The `v1.2.2-r4` verification result was:
 
 ```text
 Redmi AX6S / OpenWrt 24.10.5|OpenWrt 24.10.5 aarch64_generic|installed|started|socket-ok|status-ok
