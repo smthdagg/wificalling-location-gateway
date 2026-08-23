@@ -5,9 +5,11 @@ repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 builder="$repo_root/scripts/build-luci-ipk.sh"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-standalone-package-test.XXXXXX")
 built_output=
+integrated_output=
 cleanup() {
 	rm -rf "$tmp"
 	[ -z "$built_output" ] || rm -f "$built_output"
+	[ -z "$integrated_output" ] || rm -f "$integrated_output"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -196,6 +198,25 @@ grep -F 'node_test' \
 grep -F '"note":"ICMP ping only' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null &&
 	fail 'standalone package compact output must drop the note field'
+
+# A stable integrated 1.2.x package is also a valid immutable upgrade base.
+# This is how a small AX6S release preserves the last hardware-validated
+# package while replacing only maintained files and architecture binaries.
+sed 's/^Package: .*/Package: wificalling-location-gateway/; s/^Version: .*/Version: 1.2.2-r3/' \
+	"$tmp/gateway/control/control" > "$tmp/gateway/control/control.next"
+mv "$tmp/gateway/control/control.next" "$tmp/gateway/control/control"
+(cd "$tmp/gateway/control" && tar -czf "$tmp/gateway/control.tar.gz" .)
+(cd "$tmp/gateway" && tar -czf "$tmp/integrated.ipk" debian-binary control.tar.gz data.tar.gz)
+integrated_sha=$(shasum -a 256 "$tmp/integrated.ipk" | awk '{print $1}')
+integrated_output=$(
+	WLOC_SERVICE_BIN="$tmp/wloc-service" \
+	WLOC_CTL_BIN="$tmp/wloc-ctl" \
+	GATEWAY_IPK="$tmp/integrated.ipk" \
+	GATEWAY_IPK_SHA256="$integrated_sha" \
+	"$builder" "0.1.0-4-integrated-test" ax6s-standalone
+)
+[ -f "$integrated_output" ] ||
+	fail 'standalone builder must accept a hash-pinned stable integrated 1.2.x package'
 
 if GATEWAY_IPK="$tmp/gateway.ipk" GATEWAY_IPK_SHA256=deadbeef \
 	WLOC_SERVICE_BIN="$tmp/wloc-service" WLOC_CTL_BIN="$tmp/wloc-ctl" \
