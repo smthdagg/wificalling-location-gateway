@@ -16,6 +16,12 @@ fail() {
 [ -x "$builder" ] || fail "missing executable $builder"
 [ -x "$matrix" ] || fail "missing executable $matrix"
 [ -x "$runtime_builder" ] || fail "missing executable $runtime_builder"
+grep -F '`1.2.x` stable integrated releases are the only permitted build/package baseline.' \
+	"$repo_root/AGENTS.md" >/dev/null ||
+	fail 'project rules must pin the sole stable integrated 1.2.x baseline'
+grep -F 'The multi-device/2.0 Beta line is maintained only in the separate Beta repository' \
+	"$repo_root/AGENTS.md" >/dev/null ||
+	fail 'project rules must exclude the independently maintained Beta line'
 
 grep -F '\$\$required' "$builder" >/dev/null ||
 	fail 'package post-install must preserve the full prerequisite path through Make'
