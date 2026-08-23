@@ -3,7 +3,7 @@
 ## Identity and scope
 
 - Source agent ID: codex-release
-- Capabilities used: openwrt,test,ci,integration,release
+- Capabilities used: openwrt,test,ci,integration
 - Branch: codex/issue-66-standard-lite-variants-codex-release-20260823041333-31bfd3b9
 - Stable base commit: `81d5f6b`
 - Updated at (UTC): 2026-08-23
