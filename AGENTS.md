@@ -2,9 +2,9 @@
 
 ## Mission and release boundary
 
-Maintain `wificalling-location-gateway` as the stable, integrated Wi-Fi Calling + WLOC OpenWrt product. Preserve its fail-open WLOC behavior and the proven 1.2.x implementation; incremental releases extend that baseline instead of redesigning it.
+Maintain `wificalling-location-gateway` as the stable, integrated Wi-Fi Calling + WLOC OpenWrt product. Preserve its fail-open WLOC behavior and the proven `1.3.0-r1` baseline; incremental releases extend that baseline instead of redesigning it. Historical 1.7-era development records are closed as design provenance only and must not be referenced as a baseline or external dependency for future work.
 
-- `1.2.x` stable integrated releases are the only permitted build/package baseline.
+- The `1.3.0-r1` stable integrated release is the permitted build/package baseline; earlier 1.2.x packages and every retired 1.7.x package are not valid build inputs.
 - Retired standalone Wi-Fi Calling Gateway packages, including every 1.7.x package, must be rejected as build inputs and must not be copied back into this repository.
 - The multi-device/2.0 Beta line is maintained only in the separate Beta repository. It is outside this repository's architecture, source, issues, branches, releases, documentation, packaging, and test scope; do not import or recreate it here.
 - The `2.0` value in an IPK `debian-binary` member is an archive-format marker, not a project version, and remains required for valid IPK output.
