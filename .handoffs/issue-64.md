@@ -57,6 +57,8 @@ Release hashes are recorded in
 - An initial router status command used exact-name `pgrep`, which does not work
   reliably with OpenWrt process-name truncation. `pidof` and service state were
   used for the final evidence.
+- The first PR body referenced the handoff path without the contract-required
+  backticks. The body was corrected before this checkpoint was pushed.
 
 ## Next executable steps
 
