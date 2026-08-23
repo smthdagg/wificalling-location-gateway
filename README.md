@@ -302,6 +302,16 @@ docs/                        API, security, deployment, testing, bilingual guide
 
 Report vulnerabilities privately via [SECURITY.md](SECURITY.md); never paste certificates, IPs, node configs, or device information into public issues.
 
+## Notes & gotchas
+
+These come from the working model above (device → TPROXY intercept → wloc MITM → Apple WLOC), not theory. Each was hit in real testing.
+
+- **PassWall coexistence.** This plugin uses its own `inet wificalling_gateway` table and its own `fwmark 0x66 → table 166` TPROXY return path, kept separate from PassWall. PassWall runs a global TPROXY on `inet passwall` (`PSW_MANGLE` / `PSW_NAT`) that would otherwise capture the test device's traffic before this plugin sees it. `passwall-bypass.sh` therefore inserts a `return` rule (`WFC_GATEWAY_BYPASS`) for each bound test-device IP into PassWall's chains. If that bypass is missing or stale, the device's Apple 443 traffic is silently taken by PassWall and the WLOC intercept never fires — the plugin looks installed but does nothing. Re-run the bypass whenever the device set changes.
+- **wloc → Apple TPROXY loopback.** The WLOC service itself reaches `gs-loc.apple.com` as a client. Its outbound handshake rides the same TPROXY plumbing (`ip rule fwmark 0x66 lookup 166`, `ip route local 0.0.0.0/0 dev lo table 166`). If that mark, route table, or the `apple_hosts` set is wrong, the service's own outbound handshake is caught by its own redirect and loops — the device reaches wloc fine, but wloc cannot complete the handshake with Apple. This is the classic "device reaches the server, server can't reach Apple" symptom; check the nftables return path and `apple_hosts` before blaming DNS or the proxy node.
+- **wloc → Apple response rewrite.** Even with a clean handshake, Apple rejects a proxied WLOC response unless the rewrite is exact (see `issue-17`): a duplicated `Content-Length` makes Apple return `400 Bad Request`; a response not forced to `Accept-Encoding: identity` comes back gzip-compressed and cannot be rewritten; and the 10-byte opaque header framing (`[0:2]=0x0001`, `[6:10]=u32 BE block length`) must be re-summed after the patch or `locationd` reads a truncated body.
+- **xhttp transport is not supported by sing-box.** `compiler.sh` once emitted an `xhttp` outbound; sing-box (any version) rejects it and the whole `sing-box.json`/config check fails. `xhttp` is a Clash/mihomo-only transport — use `ws` / `grpc` / `httpupgrade` instead. `compiler.sh` now fails the node with a clear message instead of producing an unusable outbound (commit `601097f`).
+- **Package format is per-platform.** OpenWrt 24.10 `.ipk` is a whole-file gzip-wrapped tar; a bare tar is rejected by `opkg` as malformed. OpenWrt 25.12 dropped the `.ipk` format — installing on 25.x requires the native `.apk` (an `.ipk` there errors with `v2 package format error`). Pick the asset that matches the target's package manager, and never rename an IPK into an APK.
+
 ## Contributing
 
 This repository uses GitHub Issues as the only assignable work units, integrated through dedicated branches, path leases, reproducible handoffs, and cross-role reviews. Before committing:
@@ -591,7 +601,17 @@ docs/                        API、安全、部署、测试和双语用户教程
 - 停用时先撤销 WLOC 重定向，再排空并停止服务；恢复前应确认独立 nftables 规则已消失。
 - 删除 iPhone 上的 `wloc-service root CA` 描述文件即可撤销设备信任；重新生成 CA 后必须重新核对并安装新指纹。
 
-漏洞请按 [SECURITY.md](SECURITY.md) 私下报告，不要在公开 Issue 中粘贴证书、IP、节点配置或设备信息。
+漏洞请按 [SECURITY.md](SECURITY.md) 私下报告，并向公开 Issue 中贴证书、IP、节点配置或设备信息。
+
+## 注意事项
+
+以下条目来自上面的工作原理（设备 → TPROXY 拦截 → wloc 中间人 → Apple WLOC），均为实测踩坑，而非理论。
+
+- **与 PassWall 共存。** 本插件使用独立的 `inet wificalling_gateway` 表，以及独立的 `fwmark 0x66 → table 166` TPROXY 回环路径，与 PassWall 隔离。PassWall 在 `inet passwall`（`PSW_MANGLE` / `PSW_NAT`）上做全局 TPROXY，否则会在本插件之前抢走测试设备的流量。`passwall-bypass.sh` 因此会为每个已绑定测试设备 IP 在 PassWall 链中插入一条 `return` 规则（`WFC_GATEWAY_BYPASS`）。若该旁路缺失或过旧，设备的 Apple 443 流量会被 PassWall 静默截走，WLOC 拦截根本不触发——插件看似已装，实则不工作。设备集合变化时务必重新执行旁路。
+- **wloc → Apple 的 TPROXY 回环。** WLOC 服务自身以客户端身份访问 `gs-loc.apple.com`。它的出站握手复用同一套 TPROXY 机制（`ip rule fwmark 0x66 lookup 166`、`ip route local 0.0.0.0/0 dev lo table 166`）。若该 mark、路由表或 `apple_hosts` 集合写错，服务自身的出站握手会被自己的重定向规则捕获并回环——表现为“设备能连到 wloc 服务器，但 wloc 与 Apple 握手失败”。遇到“设备到服务端正常、服务端到 Apple 不通”这类症状，先查 nftables 回环路径与 `apple_hosts`，别急着怀疑 DNS 或节点。
+- **wloc → Apple 响应重写。** 即便握手正常，Apple 仍会拒绝代理后的 WLOC 响应，除非重写精确（见 `issue-17`）：重复的 `Content-Length` 会让 Apple 返回 `400 Bad Request`；未强制 `Accept-Encoding: identity` 的响应会以 gzip 压缩返回、无法重写；且 10 字节不透明头帧（`[0:2]=0x0001`、`[6:10]=u32 BE block length`）在补丁后必须重算长度，否则 `locationd` 读到截断的 body。
+- **sing-box 不支持 xhttp 传输。** `compiler.sh` 曾错误输出 `xhttp` outbound；sing-box（任何版本）都会拒绝它，导致整个 `sing-box.json` / 配置检查失败。`xhttp` 是 Clash/mihomo 专属传输，应改用 `ws` / `grpc` / `httpupgrade`。`compiler.sh` 现已在编译阶段以清晰报错拒绝该节点，而不是生成不可用的 outbound（commit `601097f`）。
+- **安装包格式按平台区分。** OpenWrt 24.10 的 `.ipk` 是整体 gzip 包裹的 tar，裸 tar 会被 `opkg` 判为损坏。OpenWrt 25.12 已废弃 `.ipk` 格式——在 25.x 上安装必须使用原生 `.apk`（误用 `.ipk` 会报 `v2 package format error`）。请按目标包管理器选择对应资产，切勿把 IPK 改名成 APK。
 
 ## 参与开发
 
