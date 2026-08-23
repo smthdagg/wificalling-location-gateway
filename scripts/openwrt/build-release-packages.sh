@@ -30,8 +30,8 @@ Options:
   --arch ARCH                OpenWrt runtime architecture (default: x86_64)
   --service-bin PATH         Static wloc-service binary (required)
   --ctl-bin PATH             Static wloc-ctl binary (required)
-  --gateway-ipk PATH         Pinned Wi-Fi Calling Gateway 1.7 IPK (required to build)
-  --gateway-sha256 SHA256    Expected Gateway IPK digest (required to build)
+  --gateway-ipk PATH         Pinned stable Gateway/integrated IPK (required to build)
+  --gateway-sha256 SHA256    Expected base IPK digest (required to build)
   --out-dir PATH             Output directory
   --plan                     Print the immutable build plan without Docker
 EOF
@@ -96,10 +96,12 @@ chmod 0777 "$stage/output"
 
 tar -xf "$gateway_ipk" -C "$stage/gateway"
 gateway_control=$(tar -xOf "$stage/gateway/control.tar.gz" ./control)
-printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null ||
+if ! printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null &&
+	! printf '%s\n' "$gateway_control" | grep -Fx 'Package: wificalling-location-gateway' >/dev/null; then
 	fail 'Gateway IPK has an unexpected package identity'
-printf '%s\n' "$gateway_control" | grep -E '^Version: (1\.7|1\.2)\.[0-9]+-[0-9]+$' >/dev/null ||
-	fail 'Gateway IPK must be a validated 1.7.x or 1.2.x release'
+fi
+printf '%s\n' "$gateway_control" | grep -E '^Version: (1\.7\.[0-9]+-[0-9]+|1\.2\.[0-9]+-(r)?[0-9]+)$' >/dev/null ||
+	fail 'Gateway IPK must be a validated 1.7.x or stable 1.2.x release'
 tar -tzf "$stage/gateway/data.tar.gz" | while IFS= read -r member; do
 	case "$member" in /*|../*|*/../*|*/..) fail 'Gateway IPK contains an unsafe path' ;; esac
 done
