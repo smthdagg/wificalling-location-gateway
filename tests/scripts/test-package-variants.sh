@@ -45,7 +45,7 @@ printf '%s\n' "$plan" | grep -F "lite runtime: $tiny_sha" >/dev/null ||
 if "$release_builder" --plan --variants standard,lite --arch x86_64 \
 	--service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl" \
 	--singbox-lite-bin "$tmp/sing-box-x86_64" \
-	--singbox-lite-sha256 deadbeef >"$tmp/out" 2>"$tmp/err"; then
+	--singbox-lite-sha256 0000000000000000000000000000000000000000000000000000000000000000 >"$tmp/out" 2>"$tmp/err"; then
 	fail 'lite build plan must reject an unpinned tiny runtime'
 fi
 grep -F 'sing-box Lite SHA-256 mismatch' "$tmp/err" >/dev/null ||
@@ -67,13 +67,13 @@ fi
 grep -F 'variants must be standard, lite, or standard,lite' "$tmp/err" >/dev/null ||
 	fail 'variant rejection must list the supported choices'
 
-grep -F 'Conflicts: wificalling-location-gateway-lite' "$ax6s_builder" >/dev/null ||
+grep -F "conflicts='wificalling-location-gateway-lite'" "$ax6s_builder" >/dev/null ||
 	fail 'standard package must conflict with the Lite package'
-grep -F 'Package: wificalling-location-gateway-lite' "$ax6s_builder" >/dev/null ||
+grep -F 'output_package=wificalling-location-gateway-lite' "$ax6s_builder" >/dev/null ||
 	fail 'AX6S builder must define the Lite package identity'
-grep -F 'Provides: wificalling-location-gateway, sing-box' "$ax6s_builder" >/dev/null ||
+grep -F "provides='wificalling-location-gateway, sing-box" "$ax6s_builder" >/dev/null ||
 	fail 'Lite must provide the integrated product and sing-box runtime'
-grep -F 'Conflicts: wificalling-location-gateway, sing-box' "$ax6s_builder" >/dev/null ||
+grep -F "conflicts='wificalling-location-gateway, sing-box'" "$ax6s_builder" >/dev/null ||
 	fail 'Lite must not coexist with the standard product or standard sing-box package'
 grep -F 'GOMEMLIMIT=24MiB' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
 	fail 'Lite runtime profile must retain the AX6S-validated sing-box heap limit'

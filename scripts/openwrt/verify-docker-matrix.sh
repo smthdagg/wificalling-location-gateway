@@ -26,10 +26,12 @@ done
 
 [ -n "$dist_dir" ] || fail '--dist-dir is required'
 
-printf '%s|%s|%s\n' 'Redmi AX6S / OpenWrt 24.10.5' opkg "$AX6S_24_ROOTFS"
-printf '%s|%s|%s\n' 'OpenWrt 24.10.8' opkg "$OPENWRT_24_ROOTFS"
-printf '%s|%s|%s\n' 'OpenWrt 25.12.3' apk "$OPENWRT_25_ROOTFS"
-printf '%s|%s|%s\n' 'iStoreOS 24.10.5' opkg "$ISTOREOS_24_ROOTFS"
+for variant in standard lite; do
+	printf '%s|%s|%s|variant=%s\n' 'Redmi AX6S / OpenWrt 24.10.5' opkg "$AX6S_24_ROOTFS" "$variant"
+	printf '%s|%s|%s|variant=%s\n' 'OpenWrt 24.10.8' opkg "$OPENWRT_24_ROOTFS" "$variant"
+	printf '%s|%s|%s|variant=%s\n' 'OpenWrt 25.12.3' apk "$OPENWRT_25_ROOTFS" "$variant"
+	printf '%s|%s|%s|variant=%s\n' 'iStoreOS 24.10.5' opkg "$ISTOREOS_24_ROOTFS" "$variant"
+done
 [ "$plan_only" -eq 0 ] || exit 0
 
 command -v docker >/dev/null 2>&1 || fail 'docker is required'
@@ -44,8 +46,8 @@ else
 fi
 
 manifest_entries=$(awk 'NF == 2 { print $2 }' "$dist_dir/SHA256SUMS")
-[ "$(printf '%s\n' "$manifest_entries" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 3 ] ||
-	fail 'SHA256SUMS must list exactly the three release packages'
+[ "$(printf '%s\n' "$manifest_entries" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 6 ] ||
+	fail 'SHA256SUMS must list exactly six packages: three targets for each variant'
 case "$manifest_entries" in *'/'*) fail 'SHA256SUMS package names must be basenames' ;; esac
 
 select_manifest_package() {
@@ -57,9 +59,12 @@ select_manifest_package() {
 	printf '%s/%s\n' "$dist_dir" "$selected"
 }
 
-ax6s_package=$(select_manifest_package '^wificalling-location-gateway.*_aarch64_cortex-a53\.ipk$' 'AX6S AArch64 IPK')
-ipk_package=$(select_manifest_package '^wificalling-location-gateway.*_x86_64\.ipk$' 'x86_64 IPK')
-apk_package=$(select_manifest_package '^wificalling-location-gateway.*\.apk$' 'x86_64 APK')
+ax6s_standard_package=$(select_manifest_package '^wificalling-location-gateway_[^/]*_aarch64_cortex-a53\.ipk$' 'Standard AX6S AArch64 IPK')
+ax6s_lite_package=$(select_manifest_package '^wificalling-location-gateway-lite_[^/]*_aarch64_cortex-a53\.ipk$' 'Lite AX6S AArch64 IPK')
+ipk_standard_package=$(select_manifest_package '^wificalling-location-gateway_[^/]*_x86_64\.ipk$' 'Standard x86_64 IPK')
+ipk_lite_package=$(select_manifest_package '^wificalling-location-gateway-lite_[^/]*_x86_64\.ipk$' 'Lite x86_64 IPK')
+apk_standard_package=$(select_manifest_package '^wificalling-location-gateway-[0-9][^/]*\.apk$' 'Standard x86_64 APK')
+apk_lite_package=$(select_manifest_package '^wificalling-location-gateway-lite-[0-9][^/]*\.apk$' 'Lite x86_64 APK')
 
 find "$dist_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk' -o -name 'wificalling-location-gateway*.apk' \) -print |
 	while IFS= read -r candidate; do
@@ -79,17 +84,34 @@ run_case() {
 	manager=$3
 	image=$4
 	package_path=$5
-	platform=$6
-	package_arch=$7
+	variant=$6
+	platform=$7
+	package_arch=$8
+	case "$variant" in
+		standard) package_name=wificalling-location-gateway ;;
+		lite) package_name=wificalling-location-gateway-lite ;;
+		*) fail "unsupported matrix variant: $variant" ;;
+	esac
 	container="wloc-matrix-${name}-$$"
 	containers="$containers $container"
 	docker image inspect "$image" >/dev/null 2>&1 || fail "missing Docker image: $image"
-	docker run -d --rm --privileged --pull never --platform "$platform" \
-		--name "$container" -v "$dist_dir:/packages:ro" \
-		--entrypoint /sbin/init "$image" >/dev/null
+	if [ "$manager" = apk ]; then
+		# Resolve dependencies before OpenWrt's firewall starts. Once init has
+		# applied its default policy, Docker Desktop's translated egress is no
+		# longer available inside this minimal rootfs.
+		docker run -d --rm --privileged --pull never --platform "$platform" \
+			--name "$container" -v "$dist_dir:/packages:ro" \
+			-e "WLG_PACKAGE_BASENAME=${package_path##*/}" \
+			--entrypoint /bin/sh "$image" -c \
+			'apk add --allow-untrusted "/packages/$WLG_PACKAGE_BASENAME" >/tmp/wlg-apk-install.log && exec /sbin/init' >/dev/null
+	else
+		docker run -d --rm --privileged --pull never --platform "$platform" \
+			--name "$container" -v "$dist_dir:/packages:ro" \
+			--entrypoint /sbin/init "$image" >/dev/null
+	fi
 
 	ready=0
-	for _attempt in 1 2 3 4 5 6 7 8 9 10; do
+	for _attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45; do
 		if docker exec "$container" /bin/sh -c 'ubus list system >/dev/null 2>&1'; then
 			ready=1
 			break
@@ -103,17 +125,41 @@ run_case() {
 		# architecture stanza. Register the architecture reported by the image;
 		# production firmware already has this in /etc/opkg.conf.
 		docker exec "$container" /bin/sh -c '
-			for package in firewall4 ip-full nftables sing-box luci-base rpcd-mod-rpcsys kmod-nft-tproxy kmod-nft-socket; do
+			for package in ca-bundle firewall4 ip-full nftables luci-base rpcd-mod-rpcsys kmod-inet-diag kmod-netlink-diag kmod-tun kmod-nft-tproxy kmod-nft-socket; do
 				printf "Package: %s\nVersion: 0-docker-smoke\nArchitecture: all\nStatus: install ok installed\n\n" "$package" >> /usr/lib/opkg/status
 				: > "/usr/lib/opkg/info/$package.list"
 			done
 		'
-		docker exec "$container" opkg --add-arch all:1 --add-arch "$package_arch:100" install --force-depends \
+		if [ "$variant" = standard ]; then
+			docker exec "$container" /bin/sh -c '
+				printf "Package: sing-box\nVersion: 0-docker-smoke\nArchitecture: all\nStatus: install ok installed\n\n" >> /usr/lib/opkg/status
+				printf "%s\n" /usr/bin/sing-box > /usr/lib/opkg/info/sing-box.list
+				printf "#!/bin/sh\necho sing-box docker-smoke\n" > /usr/bin/sing-box
+				chmod 0755 /usr/bin/sing-box
+			'
+		fi
+		runtime_arch=$(docker exec "$container" /bin/sh -c '. /etc/openwrt_release; printf "%s" "$DISTRIB_ARCH"')
+		docker exec "$container" opkg --add-arch all:1 --add-arch "$runtime_arch:50" \
+			--add-arch "$package_arch:100" install --force-depends \
 			"/packages/${package_path##*/}" >/dev/null
+	fi
+
+	if [ "$manager" = opkg ]; then
+		# --add-arch applies only to the install invocation in these minimal
+		# rootfs images, so inspect the package manager's persisted file list.
+		owned=$(docker exec "$container" cat "/usr/lib/opkg/info/$package_name.list")
 	else
-		docker exec "$container" apk add --allow-untrusted --no-network \
-			--force-missing-repositories --repositories-file /dev/null \
-			"/packages/${package_path##*/}" >/dev/null
+		owned=$(docker exec "$container" apk info -L "$package_name")
+	fi
+	if [ "$variant" = standard ]; then
+		if printf '%s\n' "$owned" | grep -E '^/?usr/bin/sing-box$' >/dev/null; then
+			fail "$display standard package unexpectedly owns /usr/bin/sing-box"
+		fi
+	else
+		printf '%s\n' "$owned" | grep -E '^/?usr/bin/sing-box$' >/dev/null ||
+			fail "$display Lite package did not install /usr/bin/sing-box"
+		docker exec "$container" /usr/bin/sing-box version >/dev/null ||
+			fail "$display Lite sing-box runtime is not executable"
 	fi
 
 	docker exec "$container" /etc/init.d/wloc-service enable
@@ -131,19 +177,33 @@ run_case() {
 	printf '%s\n' "$status" | grep -F '"api_version"' | grep -F 'wloc.service/v1' >/dev/null ||
 		fail "$display returned an invalid control response"
 	release=$(docker exec "$container" /bin/sh -c '. /etc/openwrt_release; printf "%s %s %s" "$DISTRIB_ID" "$DISTRIB_RELEASE" "$DISTRIB_ARCH"')
-	printf '%s|%s|installed|started|socket-ok|status-ok\n' "$display" "$release" >> "$tmp/report"
+	printf '%s|%s|%s|installed|started|socket-ok|status-ok\n' "$display" "$release" "$variant" >> "$tmp/report"
 	docker rm -f "$container" >/dev/null
 	containers=$(printf '%s' "$containers" | sed "s/ $container//")
 }
 
-run_case ax6s2410 'Redmi AX6S / OpenWrt 24.10.5' opkg "$AX6S_24_ROOTFS" \
-	"$ax6s_package" linux/aarch64_generic aarch64_cortex-a53
-run_case openwrt2410 'OpenWrt 24.10.8' opkg "$OPENWRT_24_ROOTFS" \
-	"$ipk_package" linux/amd64 x86_64
-run_case openwrt2512 'OpenWrt 25.12.3' apk "$OPENWRT_25_ROOTFS" \
-	"$apk_package" linux/amd64 x86_64
-run_case istoreos2410 'iStoreOS 24.10.5' opkg "$ISTOREOS_24_ROOTFS" \
-	"$ipk_package" linux/amd64 x86_64
+for variant in standard lite; do
+	case "$variant" in
+		standard)
+			ax6s_package=$ax6s_standard_package
+			ipk_package=$ipk_standard_package
+			apk_package=$apk_standard_package
+			;;
+		lite)
+			ax6s_package=$ax6s_lite_package
+			ipk_package=$ipk_lite_package
+			apk_package=$apk_lite_package
+			;;
+	esac
+	run_case "ax6s2410-$variant" 'Redmi AX6S / OpenWrt 24.10.5' opkg "$AX6S_24_ROOTFS" \
+		"$ax6s_package" "$variant" linux/aarch64_generic aarch64_cortex-a53
+	run_case "openwrt2410-$variant" 'OpenWrt 24.10.8' opkg "$OPENWRT_24_ROOTFS" \
+		"$ipk_package" "$variant" linux/amd64 x86_64
+	run_case "openwrt2512-$variant" 'OpenWrt 25.12.3' apk "$OPENWRT_25_ROOTFS" \
+		"$apk_package" "$variant" linux/amd64 x86_64
+	run_case "istoreos2410-$variant" 'iStoreOS 24.10.5' opkg "$ISTOREOS_24_ROOTFS" \
+		"$ipk_package" "$variant" linux/amd64 x86_64
+done
 
 cp "$tmp/report" "$report"
 cat "$report"

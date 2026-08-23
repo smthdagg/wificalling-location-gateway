@@ -40,6 +40,12 @@ grep -F 'manifest_entries=' "$matrix" >/dev/null ||
 	fail 'Docker verification must select install artifacts from the checksum manifest'
 grep -F 'unexpected release package not listed in SHA256SUMS' "$matrix" >/dev/null ||
 	fail 'Docker verification must reject unlisted matching release packages'
+grep -F "variant=\$6" "$matrix" >/dev/null ||
+	fail 'Docker verification must execute each runtime row for an explicit package variant'
+grep -F 'standard package unexpectedly owns /usr/bin/sing-box' "$matrix" >/dev/null ||
+	fail 'Docker verification must enforce firmware ownership for the Standard runtime'
+grep -F 'Lite package did not install /usr/bin/sing-box' "$matrix" >/dev/null ||
+	fail 'Docker verification must enforce bundled runtime ownership for Lite'
 if grep -F 'shasum -a 256 ./wificalling-location-gateway' "$builder" >/dev/null; then
 	fail 'release builder must write basename-only SHA256SUMS entries'
 fi
@@ -100,6 +106,10 @@ for expected in \
 	'iStoreOS 24.10.5|opkg|wukongdaily/openwrt-istoreos:amd64-latest'; do
 	printf '%s\n' "$matrix_plan" | grep -F "$expected" >/dev/null ||
 		fail "missing Docker matrix row: $expected"
+done
+for variant in standard lite; do
+	printf '%s\n' "$matrix_plan" | grep -F "variant=$variant" >/dev/null ||
+		fail "Docker matrix plan must include the $variant package variant"
 done
 printf '%s\n' "$matrix_plan" | grep -F 'sha256:93f980c266b9b68e3085f3eee7909c04f1dc4061047558e18a9ef12aec43efa9' >/dev/null ||
 	fail 'AX6S-compatible AArch64 rootfs image must be immutable'

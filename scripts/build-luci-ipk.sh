@@ -10,10 +10,22 @@ out_dir="$root/dist"
 architecture=all
 output_package=$package
 description='Unified LuCI UI for Wi-Fi Calling and WLOC location controls.'
-if [ "$dependency_mode" = ax6s-standalone ]; then
+license=MIT
+variant=standard
+if [ "$dependency_mode" = ax6s-lite ]; then
+	variant=lite
+	license='MIT, GPL-3.0-or-later'
+	architecture=aarch64_cortex-a53
+	output_package=wificalling-location-gateway-lite
+	description='Complete Wi-Fi Calling Gateway and WLOC service with bundled sing-box Lite.'
+elif [ "$dependency_mode" = ax6s-standard ] || [ "$dependency_mode" = ax6s-standalone ]; then
 	architecture=aarch64_cortex-a53
 	output_package=wificalling-location-gateway
-	description='Complete Wi-Fi Calling Gateway and WLOC service with unified LuCI.'
+	if [ "$dependency_mode" = ax6s-standard ]; then
+		description='Complete Wi-Fi Calling Gateway and WLOC service using the system sing-box.'
+	else
+		description='Complete Wi-Fi Calling Gateway and WLOC service with unified LuCI.'
+	fi
 fi
 out="$out_dir/${output_package}_${version}_${architecture}.ipk"
 stage=$(mktemp -d "${TMPDIR:-/tmp}/wloc-luci-ipk.XXXXXX")
@@ -41,6 +53,7 @@ mkdir -p "$stage/control" "$stage/data" "$out_dir"
 cp -R "$source_dir/." "$stage/data/"
 provides=
 replaces=
+conflicts=
 
 archive_is_safe() {
 	archive=$1
@@ -63,11 +76,11 @@ case "$dependency_mode" in
 	production)
 		depends='wloc-service, luci-app-wificalling-gateway, luci-base, rpcd-mod-rpcsys'
 		;;
-	ax6s-existing|ax6s-full|ax6s-standalone)
+	ax6s-existing|ax6s-full|ax6s-standalone|ax6s-standard|ax6s-lite)
 		# The validated AX6S predates package registration for its already-running
 		# wloc-service. The existing/full variants retain the external Gateway
 		# package dependency; standalone safely merges a pinned Gateway IPK.
-		if [ "$dependency_mode" = ax6s-standalone ]; then
+		if [ "$dependency_mode" = ax6s-standalone ] || [ "$dependency_mode" = ax6s-standard ] || [ "$dependency_mode" = ax6s-lite ]; then
 			gateway_ipk=${GATEWAY_IPK:-}
 			gateway_sha=${GATEWAY_IPK_SHA256:-}
 			[ -f "$gateway_ipk" ] || { echo "missing Gateway IPK: $gateway_ipk" >&2; exit 2; }
@@ -102,9 +115,17 @@ case "$dependency_mode" in
 			# Gateway views after the verified Gateway payload is merged.
 			cp -R "$source_dir/." "$stage/data/"
 			rm -f "$stage/data/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"
-			depends='luci-base, rpcd-mod-rpcsys, sing-box, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full'
-			provides='luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
-			replaces='luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
+			if [ "$variant" = lite ]; then
+				depends='luci-base, rpcd-mod-rpcsys, ca-bundle, kmod-inet-diag, kmod-netlink-diag, kmod-tun, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full'
+				provides='wificalling-location-gateway, sing-box, luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
+				replaces='wificalling-location-gateway, sing-box, luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
+				conflicts='wificalling-location-gateway, sing-box'
+			else
+				depends='luci-base, rpcd-mod-rpcsys, sing-box, nftables, firewall4, kmod-nft-tproxy, kmod-nft-socket, ip-full'
+				provides='luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
+				replaces='luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service'
+				conflicts='wificalling-location-gateway-lite'
+			fi
 		else
 			depends='luci-app-wificalling-gateway, luci-base, rpcd-mod-rpcsys'
 			rm -f "$stage/data/www/luci-static/resources/view/wificalling-gateway/overview.js"
@@ -160,7 +181,7 @@ with open(path, "w", encoding="utf-8") as handle:
     json.dump(menu, handle, ensure_ascii=False, indent=2)
     handle.write("\n")
 PY
-		if [ "$dependency_mode" = ax6s-full ] || [ "$dependency_mode" = ax6s-standalone ]; then
+		if [ "$dependency_mode" = ax6s-full ] || [ "$dependency_mode" = ax6s-standalone ] || [ "$dependency_mode" = ax6s-standard ] || [ "$dependency_mode" = ax6s-lite ]; then
 			service_bin=${WLOC_SERVICE_BIN:-$out_dir/wloc-service_aarch64-openwrt-linux-musl}
 			ctl_bin=${WLOC_CTL_BIN:-$out_dir/wloc-ctl_aarch64-openwrt-linux-musl}
 			[ -x "$service_bin" ] || { echo "missing WLOC service binary: $service_bin" >&2; exit 2; }
@@ -174,7 +195,27 @@ PY
 			cp "$service_bin" "$stage/data/usr/sbin/wloc-service"
 			cp "$ctl_bin" "$stage/data/usr/sbin/wloc-ctl"
 			chmod 0755 "$stage/data/etc/init.d/wloc-service" "$stage/data/usr/sbin/"*
-			if [ "$dependency_mode" = ax6s-standalone ]; then
+			mkdir -p "$stage/data/usr/share/wificalling-location-gateway"
+			printf '%s\n' "$variant" > "$stage/data/usr/share/wificalling-location-gateway/runtime-variant"
+			if [ "$variant" = lite ]; then
+				tiny_bin=${SINGBOX_LITE_BIN:-}
+				tiny_sha=${SINGBOX_LITE_SHA256:-}
+				[ -x "$tiny_bin" ] || { echo "missing sing-box Lite binary: $tiny_bin" >&2; exit 2; }
+				[ -n "$tiny_sha" ] || { echo 'SINGBOX_LITE_SHA256 is required' >&2; exit 2; }
+				actual_tiny_sha=$(sha256_file "$tiny_bin")
+				[ "$actual_tiny_sha" = "$tiny_sha" ] || {
+					echo "sing-box Lite SHA-256 mismatch: expected $tiny_sha, got $actual_tiny_sha" >&2
+					exit 2
+				}
+				case "$(file "$tiny_bin" 2>/dev/null)" in
+					*ELF*ARM\ aarch64*) ;;
+					*) echo 'sing-box Lite binary must be an AArch64 ELF' >&2; exit 2 ;;
+				esac
+				mkdir -p "$stage/data/usr/bin"
+				cp "$tiny_bin" "$stage/data/usr/bin/sing-box"
+				chmod 0755 "$stage/data/usr/bin/sing-box"
+			fi
+			if [ "$dependency_mode" = ax6s-standalone ] || [ "$dependency_mode" = ax6s-standard ] || [ "$dependency_mode" = ax6s-lite ]; then
 				printf '%s\n' \
 					'/etc/config/wificalling-gateway' \
 					'/etc/config/wloc-service' > "$stage/control/conffiles"
@@ -213,11 +254,12 @@ printf '%s\n' \
 	"Depends: $depends" \
 	'Section: luci' \
 	'Priority: optional' \
-	'License: MIT' \
+	"License: $license" \
 	"Description: $description" \
 	> "$stage/control/control"
 [ -z "$provides" ] || printf 'Provides: %s\n' "$provides" >> "$stage/control/control"
 [ -z "$replaces" ] || printf 'Replaces: %s\n' "$replaces" >> "$stage/control/control"
+[ -z "$conflicts" ] || printf 'Conflicts: %s\n' "$conflicts" >> "$stage/control/control"
 printf '2.0\n' > "$stage/debian-binary"
 
 make_archive "$stage/control" "$stage/control.tar.gz" .
