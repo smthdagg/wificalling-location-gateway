@@ -819,6 +819,73 @@ config device
     }
 
     #[test]
+    fn deleted_bound_node_never_falls_back_to_an_unrelated_outbound() {
+        let doc = json!({"outbounds": [
+            {"type": "vmess", "tag": "node-unrelated"},
+            {"type": "direct", "tag": "direct"}
+        ]});
+        let dir = std::env::temp_dir();
+        let suffix = std::process::id();
+        let config_path = dir.join(format!("wloc-deleted-node-{suffix}.json"));
+        let uci_path = dir.join(format!("wloc-deleted-node-{suffix}.uci"));
+        std::fs::write(&config_path, doc.to_string()).unwrap();
+        std::fs::write(
+            &uci_path,
+            "config device\n\toption node 'deleted'\n\tlist source_ip '192.168.31.175'\n",
+        )
+        .unwrap();
+        let mut probe = SingBoxProbe::new(
+            config_path.clone(),
+            IpAddr::V4(Ipv4Addr::new(192, 168, 31, 175)),
+            18_083,
+            dir.join(format!("wloc-deleted-node-work-{suffix}")),
+        );
+        probe.uci_config_path = uci_path.clone();
+
+        assert_eq!(probe.load_outbound_tag(), Err(ProbeFailure::Unreachable));
+
+        std::fs::remove_file(config_path).unwrap();
+        std::fs::remove_file(uci_path).unwrap();
+    }
+
+    #[test]
+    fn deleted_device_policy_never_uses_a_stale_runtime_route() {
+        let doc = json!({
+            "outbounds": [
+                {"type": "vmess", "tag": "node-stale"},
+                {"type": "direct", "tag": "direct"}
+            ],
+            "route": {"rules": [{
+                "source_ip_cidr": ["192.168.31.175/32"],
+                "action": "route",
+                "outbound": "node-stale"
+            }]}
+        });
+        let dir = std::env::temp_dir();
+        let suffix = std::process::id();
+        let config_path = dir.join(format!("wloc-deleted-device-{suffix}.json"));
+        let uci_path = dir.join(format!("wloc-deleted-device-{suffix}.uci"));
+        std::fs::write(&config_path, doc.to_string()).unwrap();
+        std::fs::write(
+            &uci_path,
+            "config device\n\toption node 'other'\n\tlist source_ip '192.168.31.176'\n",
+        )
+        .unwrap();
+        let mut probe = SingBoxProbe::new(
+            config_path.clone(),
+            IpAddr::V4(Ipv4Addr::new(192, 168, 31, 175)),
+            18_084,
+            dir.join(format!("wloc-deleted-device-work-{suffix}")),
+        );
+        probe.uci_config_path = uci_path.clone();
+
+        assert_eq!(probe.load_outbound_tag(), Err(ProbeFailure::Unreachable));
+
+        std::fs::remove_file(config_path).unwrap();
+        std::fs::remove_file(uci_path).unwrap();
+    }
+
+    #[test]
     fn probe_does_not_hang_when_singbox_stderr_stays_open() {
         use std::time::Instant;
         // A probe child that keeps writing to stderr but never exits must
