@@ -7,7 +7,7 @@
 A standalone Rust service handles exit geolocation, WLOC response rewriting, certificate lifecycle, precise traffic isolation, and LuCI management — all integrated into a single installable package.
 
 [![CI](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v1.2.2--r5-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.2.2-r5)
+[![Release](https://img.shields.io/badge/release-v1.3.0--r1-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.3.0-r1)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Rust 1.90](https://img.shields.io/badge/Rust-1.90-orange.svg?logo=rust)](Cargo.toml)
 [![OpenWrt](https://img.shields.io/badge/OpenWrt-24.10%20%7C%2025.12-00B5E2.svg?logo=openwrt)](#support-and-validation-status)
@@ -132,10 +132,10 @@ The runtime packages contain architecture-specific ELF files and **must match th
 
 ### 1. Choose the right package
 
-Release `v1.2.2-r5` provides two installation variants for each of three targets. Both belong to this project and contain the same WCG, WLOC, control tools, LuCI and saved UCI schema:
+Release `v1.3.0-r1` provides two installation variants for each of three targets. Both belong to this project and contain the same WCG, WLOC, control tools, LuCI and saved UCI schema:
 
-- Standard: `wificalling-location-gateway_1.2.2-r5_aarch64_cortex-a53.ipk`, `wificalling-location-gateway_1.2.2-r5_x86_64.ipk`, `wificalling-location-gateway-1.2.2-r5.apk`
-- Lite: `wificalling-location-gateway-lite_1.2.2-r5_aarch64_cortex-a53.ipk`, `wificalling-location-gateway-lite_1.2.2-r5_x86_64.ipk`, `wificalling-location-gateway-lite-1.2.2-r5.apk`
+- Standard: `wificalling-location-gateway_1.3.0-r1_aarch64_cortex-a53.ipk`, `wificalling-location-gateway_1.3.0-r1_x86_64.ipk`, `wificalling-location-gateway-1.3.0-r1.apk`
+- Lite: `wificalling-location-gateway-lite_1.3.0-r1_aarch64_cortex-a53.ipk`, `wificalling-location-gateway-lite_1.3.0-r1_x86_64.ipk`, `wificalling-location-gateway-lite-1.3.0-r1.apk`
 
 Choose **Standard** when the firmware already supplies a suitable `/usr/bin/sing-box`. Choose **Lite** for constrained gateways such as AX6S: it stores a hash-pinned compressed sing-box in flash, transparently expands one shared copy into `/tmp`, and applies the validated 24 MiB WCG heap profile. Standard and Lite conflict intentionally and must not be installed together. Both preserve `/etc/config/wificalling-gateway` and `/etc/config/wloc-service`.
 
@@ -166,7 +166,7 @@ Full instructions for both methods live in the
 ### 2. Redmi AX6S (Lite recommended)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway-lite_1.2.2-r5_aarch64_cortex-a53.ipk
+opkg install /tmp/wificalling-location-gateway-lite_1.3.0-r1_aarch64_cortex-a53.ipk
 ```
 
 Back up both UCI files first. On storage-constrained AX6S units, stop the services and remove the old integrated and sing-box packages before installing Lite; do not delete the saved UCI files. The r5 Lite package replaces the separate sing-box package and owns its transparent wrapper.
@@ -174,14 +174,14 @@ Back up both UCI files first. On storage-constrained AX6S units, stop the servic
 ### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.2.2-r5_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.3.0-r1_x86_64.ipk
 # Or use the corresponding Lite asset when a bundled, bounded runtime is preferred.
 ```
 
 ### 4. OpenWrt 25.12 (native APK v3)
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.2-r5.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.3.0-r1.apk
 ```
 
 `--allow-untrusted` applies only to locally built packages that are not yet signed in a repository. Formal releases use repository signing; never rename an IPK into an APK.
@@ -243,7 +243,7 @@ This pins the OpenWrt 24.10.8 `mediatek/mt7622` toolchain, Rust version, and SHA
   --out-dir "$PWD/dist/runtime/x86_64"
 
 ./scripts/openwrt/build-release-packages.sh \
-  --version 1.2.2 \
+  --version 1.3.0 \
   --release 4 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
@@ -422,10 +422,10 @@ flowchart LR
 
 ### 1. 选择正确的安装包
 
-`v1.2.2-r5` 为三个目标各提供 Standard 与 Lite 两种安装规格。它们属于同一个项目，WCG、WLOC、控制工具、LuCI 与 UCI 数据结构完全一致：
+`v1.3.0-r1` 为三个目标各提供 Standard 与 Lite 两种安装规格。它们属于同一个项目，WCG、WLOC、控制工具、LuCI 与 UCI 数据结构完全一致：
 
-- Standard：`wificalling-location-gateway_1.2.2-r5_aarch64_cortex-a53.ipk`、`wificalling-location-gateway_1.2.2-r5_x86_64.ipk`、`wificalling-location-gateway-1.2.2-r5.apk`
-- Lite：`wificalling-location-gateway-lite_1.2.2-r5_aarch64_cortex-a53.ipk`、`wificalling-location-gateway-lite_1.2.2-r5_x86_64.ipk`、`wificalling-location-gateway-lite-1.2.2-r5.apk`
+- Standard：`wificalling-location-gateway_1.3.0-r1_aarch64_cortex-a53.ipk`、`wificalling-location-gateway_1.3.0-r1_x86_64.ipk`、`wificalling-location-gateway-1.3.0-r1.apk`
+- Lite：`wificalling-location-gateway-lite_1.3.0-r1_aarch64_cortex-a53.ipk`、`wificalling-location-gateway-lite_1.3.0-r1_x86_64.ipk`、`wificalling-location-gateway-lite_1.3.0-r1.apk`
 
 固件已有合适 `/usr/bin/sing-box` 时选择 **Standard**；AX6S 等受限设备推荐 **Lite**：flash 只保存带 SHA256 固定的压缩运行时，首次调用透明解压一份到 `/tmp`，并为 WCG 应用已验证的 24 MiB 堆上限。两种规格故意互斥，不能同时安装；两者都保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
 
@@ -456,7 +456,7 @@ OpenWrt 25.x 的 `.apk` 手动安装命令）。
 ### 2. Redmi AX6S（推荐 Lite）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway-lite_1.2.2-r5_aarch64_cortex-a53.ipk
+opkg install /tmp/wificalling-location-gateway-lite_1.3.0-r1_aarch64_cortex-a53.ipk
 ```
 
 安装前先备份两份 UCI 配置。AX6S 空间不足时，先停止服务并卸载旧整合包和旧 sing-box 包，再安装 Lite；不要删除 UCI 配置。r5 Lite 会替代独立 sing-box 包并拥有透明启动包装器。
@@ -464,14 +464,14 @@ opkg install /tmp/wificalling-location-gateway-lite_1.2.2-r5_aarch64_cortex-a53.
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.2.2-r5_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.3.0-r1_x86_64.ipk
 # 需要内置、受限运行时时也可选择对应 Lite 文件。
 ```
 
 ### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.2-r5.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.3.0-r1.apk
 ```
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。
@@ -533,7 +533,7 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
   --out-dir "$PWD/dist/runtime/x86_64"
 
 ./scripts/openwrt/build-release-packages.sh \
-  --version 1.2.2 \
+  --version 1.3.0 \
   --release 4 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
