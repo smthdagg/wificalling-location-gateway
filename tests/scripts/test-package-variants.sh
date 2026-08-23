@@ -4,6 +4,7 @@ set -eu
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 release_builder="$repo_root/scripts/openwrt/build-release-packages.sh"
 ax6s_builder="$repo_root/scripts/build-luci-ipk.sh"
+runtime_packager="$repo_root/scripts/openwrt/package-singbox-lite.sh"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wlg-variant-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
@@ -11,6 +12,8 @@ fail() {
 	printf 'FAIL: %s\n' "$*" >&2
 	exit 1
 }
+
+[ -x "$runtime_packager" ] || fail 'missing sing-box Lite runtime packager'
 
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"
@@ -79,5 +82,9 @@ grep -F 'GOMEMLIMIT=24MiB' "$repo_root/openwrt/files/etc/init.d/wificalling-gate
 	fail 'Lite runtime profile must retain the AX6S-validated sing-box heap limit'
 grep -F '/usr/bin/sing-box' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
 	fail 'both variants must keep the shared sing-box executable contract'
+grep -F '/usr/share/wificalling-location-gateway/sing-box-lite.gz' "$runtime_packager" >/dev/null ||
+	fail 'Lite must keep the compressed runtime on persistent storage'
+grep -F '/tmp/sing-box-lite' "$runtime_packager" >/dev/null ||
+	fail 'Lite must expand sing-box into tmpfs at runtime'
 
 printf '%s\n' 'Standard/Lite package variant tests passed'

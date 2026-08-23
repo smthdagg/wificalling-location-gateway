@@ -243,8 +243,12 @@ for conffile in /etc/config/wificalling-gateway /etc/config/wloc-service; do
 	printf '%s\n' "$lite_conffiles" | grep -Fx "$conffile" >/dev/null ||
 		fail "Lite package must preserve $conffile"
 done
-cmp "$tmp/sing-box-lite" "$tmp/lite-result/data/usr/bin/sing-box" >/dev/null ||
-	fail 'Lite package must install the exact hash-pinned sing-box runtime'
+grep -F '/tmp/sing-box-lite' "$tmp/lite-result/data/usr/bin/sing-box" >/dev/null ||
+	fail 'Lite package must install the transparent tmpfs runtime wrapper'
+gzip -dc "$tmp/lite-result/data/usr/share/wificalling-location-gateway/sing-box-lite.gz" \
+	> "$tmp/lite-result/sing-box-lite.unpacked"
+cmp "$tmp/sing-box-lite" "$tmp/lite-result/sing-box-lite.unpacked" >/dev/null ||
+	fail 'Lite package must persist the exact hash-pinned sing-box runtime in compressed form'
 [ "$(cat "$tmp/lite-result/data/usr/share/wificalling-location-gateway/runtime-variant")" = lite ] ||
 	fail 'Lite package must install its runtime marker'
 grep -F 'GOMEMLIMIT=24MiB' "$tmp/lite-result/data/etc/init.d/wificalling-gateway" >/dev/null ||

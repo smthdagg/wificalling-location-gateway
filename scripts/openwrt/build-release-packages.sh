@@ -213,9 +213,8 @@ case ",$variants," in
 		lite_dir="$stage/input/wificalling-location-gateway-lite"
 		cp -R "$package_dir" "$lite_dir"
 		printf '%s\n' lite > "$lite_dir/files/usr/share/wificalling-location-gateway/runtime-variant"
-		mkdir -p "$lite_dir/files/usr/bin"
-		cp "$singbox_lite_bin" "$lite_dir/files/usr/bin/sing-box"
-		chmod 0755 "$lite_dir/files/usr/bin/sing-box"
+		"$repo_root/scripts/openwrt/package-singbox-lite.sh" \
+			"$lite_dir/files" "$singbox_lite_bin" "$singbox_lite_sha256"
 		cat > "$lite_dir/Makefile" <<EOF
 include \$(TOPDIR)/rules.mk
 PKG_NAME:=wificalling-location-gateway-lite

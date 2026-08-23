@@ -211,9 +211,8 @@ PY
 					*ELF*ARM\ aarch64*) ;;
 					*) echo 'sing-box Lite binary must be an AArch64 ELF' >&2; exit 2 ;;
 				esac
-				mkdir -p "$stage/data/usr/bin"
-				cp "$tiny_bin" "$stage/data/usr/bin/sing-box"
-				chmod 0755 "$stage/data/usr/bin/sing-box"
+				"$root/scripts/openwrt/package-singbox-lite.sh" \
+					"$stage/data" "$tiny_bin" "$tiny_sha"
 			fi
 			if [ "$dependency_mode" = ax6s-standalone ] || [ "$dependency_mode" = ax6s-standard ] || [ "$dependency_mode" = ax6s-lite ]; then
 				printf '%s\n' \
