@@ -56,6 +56,35 @@ e43e12fd0b87a34b517472903d16fb251cdc17be8de6a2728eab3546d61ff95c  wificalling-lo
   was not initiated during this release pass.
 - Confirm no Beta/multi-device files entered the stable branch.
 
+## Failed attempts
+
+- The first x86_64 build reused an incomplete external Cargo cache and failed
+  while reading `webpki-roots`. A release-specific empty cache fixed dependency
+  preparation; no stale binary was reused.
+- The first Docker-matrix invocation omitted the required `--dist-dir` option.
+  The corrected invocation passed all four environments.
+- The first PR contract run used `Handoff:` instead of the required exact
+  `Handoff capsule:` marker. The PR body was corrected.
+- The first GitHub verify run found this capsule lacked mandatory fixed
+  headings. This update adds those headings without changing release code or
+  assets.
+
+## Next executable steps
+
+1. Wait for GitHub repository gates to pass on the final commit.
+2. Obtain independent review of the stable-tree restoration and package-input
+   allowlist.
+3. Merge PR #63 only after required review and checks; do not force-push main.
+4. Keep all future multi-device work in the permanent Beta repository.
+
+## Capabilities required for the next Agent
+
+- openwrt
+- release
+- ci
+- security-review
+- stable/beta repository separation
+
 ## Security and privacy notes
 
 - No credentials, node secrets, CA private keys, device identifiers, raw WLOC
