@@ -43,6 +43,9 @@ grep -F "Package: wificalling-location-gateway" "$builder" >/dev/null ||
 	fail 'release builder must accept a hash-pinned stable integrated package as its 1.2.x base'
 grep -F "1\\.2\\.[0-9]+-(r)?[0-9]+" "$builder" >/dev/null ||
 	fail 'release builder must accept the stable 1.2.x rN revision format'
+if grep -F '1\.7' "$builder" >/dev/null; then
+	fail 'release builder must not accept the retired standalone 1.7 baseline'
+fi
 
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"

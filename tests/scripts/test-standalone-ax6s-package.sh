@@ -5,11 +5,9 @@ repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 builder="$repo_root/scripts/build-luci-ipk.sh"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-standalone-package-test.XXXXXX")
 built_output=
-integrated_output=
 cleanup() {
 	rm -rf "$tmp"
 	[ -z "$built_output" ] || rm -f "$built_output"
-	[ -z "$integrated_output" ] || rm -f "$integrated_output"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -22,8 +20,8 @@ mkdir -p "$tmp/gateway/control" "$tmp/gateway/data/etc/config" \
 	"$tmp/gateway/data/etc/init.d" "$tmp/gateway/data/www/luci-static/resources/view/wificalling-gateway" \
 	"$tmp/gateway/data/usr/share/luci/menu.d"
 cat > "$tmp/gateway/control/control" <<'EOF'
-Package: luci-app-wificalling-gateway
-Version: 1.7.3-1
+Package: wificalling-location-gateway
+Version: 1.2.2-r3
 Architecture: all
 License: MIT
 EOF
@@ -33,9 +31,8 @@ printf '%s\n' '#!/bin/sh' > "$tmp/gateway/data/etc/init.d/wificalling-gateway"
 printf '%s\n' "'use strict';" > "$tmp/gateway/data/www/luci-static/resources/view/wificalling-gateway/overview.js"
 printf '%s\n' '{"admin/services/wificalling-gateway":{"title":"Wi-Fi Calling Gateway"}}' > \
 	"$tmp/gateway/data/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"
-# The Gateway payload must include the wireguard compiler targets the
-# pre_shared_key patch rewrites; the standalone builder applies the patch
-# to the merged payload (fail-closed).
+# The old payload is intentional: the stable 1.2.x upgrade base must be
+# overlaid with the current maintained files rather than trusted blindly.
 mkdir -p "$tmp/gateway/data/usr/libexec/wificalling-gateway"
 cat > "$tmp/gateway/data/usr/libexec/wificalling-gateway/compiler.sh" <<'COMPILER'
 #!/bin/sh
@@ -199,24 +196,22 @@ grep -F '"note":"ICMP ping only' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null &&
 	fail 'standalone package compact output must drop the note field'
 
-# A stable integrated 1.2.x package is also a valid immutable upgrade base.
-# This is how a small AX6S release preserves the last hardware-validated
-# package while replacing only maintained files and architecture binaries.
-sed 's/^Package: .*/Package: wificalling-location-gateway/; s/^Version: .*/Version: 1.2.2-r3/' \
-	"$tmp/gateway/control/control" > "$tmp/gateway/control/control.next"
-mv "$tmp/gateway/control/control.next" "$tmp/gateway/control/control"
-(cd "$tmp/gateway/control" && tar -czf "$tmp/gateway/control.tar.gz" .)
-(cd "$tmp/gateway" && tar -czf "$tmp/integrated.ipk" debian-binary control.tar.gz data.tar.gz)
-integrated_sha=$(shasum -a 256 "$tmp/integrated.ipk" | awk '{print $1}')
-integrated_output=$(
-	WLOC_SERVICE_BIN="$tmp/wloc-service" \
-	WLOC_CTL_BIN="$tmp/wloc-ctl" \
-	GATEWAY_IPK="$tmp/integrated.ipk" \
-	GATEWAY_IPK_SHA256="$integrated_sha" \
-	"$builder" "0.1.0-4-integrated-test" ax6s-standalone
-)
-[ -f "$integrated_output" ] ||
-	fail 'standalone builder must accept a hash-pinned stable integrated 1.2.x package'
+# The retired standalone 1.7 package must never be accepted as a baseline.
+mkdir -p "$tmp/legacy"
+cp -R "$tmp/gateway/." "$tmp/legacy/"
+sed 's/^Package: .*/Package: luci-app-wificalling-gateway/; s/^Version: .*/Version: 1.7.3-1/' \
+	"$tmp/legacy/control/control" > "$tmp/legacy/control/control.next"
+mv "$tmp/legacy/control/control.next" "$tmp/legacy/control/control"
+(cd "$tmp/legacy/control" && tar -czf "$tmp/legacy/control.tar.gz" .)
+(cd "$tmp/legacy" && tar -czf "$tmp/legacy.ipk" debian-binary control.tar.gz data.tar.gz)
+legacy_sha=$(shasum -a 256 "$tmp/legacy.ipk" | awk '{print $1}')
+if GATEWAY_IPK="$tmp/legacy.ipk" GATEWAY_IPK_SHA256="$legacy_sha" \
+	WLOC_SERVICE_BIN="$tmp/wloc-service" WLOC_CTL_BIN="$tmp/wloc-ctl" \
+	"$builder" "$version-legacy" ax6s-standalone >"$tmp/out" 2>"$tmp/err"; then
+	fail 'standalone builder must reject the retired 1.7 package baseline'
+fi
+grep -F 'stable integrated 1.2.x release' "$tmp/err" >/dev/null ||
+	fail 'legacy baseline rejection must explain the stable integrated requirement'
 
 if GATEWAY_IPK="$tmp/gateway.ipk" GATEWAY_IPK_SHA256=deadbeef \
 	WLOC_SERVICE_BIN="$tmp/wloc-service" WLOC_CTL_BIN="$tmp/wloc-ctl" \
