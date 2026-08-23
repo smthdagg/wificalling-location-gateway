@@ -54,7 +54,11 @@ fn successful_probe_produces_a_validated_observation() {
 
 #[test]
 fn probe_failure_is_fail_closed() {
-    for failure in [ProbeFailure::Unreachable, ProbeFailure::Timeout] {
+    for failure in [
+        ProbeFailure::BoundNodeMissing,
+        ProbeFailure::Unreachable,
+        ProbeFailure::Timeout,
+    ] {
         let mut probe = StubProbe {
             probe_result: Err(failure),
             wan_result: Ok(vec![OTHER_V4]),

@@ -323,7 +323,19 @@ impl SingBoxProbe {
         //    which the Gateway compiler names `wg-<section>` (sing-box
         //    1.11+), while the UCI binding resolves to `node-<section>`.
         let uci_text = std::fs::read_to_string(&self.uci_config_path).ok();
-        if let Some(tag) = select_node_tag(&document, uci_text.as_deref(), self.device_ip) {
+        let selected_tag = if let Some(uci_text) = uci_text.as_deref() {
+            // A readable UCI file is authoritative. If the followed device
+            // or its bound node was deleted, a stale sing-box route must not
+            // resurrect it and an unrelated first node must never be used.
+            device_bound_node_tag(uci_text, self.device_ip).ok_or(ProbeFailure::BoundNodeMissing)?
+        } else {
+            // Compatibility for pre-UCI/test environments: the running route
+            // may identify the device, but absence still fails closed.
+            select_outbound_tag(&document, self.device_ip).ok_or(ProbeFailure::BoundNodeMissing)?
+        };
+
+        {
+            let tag = selected_tag;
             if config.outbounds.iter().any(|o| o.tag == tag) {
                 return Ok(tag);
             }
@@ -337,21 +349,7 @@ impl SingBoxProbe {
                 return Ok(tag);
             }
         }
-        // 2. Fall back to the first non-direct outbound, then the first
-        //    wireguard endpoint (a gateway with only wg nodes has no usable
-        //    outbound for the follow-device probe).
-        config
-            .outbounds
-            .iter()
-            .find(|outbound| outbound.tag != "direct")
-            .map(|outbound| outbound.tag.clone())
-            .or_else(|| {
-                config
-                    .endpoints
-                    .first()
-                    .map(|endpoint| endpoint.tag.clone())
-            })
-            .ok_or(ProbeFailure::Unreachable)
+        Err(ProbeFailure::BoundNodeMissing)
     }
 
     /// Probe the node's real exit IP through a temporary sing-box instance.
@@ -842,7 +840,10 @@ config device
         );
         probe.uci_config_path = uci_path.clone();
 
-        assert_eq!(probe.load_outbound_tag(), Err(ProbeFailure::Unreachable));
+        assert_eq!(
+            probe.load_outbound_tag(),
+            Err(ProbeFailure::BoundNodeMissing)
+        );
 
         std::fs::remove_file(config_path).unwrap();
         std::fs::remove_file(uci_path).unwrap();
@@ -879,7 +880,10 @@ config device
         );
         probe.uci_config_path = uci_path.clone();
 
-        assert_eq!(probe.load_outbound_tag(), Err(ProbeFailure::Unreachable));
+        assert_eq!(
+            probe.load_outbound_tag(),
+            Err(ProbeFailure::BoundNodeMissing)
+        );
 
         std::fs::remove_file(config_path).unwrap();
         std::fs::remove_file(uci_path).unwrap();

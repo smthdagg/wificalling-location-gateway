@@ -152,6 +152,10 @@ var ZH = {
 	'Follow device': '定位跟随设备',
 	'Refresh IP': '刷新 IP',
 	'Refreshing…': '刷新中…',
+	'IP refreshed; exit unchanged: ': 'IP 已刷新，出口未变化：',
+	'Exit IP updated: ': '出口 IP 已更新：',
+	'Exit IP unavailable': '出口 IP 不可用',
+	'followed device node is missing; select and apply a WCG node': '跟随设备的节点已不存在，请重新选择并应用 WCG 节点',
 	'Re-probe the followed node exit IP now': '立即重新探测跟随节点的出口 IP',
 	'IP refresh failed: ': 'IP 刷新失败：',
 	'The device whose bound node the WLOC location follows (its exit IP drives auto mode).':

@@ -79,9 +79,10 @@ return view.extend({
 				title: wlocI18n.t('Re-probe the followed node exit IP now'),
 				click: function() {
 					if (refreshingIp) return;
+					var previousIp = status.exit && status.exit.ip ? status.exit.ip : null;
 					refreshingIp = true;
 					renderGeo(status);
-					callCtl('refresh', null, null, null).then(function() {
+					return callCtl('refresh', null, null, null).then(function() {
 						// The daemon re-probes and rewrites status.json
 						// before replying; read it once so the rows update
 						// immediately instead of on the next poll tick.
@@ -90,11 +91,22 @@ return view.extend({
 						var fresh;
 						try { fresh = JSON.parse(text); } catch (e) { fresh = status; }
 						refreshingIp = false;
+						status = fresh;
 						renderGeo(fresh);
+						var nextExit = fresh.exit || {};
+						if (!nextExit.ip) {
+							ui.addNotification(null, E('p', {}, wlocI18n.t('IP refresh failed: ') +
+								(nextExit.last_error ? wlocI18n.t(nextExit.last_error) : wlocI18n.t('Exit IP unavailable'))), 'error');
+						} else if (nextExit.ip === previousIp) {
+							ui.addNotification(null, E('p', {}, wlocI18n.t('IP refreshed; exit unchanged: ') + nextExit.ip), 'info');
+						} else {
+							ui.addNotification(null, E('p', {}, wlocI18n.t('Exit IP updated: ') +
+								(previousIp || '-') + ' → ' + nextExit.ip), 'info');
+						}
 					}).catch(function(err) {
 						refreshingIp = false;
 						renderGeo(status);
-						ui.addNotification(null, E('p', {}, wlocI18n.t('IP refresh failed: ') + ' ' + (err.message || err)), 'error');
+						ui.addNotification(null, E('p', {}, wlocI18n.t('IP refresh failed: ') + (err.message || err)), 'error');
 					});
 				}
 			}, label);
