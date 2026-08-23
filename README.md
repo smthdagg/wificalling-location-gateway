@@ -7,7 +7,7 @@
 A standalone Rust service handles exit geolocation, WLOC response rewriting, certificate lifecycle, precise traffic isolation, and LuCI management — all integrated into a single installable package.
 
 [![CI](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v1.2.2-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.2.2)
+[![Release](https://img.shields.io/badge/release-v1.2.2--r3-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.2.2-r3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Rust 1.90](https://img.shields.io/badge/Rust-1.90-orange.svg?logo=rust)](Cargo.toml)
 [![OpenWrt](https://img.shields.io/badge/OpenWrt-24.10%20%7C%2025.12-00B5E2.svg?logo=openwrt)](#support-and-validation-status)
@@ -113,7 +113,7 @@ More detail: [WLOC Service API](docs/api/WLOC_SERVICE_API.md), [Threat model](do
 
 | Platform | Arch | Package manager | Current evidence | Status |
 |---|---:|---|---|---|
-| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | Official AArch64 OpenWrt 24.10.5 Docker install/start matrix; plus real-device procd, LuCI, auto/manual switch, certificate, and iPhone WLOC path | **Docker + real device passed** |
+| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | Exact r3 asset installed on hardware; WCG/sing-box/WLOC/config/socket healthy and stable; 5/5 local TLS/HTTP2 WLOC requests passed. Fresh carrier/iPhone traffic remains client-triggered | **Docker + router runtime passed** |
 | OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker boot of init/ubus, integrated package install, service start, socket and v1 status checks | **Install matrix passed** |
 | iStoreOS 24.10.5 | x86_64 | opkg / IPK | Same as above | **Install matrix passed** |
 | OpenWrt 25.12.3 | x86_64 | apk / APK v3 | Same, using native APK v3, not a renamed IPK | **Install matrix passed** |
@@ -132,9 +132,11 @@ The runtime packages contain a Rust ELF and **must match the router CPU architec
 
 ### 1. Choose the right package
 
-The Redmi AX6S uses a single architecture-specific integrated package:
+Release `v1.2.2-r3` provides exactly three integrated packages:
 
-- `wificalling-location-gateway_<version>_aarch64_cortex-a53.ipk`
+- Redmi AX6S: `wificalling-location-gateway_1.2.2-r3_aarch64_cortex-a53.ipk`
+- OpenWrt/iStoreOS 24.x x86_64: `wificalling-location-gateway_1.2.2-r3_x86_64.ipk`
+- OpenWrt 25.12 x86_64: `wificalling-location-gateway-1.2.2-r3.apk`
 
 It bundles the Wi‑Fi Calling Gateway, the WLOC service, control tools, and the unified LuCI; installing `luci-app-wificalling-gateway` or `wloc-service` separately is not required. On reinstall or upgrade, opkg preserves `/etc/config/wificalling-gateway` and `/etc/config/wloc-service`.
 
@@ -166,21 +168,21 @@ Full instructions for both methods live in the
 ### 2. Redmi AX6S (single integrated IPK)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_<version>_aarch64_cortex-a53.ipk
+opkg install /tmp/wificalling-location-gateway_1.2.2-r3_aarch64_cortex-a53.ipk
 ```
 
-Do not run `opkg remove` first; installing directly restores missing components and keeps the existing configuration. After installing, check both services under "Verify the services" below.
+Back up `/etc/config/wificalling-gateway` and `/etc/config/wloc-service` first. A normal in-place upgrade preserves both files. On storage-constrained AX6S units, remove an older package before installing this file, but do not delete the two saved UCI configurations. After installing, check both services below.
 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.2.2-r1_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.2.2-r3_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12 (native APK v3)
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.2-r1.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.2-r3.apk
 ```
 
 `--allow-untrusted` applies only to locally built packages that are not yet signed in a repository. Formal releases use repository signing; never rename an IPK into an APK.
@@ -243,11 +245,11 @@ This pins the OpenWrt 24.10.8 `mediatek/mt7622` toolchain, Rust version, and SHA
 
 ./scripts/openwrt/build-release-packages.sh \
   --version 1.2.2 \
-  --release 1 \
+  --release 3 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
   --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \
-  --gateway-ipk /absolute/path/luci-app-wificalling-gateway_<version>_all.ipk \
+  --gateway-ipk /absolute/path/wificalling-location-gateway_1.2.2-r3_aarch64_cortex-a53.ipk \
   --gateway-sha256 <verified-sha256> \
   --out-dir "$PWD/dist/openwrt-release"
 ```
@@ -256,7 +258,7 @@ This pins the OpenWrt 24.10.8 `mediatek/mt7622` toolchain, Rust version, and SHA
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir "$PWD/dist/v1.2.2"
+  --dist-dir "$PWD/dist/wloc-openwrt-release-r3"
 ```
 
 Builds use the official OpenWrt SDK pinned by digest; after dependency preparation, product compilation runs locked/offline with read-only sources in a network-disabled container. Full boundaries and results: [OpenWrt packaging and Docker matrix](docs/testing/OPENWRT_PACKAGE_DOCKER_MATRIX.md).
@@ -402,7 +404,7 @@ flowchart LR
 
 | 平台 | 架构 | 包管理器 | 当前证据 | 状态 |
 |---|---:|---|---|---|
-| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | 官方 AArch64 OpenWrt 24.10.5 Docker 安装/启动矩阵；另有实机 procd、LuCI、自动/手动切换、证书和 iPhone WLOC 链路 | **Docker + 真机通过** |
+| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | r3 原包已在真机安装；WCG/sing-box/WLOC、配置与 Socket 健康且进程稳定；本地 TLS/HTTP2 WLOC 请求 5/5 通过。新的运营商/iPhone 流量仍需手机主动触发 | **Docker + 路由器运行时通过** |
 | OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker 中启动 init/ubus、安装集成包、启动服务、Socket 与 v1 状态检查 | **安装矩阵通过** |
 | iStoreOS 24.10.5 | x86_64 | opkg / IPK | 同上 | **安装矩阵通过** |
 | OpenWrt 25.12.3 | x86_64 | apk / APK v3 | 同上，使用原生 APK v3，非改名 IPK | **安装矩阵通过** |
@@ -421,9 +423,11 @@ flowchart LR
 
 ### 1. 选择正确的安装包
 
-Redmi AX6S 使用单一的架构专用集成包：
+`v1.2.2-r3` 正式版提供且只提供三个集成安装包：
 
-- `wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk`
+- Redmi AX6S：`wificalling-location-gateway_1.2.2-r3_aarch64_cortex-a53.ipk`
+- OpenWrt/iStoreOS 24.x x86_64：`wificalling-location-gateway_1.2.2-r3_x86_64.ipk`
+- OpenWrt 25.12 x86_64：`wificalling-location-gateway-1.2.2-r3.apk`
 
 该包内含 Wi‑Fi Calling Gateway、WLOC 服务、控制工具和统一 LuCI，不依赖另行安装 `luci-app-wificalling-gateway` 或 `wloc-service`。重新安装或升级时，opkg 会保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
 
@@ -456,21 +460,21 @@ OpenWrt 25.x 的 `.apk` 手动安装命令）。
 ### 2. Redmi AX6S（单一集成 IPK）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_<版本>_aarch64_cortex-a53.ipk
+opkg install /tmp/wificalling-location-gateway_1.2.2-r3_aarch64_cortex-a53.ipk
 ```
 
-不要先执行 `opkg remove`；直接安装即可恢复缺失组件并保留现有配置。安装后按“验证服务”一节检查两个服务。
+安装前先备份 `/etc/config/wificalling-gateway` 和 `/etc/config/wloc-service`。普通升级可直接覆盖并保留两份配置；AX6S 空间不足时，应先卸载旧软件包再安装本文件，但不要删除已保存的两份 UCI 配置。安装后按“验证服务”一节检查两个服务。
 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.2.2-r1_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.2.2-r3_x86_64.ipk
 ```
 
 ### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.2-r1.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.2-r3.apk
 ```
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。
@@ -533,11 +537,11 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
 
 ./scripts/openwrt/build-release-packages.sh \
   --version 1.2.2 \
-  --release 1 \
+  --release 3 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
   --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \
-  --gateway-ipk /absolute/path/luci-app-wificalling-gateway_<version>_all.ipk \
+  --gateway-ipk /absolute/path/wificalling-location-gateway_1.2.2-r3_aarch64_cortex-a53.ipk \
   --gateway-sha256 <verified-sha256> \
   --out-dir "$PWD/dist/openwrt-release"
 ```
@@ -546,7 +550,7 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir "$PWD/dist/v1.2.2"
+  --dist-dir "$PWD/dist/wloc-openwrt-release-r3"
 ```
 
 构建使用固定摘要的官方 OpenWrt SDK；依赖准备之后，产品编译采用 locked/offline、只读源码和禁网容器。完整边界和结果见 [OpenWrt 发布打包与 Docker 矩阵](docs/testing/OPENWRT_PACKAGE_DOCKER_MATRIX.md)。

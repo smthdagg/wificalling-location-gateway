@@ -2,6 +2,45 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.2.2-r3] - 2026-08-23
+
+Stable runtime hotfix and completion of the three-platform release set.
+
+### Fixed
+
+- **Non-blocking TPROXY accept path**: the WLOC listener no longer blocks the
+  async runtime while accepting redirected connections. AX6S validation
+  completed five independent local TLS/HTTP2 WLOC requests with HTTP 200.
+- **Validated local WLOC response path**: authorized WLOC requests use the
+  configured local response path again instead of timing out before protocol
+  processing.
+- **Accurate upstream failure health**: upstream connection failures now reach
+  the proxy-health recorder instead of being hidden as a healthy state.
+- **Monitor temporary-file leak**: monitor updates no longer leave zero-byte
+  temporary files behind on the router.
+- **Stable integrated package input**: the release builder now accepts the
+  SHA-256-pinned `wificalling-location-gateway` 1.2.x package identity and the
+  `-rN` revision format. It still rejects unrelated package names and versions.
+
+### Packaging and verification
+
+- Published one integrated package per target: AX6S AArch64 IPK, OpenWrt /
+  iStoreOS 24.x x86_64 IPK, and OpenWrt 25.12 x86_64 native APK v3.
+- Passed install/start/socket/status checks in four pinned rootfs environments:
+  OpenWrt 24.10.5 AArch64, OpenWrt 24.10.8 x86_64, iStoreOS 24.10.5 x86_64,
+  and OpenWrt 25.12.3 x86_64.
+- Re-verified the release AArch64 package on a Redmi AX6S: WCG, sing-box, WLOC,
+  generated configuration, and the WLOC control socket were healthy; core
+  service PIDs remained stable during observation.
+
+### 中文说明
+
+- 修复 WLOC TPROXY 接收路径阻塞、上游失败状态遗漏和监控临时文件泄漏。
+- 恢复并验证本地 WLOC 响应链路；AX6S 上 5 次 TLS/HTTP2 请求均返回 HTTP 200。
+- 补齐 AX6S AArch64 IPK、OpenWrt/iStoreOS 24.x x86_64 IPK 与 OpenWrt 25.12
+  x86_64 原生 APK 三个平台安装包，并完成四环境 Docker 与 AX6S 真机验证。
+- 修复正式打包器，使其可直接校验并复用稳定整合包，不再依赖临时篡改包元数据。
+
 ## [1.2.2] - 2026-08-19
 
 Manual-mode exit-probe fix, compiler endpoint filtering, and LuCI follow-device logic corrections.
