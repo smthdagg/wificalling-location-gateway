@@ -49,11 +49,11 @@
 | 40. 阶段 3 真实环境测试 | 待开始 | 授权路由器/iPhone、精确域名、定位/WFC/普通网络与恢复证据 |
 | 41. 服务合并与 Gateway 1.7 集成 | 待开始 | 独立安全评审后合并，再以可选包/feature flag 集成 |
 | 42. LuCI UI 开发 | 待开始 | API 冻结后单独 Issue/PR 实现 UI |
-| 43. 1.2.x Standard/Lite 发布契约 | 进行中 | Issue #66；同项目、同配置、两种内存变体、三类平台六个产物 |
-| 44. 双变体 packaging TDD | 待开始 | 先建立命名、依赖、冲突、架构、配置保留和 tiny 校验的 RED 测试 |
-| 45. Standard/Lite 构建实现 | 待开始 | Standard 调用系统 sing-box；Lite 携带架构匹配 tiny 并应用 AX6S 资源限制 |
-| 46. 三平台构建与安装矩阵 | 待开始 | AX6S AArch64 IPK、24.x x86_64 IPK、25.x x86_64 APK，各构建两版 |
-| 47. AX6S 实机与发布验收 | 待开始 | Lite 冷启动/资源/WCG/WLOC/升级保留测试，文档、校验和、回滚和 GitHub Release |
+| 43. 1.2.x Standard/Lite 发布契约 | 完成 | Issue #66；同项目、同配置、两种内存规格、三类平台六个产物 |
+| 44. 双变体 packaging TDD | 完成 | RED/GREEN 覆盖命名、依赖、冲突、架构、配置保留、哈希与 tmpfs 包装器 |
+| 45. Standard/Lite 构建实现 | 完成 | Standard 调用系统 sing-box；Lite 压缩驻留、透明解压并应用 AX6S 资源限制 |
+| 46. 三平台构建与安装矩阵 | 完成 | 六包构建；四环境 × 两规格共八行全部安装、启动、Socket、状态通过 |
+| 47. AX6S 实机与发布验收 | 进行中 | Lite 已迁移、冷启动、容量、WCG/WLOC、真实 iPhone WLOC 通过；待全仓门禁与 GitHub Release |
 
 ## 约束与原则
 

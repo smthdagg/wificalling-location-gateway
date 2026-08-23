@@ -106,3 +106,7 @@
 - Agent `codex-release` 以 `openwrt,test,ci,integration` 能力取得 480 分钟租约并创建独立工作树。
 - 工作分支已从 `origin/main` 快进到 Issue #64 稳定链提交 `81d5f6b`，后续以 1.2.x 为唯一基线。
 - 已采用 planning-with-files、TDD 和 production-audit；下一步先写 packaging RED 测试，不先改构建实现。
+- packaging RED `68deac2`、双规格 GREEN `e24ebd1` 和 tmpfs 修复 `77ce558` 已提交。
+- 六个 r5 资产已生成，固定摘要 Docker 矩阵的八个 Standard/Lite 用例全部通过。
+- 首个 AX6S Lite 候选因直接落盘导致 overlay 仅余 2.8 MB，被生产审计否决；修正版改为 gzip 驻 flash、透明解压到 `/tmp`。
+- 修正版已在 AX6S 卸载旧整合包与 sing-box 后安装；两份 UCI 哈希保持不变，冷启动后 overlay 约余 20.4 MB，WCG/WLOC/nftables 正常，并捕获和处理了真实 iPhone WLOC 请求。

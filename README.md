@@ -7,7 +7,7 @@
 A standalone Rust service handles exit geolocation, WLOC response rewriting, certificate lifecycle, precise traffic isolation, and LuCI management — all integrated into a single installable package.
 
 [![CI](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v1.2.2--r4-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.2.2-r4)
+[![Release](https://img.shields.io/badge/release-v1.2.2--r5-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.2.2-r5)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Rust 1.90](https://img.shields.io/badge/Rust-1.90-orange.svg?logo=rust)](Cargo.toml)
 [![OpenWrt](https://img.shields.io/badge/OpenWrt-24.10%20%7C%2025.12-00B5E2.svg?logo=openwrt)](#support-and-validation-status)
@@ -113,35 +113,33 @@ More detail: [WLOC Service API](docs/api/WLOC_SERVICE_API.md), [Threat model](do
 
 | Platform | Arch | Package manager | Current evidence | Status |
 |---|---:|---|---|---|
-| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | Exact r4 asset installed on hardware; WCG/sing-box/WLOC/config/socket healthy; deleted-node fail-closed and restoration regression passed. Fresh carrier/iPhone traffic remains client-triggered | **Docker + router runtime passed** |
+| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | Exact r5 Lite asset installed and cold-booted; 20.4 MB overlay remained free; WCG/WLOC, tmpfs sing-box, nftables and config hashes passed; a real iPhone WLOC request was intercepted and synthesized | **Docker + router + iPhone WLOC passed** |
 | OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker boot of init/ubus, integrated package install, service start, socket and v1 status checks | **Install matrix passed** |
 | iStoreOS 24.10.5 | x86_64 | opkg / IPK | Same as above | **Install matrix passed** |
 | OpenWrt 25.12.3 | x86_64 | apk / APK v3 | Same, using native APK v3, not a renamed IPK | **Install matrix passed** |
 | Other OpenWrt / ImmortalWrt versions or CPUs | — | — | No device/SDK evidence yet | **Not verified** |
 
-The runtime packages contain a Rust ELF and **must match the router CPU architecture**; only the LuCI package is `all`/`noarch`. x86_64 packages are built with a pinned SDK; AX6S uses a separate AArch64 `cortex-a53` cross toolchain. The formal Docker matrix installs all three release assets. Docker verifies install and boot, not nftables, DNS, carrier, or iPhone end-to-end behavior.
+The runtime packages contain architecture-specific ELF files and **must match the router CPU architecture**. x86_64 packages are built with pinned SDKs; AX6S uses a separate AArch64 `cortex-a53` toolchain. The formal Docker matrix installs both runtime variants for all three targets (six assets, eight runtime cases). Docker verifies install and boot; the AX6S row adds real router and iPhone WLOC evidence.
 
 ## Installation
 
 ### Prerequisites
 
-- sing-box, firewall4/nftables, LuCI, and rpcd available.
+- firewall4/nftables, LuCI, and rpcd available. Standard additionally requires a firmware/feed `sing-box`; Lite bundles its own runtime.
 - A fixed DHCP address for the test iPhone and a correct node binding in the Gateway.
 - Router config backed up; WARP, Shadowrocket, or any other VPN on the phone stays off during router WLOC testing.
 - Install this project's CA only on the dedicated test device and verify the certificate fingerprint.
 
 ### 1. Choose the right package
 
-Release `v1.2.2-r4` provides exactly three integrated packages:
+Release `v1.2.2-r5` provides two installation variants for each of three targets. Both belong to this project and contain the same WCG, WLOC, control tools, LuCI and saved UCI schema:
 
-- Redmi AX6S: `wificalling-location-gateway_1.2.2-r4_aarch64_cortex-a53.ipk`
-- OpenWrt/iStoreOS 24.x x86_64: `wificalling-location-gateway_1.2.2-r4_x86_64.ipk`
-- OpenWrt 25.12 x86_64: `wificalling-location-gateway-1.2.2-r4.apk`
+- Standard: `wificalling-location-gateway_1.2.2-r5_aarch64_cortex-a53.ipk`, `wificalling-location-gateway_1.2.2-r5_x86_64.ipk`, `wificalling-location-gateway-1.2.2-r5.apk`
+- Lite: `wificalling-location-gateway-lite_1.2.2-r5_aarch64_cortex-a53.ipk`, `wificalling-location-gateway-lite_1.2.2-r5_x86_64.ipk`, `wificalling-location-gateway-lite-1.2.2-r5.apk`
 
-It bundles the Wi‑Fi Calling Gateway, the WLOC service, control tools, and the unified LuCI; installing `luci-app-wificalling-gateway` or `wloc-service` separately is not required. On reinstall or upgrade, opkg preserves `/etc/config/wificalling-gateway` and `/etc/config/wloc-service`.
+Choose **Standard** when the firmware already supplies a suitable `/usr/bin/sing-box`. Choose **Lite** for constrained gateways such as AX6S: it stores a hash-pinned compressed sing-box in flash, transparently expands one shared copy into `/tmp`, and applies the validated 24 MiB WCG heap profile. Standard and Lite conflict intentionally and must not be installed together. Both preserve `/etc/config/wificalling-gateway` and `/etc/config/wloc-service`.
 
-Since the formal 1.0 line, every platform gets exactly one complete integrated package named
-`wificalling-location-gateway` — Wi‑Fi Calling Gateway, WLOC service, control tools, and unified LuCI in one; users no longer install component packages separately.
+The variant suffix changes runtime ownership only; it does not create a separate product or restore split component packages.
 
 Two ways to install:
 
@@ -165,24 +163,25 @@ Full instructions for both methods live in the
 [feed repository](https://github.com/smthdagg/wificalling-location-gateway-feed)
 (including the manual `.apk` install commands for OpenWrt 25.x).
 
-### 2. Redmi AX6S (single integrated IPK)
+### 2. Redmi AX6S (Lite recommended)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.2.2-r4_aarch64_cortex-a53.ipk
+opkg install /tmp/wificalling-location-gateway-lite_1.2.2-r5_aarch64_cortex-a53.ipk
 ```
 
-Back up `/etc/config/wificalling-gateway` and `/etc/config/wloc-service` first. A normal in-place upgrade preserves both files. On storage-constrained AX6S units, remove an older package before installing this file, but do not delete the two saved UCI configurations. After installing, check both services below.
+Back up both UCI files first. On storage-constrained AX6S units, stop the services and remove the old integrated and sing-box packages before installing Lite; do not delete the saved UCI files. The r5 Lite package replaces the separate sing-box package and owns its transparent wrapper.
 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.2.2-r4_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.2.2-r5_x86_64.ipk
+# Or use the corresponding Lite asset when a bundled, bounded runtime is preferred.
 ```
 
 ### 4. OpenWrt 25.12 (native APK v3)
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.2-r4.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.2-r5.apk
 ```
 
 `--allow-untrusted` applies only to locally built packages that are not yet signed in a repository. Formal releases use repository signing; never rename an IPK into an APK.
@@ -324,7 +323,7 @@ If this project helps your OpenWrt / Wi‑Fi Calling experiments, a Star, a repr
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE). Third-party dependencies and external projects remain under their own licenses; the MIT grant does not change the isolation requirements for external AGPL implementation material defined in the [clean-room boundary ADR](docs/adr/0001-license-boundary.md).
+This project's own code is licensed under the [MIT License](LICENSE). Lite release assets also contain sing-box under GPL-3.0-or-later; third-party components retain their own licenses. The MIT grant does not change the isolation requirements for external AGPL implementation material defined in the [clean-room boundary ADR](docs/adr/0001-license-boundary.md).
 
 The Wi‑Fi Calling Gateway component was originally a separate project. This repository integrates it as a single installable package; formal builds accept only published IPKs validated by identity, version, and SHA-256.
 
@@ -404,36 +403,33 @@ flowchart LR
 
 | 平台 | 架构 | 包管理器 | 当前证据 | 状态 |
 |---|---:|---|---|---|
-| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | r4 原包已在真机安装；WCG/sing-box/WLOC、配置与 Socket 健康；已通过“绑定节点缺失时停止并恢复”的真机回归。新的运营商/iPhone 流量仍需手机主动触发 | **Docker + 路由器运行时通过** |
+| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | r5 Lite 原包已安装并冷启动；overlay 剩余 20.4 MB；WCG/WLOC、tmpfs sing-box、nftables 与配置哈希通过；已实际收到并处理 iPhone WLOC 请求 | **Docker + 路由器 + iPhone WLOC 通过** |
 | OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker 中启动 init/ubus、安装集成包、启动服务、Socket 与 v1 状态检查 | **安装矩阵通过** |
 | iStoreOS 24.10.5 | x86_64 | opkg / IPK | 同上 | **安装矩阵通过** |
 | OpenWrt 25.12.3 | x86_64 | apk / APK v3 | 同上，使用原生 APK v3，非改名 IPK | **安装矩阵通过** |
 | 其他 OpenWrt / ImmortalWrt 版本或 CPU | — | — | 尚无对应设备/SDK证据 | **未验证** |
 
-运行时包包含 Rust ELF，**必须与路由器 CPU 架构一致**；LuCI 包才是 `all`/`noarch`。x86_64 包由固定 SDK 构建，AX6S 使用单独的 AArch64 `cortex-a53` 交叉构建链；正式 Docker 矩阵会安装全部三个发布资产。Docker 验证的是安装与启动，不等同于 nftables、DNS、真实运营商或 iPhone 端到端测试。
+运行时包包含与架构相关的 ELF，**必须与路由器 CPU 架构一致**。x86_64 使用固定 SDK，AX6S 使用 AArch64 `cortex-a53` 工具链。正式矩阵覆盖三类目标的 Standard/Lite 两种规格，共六个资产、八个运行用例；AX6S 另有真机与 iPhone WLOC 证据。
 
 ## 安装
 
 ### 前置条件
 
-- sing-box、firewall4/nftables、LuCI 与 rpcd 可用。
+- firewall4/nftables、LuCI 与 rpcd 可用；Standard 还要求固件/软件源提供 sing-box，Lite 自带运行时。
 - 为测试 iPhone 建立固定 DHCP 地址，并在 Gateway 中绑定正确节点。
 - 已备份路由器配置；手机上的 WARP、Shadowrocket 或其他 VPN 在路由器 WLOC 测试期间保持关闭。
 - 只在专用测试设备上安装本项目 CA，并核对证书指纹。
 
 ### 1. 选择正确的安装包
 
-`v1.2.2-r4` 正式版提供且只提供三个集成安装包：
+`v1.2.2-r5` 为三个目标各提供 Standard 与 Lite 两种安装规格。它们属于同一个项目，WCG、WLOC、控制工具、LuCI 与 UCI 数据结构完全一致：
 
-- Redmi AX6S：`wificalling-location-gateway_1.2.2-r4_aarch64_cortex-a53.ipk`
-- OpenWrt/iStoreOS 24.x x86_64：`wificalling-location-gateway_1.2.2-r4_x86_64.ipk`
-- OpenWrt 25.12 x86_64：`wificalling-location-gateway-1.2.2-r4.apk`
+- Standard：`wificalling-location-gateway_1.2.2-r5_aarch64_cortex-a53.ipk`、`wificalling-location-gateway_1.2.2-r5_x86_64.ipk`、`wificalling-location-gateway-1.2.2-r5.apk`
+- Lite：`wificalling-location-gateway-lite_1.2.2-r5_aarch64_cortex-a53.ipk`、`wificalling-location-gateway-lite_1.2.2-r5_x86_64.ipk`、`wificalling-location-gateway-lite-1.2.2-r5.apk`
 
-该包内含 Wi‑Fi Calling Gateway、WLOC 服务、控制工具和统一 LuCI，不依赖另行安装 `luci-app-wificalling-gateway` 或 `wloc-service`。重新安装或升级时，opkg 会保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
+固件已有合适 `/usr/bin/sing-box` 时选择 **Standard**；AX6S 等受限设备推荐 **Lite**：flash 只保存带 SHA256 固定的压缩运行时，首次调用透明解压一份到 `/tmp`，并为 WCG 应用已验证的 24 MiB 堆上限。两种规格故意互斥，不能同时安装；两者都保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
 
-正式版 1.0 对每个平台只提供一个完整集成包。包名统一为
-`wificalling-location-gateway`，内含 Wi‑Fi Calling Gateway、WLOC
-服务、控制工具和统一 LuCI；不再要求用户分别安装组件包。
+Lite 后缀只表示运行时所有权与内存策略不同，不是新项目，也不会恢复拆分组件安装。
 
 两种安装方式：
 
@@ -457,24 +453,25 @@ opkg update && opkg install wificalling-location-gateway
 [feed 仓库](https://github.com/smthdagg/wificalling-location-gateway-feed)（含
 OpenWrt 25.x 的 `.apk` 手动安装命令）。
 
-### 2. Redmi AX6S（单一集成 IPK）
+### 2. Redmi AX6S（推荐 Lite）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.2.2-r4_aarch64_cortex-a53.ipk
+opkg install /tmp/wificalling-location-gateway-lite_1.2.2-r5_aarch64_cortex-a53.ipk
 ```
 
-安装前先备份 `/etc/config/wificalling-gateway` 和 `/etc/config/wloc-service`。普通升级可直接覆盖并保留两份配置；AX6S 空间不足时，应先卸载旧软件包再安装本文件，但不要删除已保存的两份 UCI 配置。安装后按“验证服务”一节检查两个服务。
+安装前先备份两份 UCI 配置。AX6S 空间不足时，先停止服务并卸载旧整合包和旧 sing-box 包，再安装 Lite；不要删除 UCI 配置。r5 Lite 会替代独立 sing-box 包并拥有透明启动包装器。
 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.2.2-r4_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.2.2-r5_x86_64.ipk
+# 需要内置、受限运行时时也可选择对应 Lite 文件。
 ```
 
 ### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.2-r4.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.2.2-r5.apk
 ```
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。
@@ -616,6 +613,6 @@ docs/                        API、安全、部署、测试和双语用户教程
 
 ## 开源许可
 
-本项目采用 [MIT License](LICENSE)。第三方依赖及外部项目仍分别遵循其自身许可证；MIT 授权不改变 [clean-room 边界 ADR](docs/adr/0001-license-boundary.md) 中对外部 AGPL 实现材料的隔离要求。
+本项目自有代码采用 [MIT License](LICENSE)。Lite 发布资产还内含采用 GPL-3.0-or-later 的 sing-box；第三方组件继续遵循各自许可证。MIT 授权不改变 [clean-room 边界 ADR](docs/adr/0001-license-boundary.md) 对外部 AGPL 实现材料的隔离要求。
 
 Wi‑Fi Calling Gateway 组件原为独立项目。本仓库将其整合为单一安装包；正式包构建只接受经过身份、版本和 SHA-256 校验的已发布 IPK。
