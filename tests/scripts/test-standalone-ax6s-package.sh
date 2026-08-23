@@ -95,7 +95,7 @@ printf '%s\n' "$control" | grep -Fx 'Package: wificalling-location-gateway' >/de
 	fail 'standalone package metadata must use the project name'
 printf '%s\n' "$control" | grep -Fx 'Architecture: aarch64_cortex-a53' >/dev/null ||
 	fail 'standalone package metadata must identify the AX6S runtime architecture'
-printf '%s\n' "$control" | grep -Fx 'Description: Complete Wi-Fi Calling Gateway 1.7 and WLOC service with unified LuCI.' >/dev/null ||
+printf '%s\n' "$control" | grep -Fx 'Description: Complete Wi-Fi Calling Gateway and WLOC service with unified LuCI.' >/dev/null ||
 	fail 'standalone package description must identify the complete integrated product'
 printf '%s\n' "$control" | grep -F 'Provides: luci-app-wificalling-location-gateway, luci-app-wificalling-gateway, wloc-service' >/dev/null ||
 	fail 'standalone package must provide both bundled components'
