@@ -14,6 +14,9 @@ gateway_ipk=
 gateway_sha256=
 out_dir="$repo_root/dist/openwrt-release"
 plan_only=0
+variants=standard
+singbox_lite_bin=
+singbox_lite_sha256=
 
 fail() {
 	printf 'build-release-packages: %s\n' "$*" >&2
@@ -33,6 +36,9 @@ Options:
   --gateway-ipk PATH         Pinned stable Gateway/integrated IPK (required to build)
   --gateway-sha256 SHA256    Expected base IPK digest (required to build)
   --out-dir PATH             Output directory
+  --variants LIST            standard, lite, or standard,lite (default: standard)
+  --singbox-lite-bin PATH    Architecture-matched sing-box Lite binary
+  --singbox-lite-sha256 SHA  Expected Lite binary digest
   --plan                     Print the immutable build plan without Docker
 EOF
 }
@@ -47,6 +53,9 @@ while [ "$#" -gt 0 ]; do
 		--gateway-ipk) [ "$#" -ge 2 ] || fail 'missing --gateway-ipk value'; gateway_ipk=$2; shift 2 ;;
 		--gateway-sha256) [ "$#" -ge 2 ] || fail 'missing --gateway-sha256 value'; gateway_sha256=$2; shift 2 ;;
 		--out-dir) [ "$#" -ge 2 ] || fail 'missing --out-dir value'; out_dir=$2; shift 2 ;;
+		--variants) [ "$#" -ge 2 ] || fail 'missing --variants value'; variants=$2; shift 2 ;;
+		--singbox-lite-bin) [ "$#" -ge 2 ] || fail 'missing --singbox-lite-bin value'; singbox_lite_bin=$2; shift 2 ;;
+		--singbox-lite-sha256) [ "$#" -ge 2 ] || fail 'missing --singbox-lite-sha256 value'; singbox_lite_sha256=$2; shift 2 ;;
 		--plan) plan_only=1; shift ;;
 		-h|--help) usage; exit 0 ;;
 		*) fail "unknown argument: $1" ;;
@@ -65,12 +74,40 @@ esac
 [ -x "$service_bin" ] || fail "service binary is not executable: $service_bin"
 [ -x "$ctl_bin" ] || fail "control binary is not executable: $ctl_bin"
 
+case "$variants" in
+	standard|lite|standard,lite) ;;
+	*) fail 'variants must be standard, lite, or standard,lite' ;;
+esac
+case ",$variants," in
+	*,lite,*)
+		[ -n "$singbox_lite_bin" ] || fail '--singbox-lite-bin is required for the Lite variant'
+		[ -x "$singbox_lite_bin" ] || fail "sing-box Lite binary is not executable: $singbox_lite_bin"
+		[ -n "$singbox_lite_sha256" ] || fail '--singbox-lite-sha256 is required for the Lite variant'
+		case "$singbox_lite_sha256" in *[!0-9a-fA-F]*|'') fail 'invalid sing-box Lite SHA-256' ;; esac
+		[ "${#singbox_lite_sha256}" -eq 64 ] || fail 'invalid sing-box Lite SHA-256'
+		actual_lite_sha=$(shasum -a 256 "$singbox_lite_bin" | awk '{print $1}')
+		[ "$actual_lite_sha" = "$singbox_lite_sha256" ] || fail 'sing-box Lite SHA-256 mismatch'
+		;;
+esac
+
 cat <<EOF
 24.10 SDK: $OPENWRT_24_SDK
 25.12 SDK: $OPENWRT_25_SDK
-24.10 integrated: wificalling-location-gateway_${version}-r${release}_${arch}.ipk
-25.12 integrated: wificalling-location-gateway-${version}-r${release}.apk (arch: ${arch})
 EOF
+case ",$variants," in
+	*,standard,*)
+		printf '24.10 standard: wificalling-location-gateway_%s-r%s_%s.ipk\n' "$version" "$release" "$arch"
+		printf '25.12 standard: wificalling-location-gateway-%s-r%s.apk (arch: %s)\n' "$version" "$release" "$arch"
+		printf '%s\n' 'standard runtime: firmware /usr/bin/sing-box'
+		;;
+esac
+case ",$variants," in
+	*,lite,*)
+		printf '24.10 Lite: wificalling-location-gateway-lite_%s-r%s_%s.ipk\n' "$version" "$release" "$arch"
+		printf '25.12 Lite: wificalling-location-gateway-lite-%s-r%s.apk (arch: %s)\n' "$version" "$release" "$arch"
+		printf 'lite runtime: %s\n' "$singbox_lite_sha256"
+		;;
+esac
 
 [ "$plan_only" -eq 0 ] || exit 0
 command -v docker >/dev/null 2>&1 || fail 'docker is required'
@@ -121,6 +158,8 @@ for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh w
 	cp "$repo_root/openwrt/files/usr/sbin/$helper" "$package_dir/files/usr/sbin/$helper"
 done
 chmod 0755 "$package_dir/files/usr/sbin/"* "$package_dir/files/etc/init.d/"*
+mkdir -p "$package_dir/files/usr/share/wificalling-location-gateway"
+printf '%s\n' standard > "$package_dir/files/usr/share/wificalling-location-gateway/runtime-variant"
 
 cat > "$package_dir/Makefile" <<EOF
 include \$(TOPDIR)/rules.mk
@@ -134,7 +173,9 @@ define Package/wificalling-location-gateway
   SECTION:=net
   CATEGORY:=Network
   TITLE:=Integrated Wi-Fi Calling and WLOC Location Gateway
+  EXTRA_DEPENDS:=luci-base (>=0), rpcd-mod-rpcsys (>=0), sing-box (>=0), nftables (>=0), firewall4 (>=0), kmod-nft-tproxy (>=0), kmod-nft-socket (>=0), ip-full (>=0)
   PROVIDES:=wloc-service luci-app-wificalling-location-gateway luci-app-wificalling-gateway
+  CONFLICTS:=wificalling-location-gateway-lite
 endef
 define Package/wificalling-location-gateway/description
   Complete Wi-Fi Calling Gateway, WLOC service, control client, and unified LuCI UI.
@@ -167,30 +208,102 @@ endef
 \$(eval \$(call BuildPackage,wificalling-location-gateway))
 EOF
 
+case ",$variants," in
+	*,lite,*)
+		lite_dir="$stage/input/wificalling-location-gateway-lite"
+		cp -R "$package_dir" "$lite_dir"
+		printf '%s\n' lite > "$lite_dir/files/usr/share/wificalling-location-gateway/runtime-variant"
+		"$repo_root/scripts/openwrt/package-singbox-lite.sh" \
+			"$lite_dir/files" "$singbox_lite_bin" "$singbox_lite_sha256"
+		cat > "$lite_dir/Makefile" <<EOF
+include \$(TOPDIR)/rules.mk
+PKG_NAME:=wificalling-location-gateway-lite
+PKG_VERSION:=$version
+PKG_RELEASE:=$release
+PKG_MAINTAINER:=wificalling-location-gateway maintainers
+PKG_LICENSE:=MIT GPL-3.0-or-later
+include \$(INCLUDE_DIR)/package.mk
+define Package/wificalling-location-gateway-lite
+  SECTION:=net
+  CATEGORY:=Network
+  TITLE:=Integrated Wi-Fi Calling and WLOC Location Gateway Lite
+  EXTRA_DEPENDS:=luci-base (>=0), rpcd-mod-rpcsys (>=0), ca-bundle (>=0), kmod-inet-diag (>=0), kmod-netlink-diag (>=0), kmod-tun (>=0), nftables (>=0), firewall4 (>=0), kmod-nft-tproxy (>=0), kmod-nft-socket (>=0), ip-full (>=0)
+  PROVIDES:=wificalling-location-gateway sing-box wloc-service luci-app-wificalling-location-gateway luci-app-wificalling-gateway
+  CONFLICTS:=wificalling-location-gateway sing-box
+endef
+define Package/wificalling-location-gateway-lite/description
+  Complete Wi-Fi Calling Gateway and WLOC with the bundled low-memory sing-box runtime.
+endef
+define Build/Compile
+endef
+define Package/wificalling-location-gateway-lite/conffiles
+/etc/config/wificalling-gateway
+/etc/config/wloc-service
+endef
+define Package/wificalling-location-gateway-lite/install
+	\$(CP) ./files/. \$(1)/
+endef
+define Package/wificalling-location-gateway-lite/postinst
+#!/bin/sh
+[ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+for required in /usr/bin/sing-box /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd; do
+  [ -e "\$\$required" ] || echo "wificalling-location-gateway-lite: prerequisite missing: \$\$required" >&2
+done
+/etc/init.d/wificalling-gateway enable >/dev/null 2>&1 || true
+/etc/init.d/wloc-service enable >/dev/null 2>&1 || true
+mkdir -p /var/run/wificalling-gateway
+chmod 0700 /var/run/wificalling-gateway
+/etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || true
+/etc/init.d/wloc-service restart >/dev/null 2>&1 || true
+rm -f /tmp/luci-indexcache.*
+/etc/init.d/rpcd reload >/dev/null 2>&1 || true
+exit 0
+endef
+\$(eval \$(call BuildPackage,wificalling-location-gateway-lite))
+EOF
+		;;
+esac
+
 build_with_sdk() {
 	label=$1
 	image=$2
-	out="$stage/output/$label"
+	variant=$3
+	case "$variant" in
+		standard) package=wificalling-location-gateway ;;
+		lite) package=wificalling-location-gateway-lite ;;
+		*) fail "unsupported build variant: $variant" ;;
+	esac
+	out="$stage/output/$label-$variant"
 	mkdir -p "$out"
 	chmod 0777 "$out"
 	docker image inspect "$image" >/dev/null 2>&1 ||
 		fail "pinned SDK image missing; pull explicitly: docker pull --platform linux/amd64 $image"
 	docker run --rm --pull never --platform linux/amd64 --network none \
 		-v "$stage/input:/input:ro" -v "$out:/output" \
-		--entrypoint /bin/bash "$image" -ec '
-			rm -rf /builder/package/wificalling-location-gateway
-			cp -a /input/wificalling-location-gateway /builder/package/
-			printf "%s\n" "CONFIG_PACKAGE_wificalling-location-gateway=m" >> /builder/.config
+		-e WLG_PACKAGE="$package" --entrypoint /bin/bash "$image" -ec '
+			rm -rf "/builder/package/$WLG_PACKAGE"
+			cp -a "/input/$WLG_PACKAGE" /builder/package/
 			cd /builder
+			printf "%s\n" "CONFIG_PACKAGE_$WLG_PACKAGE=m" >> .config
 			make defconfig >/dev/null
-			make package/wificalling-location-gateway/compile V=s
-			find bin/packages -type f \( -name "wificalling-location-gateway*.ipk" \
-				-o -name "wificalling-location-gateway*.apk" \) -exec cp {} /output/ \;
+			make "package/$WLG_PACKAGE/compile" V=s
+			find bin/packages -type f \( -name "$WLG_PACKAGE*.ipk" \
+				-o -name "$WLG_PACKAGE*.apk" \) -exec cp {} /output/ \;
 		'
 }
 
-build_with_sdk openwrt-24.10 "$OPENWRT_24_SDK"
-build_with_sdk openwrt-25.12 "$OPENWRT_25_SDK"
+case ",$variants," in
+	*,standard,*)
+		build_with_sdk openwrt-24.10 "$OPENWRT_24_SDK" standard
+		build_with_sdk openwrt-25.12 "$OPENWRT_25_SDK" standard
+		;;
+esac
+case ",$variants," in
+	*,lite,*)
+		build_with_sdk openwrt-24.10 "$OPENWRT_24_SDK" lite
+		build_with_sdk openwrt-25.12 "$OPENWRT_25_SDK" lite
+		;;
+esac
 
 mkdir -p "$out_dir"
 find "$out_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk' \
@@ -199,7 +312,9 @@ find "$out_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk'
 find "$stage/output" -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp {} "$out_dir/" \;
 count=$(find "$out_dir" -maxdepth 1 -type f \( -name 'wificalling-location-gateway*.ipk' \
 	-o -name 'wificalling-location-gateway*.apk' \) | wc -l | tr -d ' ')
-[ "$count" -eq 2 ] || fail "expected two integrated packages, found $count"
+expected_count=2
+[ "$variants" = standard,lite ] && expected_count=4
+[ "$count" -eq "$expected_count" ] || fail "expected $expected_count integrated packages, found $count"
 (cd "$out_dir" && shasum -a 256 wificalling-location-gateway*.ipk \
 	wificalling-location-gateway*.apk > SHA256SUMS)
 printf 'release packages: %s\n' "$out_dir"

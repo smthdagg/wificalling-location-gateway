@@ -20,6 +20,7 @@ done
 ./tests/scripts/test-agent-handoff-tools.sh
 ./tests/scripts/test-verify-rust-openwrt.sh
 ./tests/scripts/test-openwrt-release-packaging.sh
+./tests/scripts/test-package-variants.sh
 ./tests/scripts/test-standalone-ax6s-package.sh
 ./tests/scripts/test-release-version.sh
 ./tests/scripts/test-monitor-temp-cleanup.sh

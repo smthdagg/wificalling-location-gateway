@@ -2,6 +2,47 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.2.2-r5] - 2026-08-23
+
+Same-project Standard/Lite packaging and the AX6S low-memory release profile.
+
+### Added and changed
+
+- Every supported target now has two complete integrated assets. **Standard**
+  uses the firmware/feed `/usr/bin/sing-box`; **Lite** owns a pinned bundled
+  runtime. They share the same WCG/WLOC implementation, LuCI, UCI schema and
+  release line and intentionally conflict at package-manager level.
+- Lite stores sing-box as a gzip payload in persistent storage. A transparent
+  wrapper verifies its SHA-256 and expands one shared executable into tmpfs on
+  first use, so WCG and PassWall can reuse it without a second flash copy.
+- The AX6S Lite WCG process applies the validated `GOMAXPROCS=1`,
+  `GOMEMLIMIT=24MiB`, and `GOGC=75` profile. Standard retains firmware defaults.
+- The release matrix now validates six assets across eight Standard/Lite
+  runtime cases, including native OpenWrt 25 APK dependency resolution and
+  package ownership of the sing-box executable contract.
+
+### Hardware verification
+
+- Removed the old integrated and sing-box packages before installing the exact
+  r5 Lite AArch64 asset on Redmi AX6S. Both UCI files retained identical
+  SHA-256 values across the migration.
+- Cold boot regenerated the verified sing-box 1.12.25 runtime in `/tmp`, left
+  about 20.4 MB free on overlay, started WCG and WLOC, restored the scoped
+  nftables rule for `192.168.31.175`, and kept WLOC health at `intercepting`.
+- A real iPhone request to `gs-loc.apple.com/clls/wloc` was observed after the
+  reboot and its WLOC payload was synthesized successfully.
+
+### 中文说明
+
+- 同一 1.2.x 项目为三个目标各提供 Standard 与 Lite 两种完整安装规格，共六个
+  资产；两者不是产品分支，也不拆分 WCG 与 WLOC。
+- Standard 调用固件/软件源的 sing-box；Lite 自带固定哈希的运行时，并通过透明
+  包装器把压缩文件解压到 `/tmp`。WCG 与 PassWall 共用一份 tmpfs 可执行文件。
+- AX6S Lite 使用 24 MiB WCG 堆上限；真机迁移和冷启动后 overlay 仍余约
+  20.4 MB，两份 UCI 配置哈希不变，WCG/WLOC 与 nftables 正常。
+- 冷启动后已实际捕获 iPhone12 的 WLOC 请求并成功生成定位响应；Standard/Lite
+  的八项 Docker 安装、启动、Socket 与状态矩阵全部通过。
+
 ## [1.2.2-r4] - 2026-08-23
 
 Stable deleted-node fail-closed hotfix and release-baseline isolation.

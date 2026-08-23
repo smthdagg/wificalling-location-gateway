@@ -4,10 +4,12 @@ set -eu
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 builder="$repo_root/scripts/build-luci-ipk.sh"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wloc-standalone-package-test.XXXXXX")
-built_output=
+built_outputs=
 cleanup() {
 	rm -rf "$tmp"
-	[ -z "$built_output" ] || rm -f "$built_output"
+	for built_output in $built_outputs; do
+		rm -f "$built_output"
+	done
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -77,6 +79,7 @@ output=$(
 	"$builder" "$version" ax6s-standalone
 )
 built_output=$output
+built_outputs="$built_outputs $output"
 [ -f "$output" ] || fail 'standalone builder did not create an IPK'
 
 mkdir -p "$tmp/result"
@@ -195,6 +198,61 @@ grep -F 'node_test' \
 grep -F '"note":"ICMP ping only' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null &&
 	fail 'standalone package compact output must drop the note field'
+
+# The Lite variant owns an architecture-matched sing-box binary, replaces the
+# standard runtime through package metadata, and preserves the same UCI files.
+mkdir -p "$tmp/mock-bin"
+cat > "$tmp/mock-bin/file" <<'FILE'
+#!/bin/sh
+printf '%s: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)\n' "$1"
+FILE
+chmod 0755 "$tmp/mock-bin/file"
+printf 'mock aarch64 sing-box Lite\n' > "$tmp/sing-box-lite"
+chmod 0755 "$tmp/sing-box-lite"
+tiny_sha=$(shasum -a 256 "$tmp/sing-box-lite" | awk '{print $1}')
+lite_version="0.1.0-4-lite-test"
+lite_output=$(
+	PATH="$tmp/mock-bin:$PATH" \
+	WLOC_SERVICE_BIN="$tmp/wloc-service" \
+	WLOC_CTL_BIN="$tmp/wloc-ctl" \
+	GATEWAY_IPK="$tmp/gateway.ipk" \
+	GATEWAY_IPK_SHA256="$gateway_sha" \
+	SINGBOX_LITE_BIN="$tmp/sing-box-lite" \
+	SINGBOX_LITE_SHA256="$tiny_sha" \
+	"$builder" "$lite_version" ax6s-lite
+)
+built_outputs="$built_outputs $lite_output"
+mkdir -p "$tmp/lite-result/data"
+tar -xf "$lite_output" -C "$tmp/lite-result"
+lite_control=$(tar -xOf "$tmp/lite-result/control.tar.gz" ./control)
+lite_conffiles=$(tar -xOf "$tmp/lite-result/control.tar.gz" ./conffiles)
+tar -xzf "$tmp/lite-result/data.tar.gz" -C "$tmp/lite-result/data"
+
+printf '%s\n' "$lite_control" | grep -Fx 'Package: wificalling-location-gateway-lite' >/dev/null ||
+	fail 'Lite package must have an explicit package identity'
+printf '%s\n' "$lite_control" | grep -F 'Provides: wificalling-location-gateway, sing-box' >/dev/null ||
+	fail 'Lite package must provide the integrated product and sing-box runtime'
+printf '%s\n' "$lite_control" | grep -F 'Conflicts: wificalling-location-gateway, sing-box' >/dev/null ||
+	fail 'Lite package must conflict with the standard product and sing-box package'
+if printf '%s\n' "$lite_control" | grep '^Depends:.*sing-box' >/dev/null; then
+	fail 'Lite package must not depend on the standard sing-box package'
+fi
+printf '%s\n' "$lite_control" | grep -F 'kmod-inet-diag, kmod-netlink-diag, kmod-tun' >/dev/null ||
+	fail 'Lite package must carry the runtime kernel dependencies'
+for conffile in /etc/config/wificalling-gateway /etc/config/wloc-service; do
+	printf '%s\n' "$lite_conffiles" | grep -Fx "$conffile" >/dev/null ||
+		fail "Lite package must preserve $conffile"
+done
+grep -F '/tmp/sing-box-lite' "$tmp/lite-result/data/usr/bin/sing-box" >/dev/null ||
+	fail 'Lite package must install the transparent tmpfs runtime wrapper'
+gzip -dc "$tmp/lite-result/data/usr/share/wificalling-location-gateway/sing-box-lite.gz" \
+	> "$tmp/lite-result/sing-box-lite.unpacked"
+cmp "$tmp/sing-box-lite" "$tmp/lite-result/sing-box-lite.unpacked" >/dev/null ||
+	fail 'Lite package must persist the exact hash-pinned sing-box runtime in compressed form'
+[ "$(cat "$tmp/lite-result/data/usr/share/wificalling-location-gateway/runtime-variant")" = lite ] ||
+	fail 'Lite package must install its runtime marker'
+grep -F 'GOMEMLIMIT=24MiB' "$tmp/lite-result/data/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Lite package must apply the AX6S-validated sing-box memory profile'
 
 # The retired standalone 1.7 package must never be accepted as a baseline.
 mkdir -p "$tmp/legacy"

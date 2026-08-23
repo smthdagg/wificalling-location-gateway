@@ -99,3 +99,14 @@
 - `cargo-audit 0.22.2` 和 `cargo-deny 0.20.2` 已安装并接入 Rust verifier/CI；RustSec 扫描及 advisories/bans/licenses/sources 全部通过。
 - 用户授权建立专门 Rust migration 任务并提交开发；已创建 GitHub Issue #15 和 `cap:rust` 标签。
 - 已切换到 `codex/issue-15-rust-migration`，并以 Agent ID `codex-rust-migration` 取得 240 分钟 CAS 租约。
+# 2026-08-23 Issue #66 Standard/Lite variants
+
+- 用户授权进入实际打包、测试和发布，并确认 Standard/Lite 属于同一项目，不是新的产品分支。
+- 创建 GitHub Issue #66，范围为两种内存变体 × 三类平台，共六个发布产物。
+- Agent `codex-release` 以 `openwrt,test,ci,integration` 能力取得 480 分钟租约并创建独立工作树。
+- 工作分支已从 `origin/main` 快进到 Issue #64 稳定链提交 `81d5f6b`，后续以 1.2.x 为唯一基线。
+- 已采用 planning-with-files、TDD 和 production-audit；下一步先写 packaging RED 测试，不先改构建实现。
+- packaging RED `68deac2`、双规格 GREEN `e24ebd1` 和 tmpfs 修复 `77ce558` 已提交。
+- 六个 r5 资产已生成，固定摘要 Docker 矩阵的八个 Standard/Lite 用例全部通过。
+- 首个 AX6S Lite 候选因直接落盘导致 overlay 仅余 2.8 MB，被生产审计否决；修正版改为 gzip 驻 flash、透明解压到 `/tmp`。
+- 修正版已在 AX6S 卸载旧整合包与 sing-box 后安装；两份 UCI 哈希保持不变，冷启动后 overlay 约余 20.4 MB，WCG/WLOC/nftables 正常，并捕获和处理了真实 iPhone WLOC 请求。

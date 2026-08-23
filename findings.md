@@ -109,3 +109,13 @@
 - 桌面 host 仍无直接 aarch64-musl linker，但已用受控 Linux 容器中的 OpenWrt 官方工具链取得真实 AArch64 构建证据。
 - rustls 0.23.43 默认启用 aws-lc-rs、logging、post-quantum 偏好、std 和 TLS 1.2；资源 Spike 必须关闭 default features 并明确选择 crypto provider，否则体积与交叉构建成本会被默认依赖放大。
 - 已安装固定版本 `cargo-audit 0.22.2` 与 `cargo-deny 0.20.2`，并将漏洞、license、source 与重复依赖检查接入 Rust verifier/CI。
+# 2026-08-23 Issue #66 Standard/Lite release findings
+
+- 用户确认这不是项目分叉，而是同一项目的不同内存版本；Git 分支仅为临时开发/审核机制。
+- 现有“三平台”在发布脚本中实际是三类安装产物：AArch64 cortex-a53 IPK、x86_64 OpenWrt/iStoreOS 24.x IPK、x86_64 OpenWrt 25.x APK。Docker 运行矩阵额外把同一个 x86_64 IPK 分别装入 OpenWrt 与 iStoreOS，因此是 3 个资产目标、4 个运行环境。
+- 当前稳定链是 `origin/main -> Issue #62 -> Issue #64`；Issue #64 分支可从 main 快进，故 Issue #66 已从 main 建立并快进到 `81d5f6b`，没有混入 v2/Beta 代码。
+- 当前 standalone 和 SDK builder 都把 `sing-box` 写为硬依赖，健康脚本和运行脚本还硬编码 `/usr/bin/sing-box`。双变体实现必须先抽象运行时路径，再区分系统运行时与 tiny payload。
+- Lite 通过包管理器显式 `Provides/Replaces/Conflicts` 接管 sing-box 契约，不能与 Standard 或独立 sing-box 包共存；`/usr/bin/sing-box` 是透明包装器，WCG 与 PassWall 共享经哈希校验的 `/tmp/sing-box-lite`，不是静默覆盖未知系统文件。
+- 首个直接写入 29.7 MB ELF 的 AX6S 候选使 overlay 仅余 2.8 MB，已阻断并废弃。压缩驻留修正版清理旧重复文件后恢复到约 20.4 MB 可用，并通过冷启动。
+- AX6S 冷启动后实际记录到 `192.168.31.175` 请求 `gs-loc.apple.com/clls/wloc`，WLOC 响应已成功生成，状态保持 `intercepting`。
+- 版本切换必须用 package conflict/provides/replaces 与 conffiles 共同保证“不可共存但配置不丢失”；安装、升级、降级和回滚都需要离线测试。
