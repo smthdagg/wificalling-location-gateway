@@ -2,6 +2,15 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r1] - 2026-08-24
+
+Bump the release line to 1.3.0-r1. Carries the Standard/Lite packaging and
+three-platform (x86_64 / AX6S / 25.12 apk) release work already on `main`.
+
+- Version sources aligned to 1.3.0: `VERSION`, `Cargo.toml`, both `openwrt/*/Makefile`
+  files, `scripts/build-luci-ipk.sh`, and `build-release-packages.sh` default.
+- Release assertion tests updated to expect the 1.3.0-r1 package names.
+
 ## [1.2.2-r5] - 2026-08-23
 
 Same-project Standard/Lite packaging and the AX6S low-memory release profile.

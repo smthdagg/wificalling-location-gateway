@@ -248,7 +248,7 @@ This pins the OpenWrt 24.10.8 `mediatek/mt7622` toolchain, Rust version, and SHA
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
   --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \
-  --gateway-ipk /absolute/path/wificalling-location-gateway_1.2.2-r3_aarch64_cortex-a53.ipk \
+  --gateway-ipk /absolute/path/wificalling-location-gateway_1.3.0-r1_aarch64_cortex-a53.ipk \
   --gateway-sha256 <verified-sha256> \
   --out-dir "$PWD/dist/openwrt-release"
 ```
@@ -538,7 +538,7 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
   --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \
-  --gateway-ipk /absolute/path/wificalling-location-gateway_1.2.2-r3_aarch64_cortex-a53.ipk \
+  --gateway-ipk /absolute/path/wificalling-location-gateway_1.3.0-r1_aarch64_cortex-a53.ipk \
   --gateway-sha256 <verified-sha256> \
   --out-dir "$PWD/dist/openwrt-release"
 ```

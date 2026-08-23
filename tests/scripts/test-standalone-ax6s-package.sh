@@ -23,7 +23,7 @@ mkdir -p "$tmp/gateway/control" "$tmp/gateway/data/etc/config" \
 	"$tmp/gateway/data/usr/share/luci/menu.d"
 cat > "$tmp/gateway/control/control" <<'EOF'
 Package: wificalling-location-gateway
-Version: 1.2.2-r3
+Version: 1.3.0-r1
 Architecture: all
 License: MIT
 EOF
