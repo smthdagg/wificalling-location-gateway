@@ -71,7 +71,8 @@ The core boundary of the project is "**independent, precise, and revertible**": 
 ## How it works
 
 ```mermaid
-flowchart LR
+%%{init: {"flowchart": {"toolbar": false}}}%%
+flowchart TD
     I["Authorized test iPhone"] -->|"Wi‑Fi Calling · UDP 500/4500"| G["Wi‑Fi Calling Gateway"]
     G --> N["Bound sing-box node"]
     I -->|"Apple WLOC · TCP 443"| D["Precise DNS / nftables isolation"]
@@ -361,7 +362,8 @@ Wi‑Fi Calling Location Gateway 将两个原本分离的流程组织在同一�
 ## 工作原理
 
 ```mermaid
-flowchart LR
+%%{init: {"flowchart": {"toolbar": false}}}%%
+flowchart TD
     I["授权测试 iPhone"] -->|"Wi‑Fi Calling · UDP 500/4500"| G["Wi‑Fi Calling Gateway"]
     G --> N["绑定的 sing-box 节点"]
     I -->|"Apple WLOC · TCP 443"| D["精确 DNS / nftables 隔离"]
