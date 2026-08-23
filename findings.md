@@ -109,3 +109,11 @@
 - 桌面 host 仍无直接 aarch64-musl linker，但已用受控 Linux 容器中的 OpenWrt 官方工具链取得真实 AArch64 构建证据。
 - rustls 0.23.43 默认启用 aws-lc-rs、logging、post-quantum 偏好、std 和 TLS 1.2；资源 Spike 必须关闭 default features 并明确选择 crypto provider，否则体积与交叉构建成本会被默认依赖放大。
 - 已安装固定版本 `cargo-audit 0.22.2` 与 `cargo-deny 0.20.2`，并将漏洞、license、source 与重复依赖检查接入 Rust verifier/CI。
+# 2026-08-23 Issue #66 Standard/Lite release findings
+
+- 用户确认这不是项目分叉，而是同一项目的不同内存版本；Git 分支仅为临时开发/审核机制。
+- 现有“三平台”在发布脚本中实际是三类安装产物：AArch64 cortex-a53 IPK、x86_64 OpenWrt/iStoreOS 24.x IPK、x86_64 OpenWrt 25.x APK。Docker 运行矩阵额外把同一个 x86_64 IPK 分别装入 OpenWrt 与 iStoreOS，因此是 3 个资产目标、4 个运行环境。
+- 当前稳定链是 `origin/main -> Issue #62 -> Issue #64`；Issue #64 分支可从 main 快进，故 Issue #66 已从 main 建立并快进到 `81d5f6b`，没有混入 v2/Beta 代码。
+- 当前 standalone 和 SDK builder 都把 `sing-box` 写为硬依赖，健康脚本和运行脚本还硬编码 `/usr/bin/sing-box`。双变体实现必须先抽象运行时路径，再区分系统运行时与 tiny payload。
+- 不能让 Lite 无条件覆盖固件的 `/usr/bin/sing-box`：这会破坏已有 PassWall/系统包的所有权。Lite 应使用项目私有、架构受检的运行时路径；如需与 PassWall 共享 tiny，必须以显式兼容方案处理，不能偷偷替换系统文件。
+- 版本切换必须用 package conflict/provides/replaces 与 conffiles 共同保证“不可共存但配置不丢失”；安装、升级、降级和回滚都需要离线测试。
