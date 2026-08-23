@@ -315,13 +315,9 @@ Detailed collaboration: [Multi-agent workflow](docs/MULTI_AGENT_WORKFLOW.md).
 
 ## Star growth
 
-<a href="https://www.star-history.com/?repos=smthdagg/wificalling-location-gateway&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=smthdagg/wificalling-location-gateway&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=smthdagg/wificalling-location-gateway&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=smthdagg/wificalling-location-gateway&type=date&legend=top-left" />
- </picture>
-</a>
+![Star History](https://cdn.jsdelivr.net/gh/smthdagg/wificalling-location-gateway@star-chart/docs/images/star-history.svg)
+
+> The chart is regenerated daily by the `star-history-chart` workflow (or manually from the Actions tab). It uses GitHub's auto-injected `GITHUB_TOKEN` to read the star timeline and renders the SVG locally — the token never leaves GitHub's workflow environment and is never written to any repository file or third-party service. The chart lives on the `star-chart` branch and is embedded via the jsDelivr CDN.
 
 If this project helps your OpenWrt / Wi‑Fi Calling experiments, a Star, a reproducible bug report, or a note in the [LINUX.DO](https://linux.do/) community is welcome. Please never publish personal locations, certificates, or proxy credentials in public content.
 
@@ -609,13 +605,9 @@ docs/                        API、安全、部署、测试和双语用户教程
 
 ## Star 增长
 
-<a href="https://www.star-history.com/?repos=smthdagg/wificalling-location-gateway&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=smthdagg/wificalling-location-gateway&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=smthdagg/wificalling-location-gateway&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=smthdagg/wificalling-location-gateway&type=date&legend=top-left" />
- </picture>
-</a>
+![Star History](https://cdn.jsdelivr.net/gh/smthdagg/wificalling-location-gateway@star-chart/docs/images/star-history.svg)
+
+> 图表由 `star-history-chart` 工作流每日自动更新（也可在 Actions 页面手动运行）。它使用 GitHub 自动注入的 `GITHUB_TOKEN` 读取 star 时间线并在本地生成 SVG——token 只在 GitHub 的工作流环境内使用，不写入仓库任何文件，也不经过第三方服务。图表发布在 `star-chart` 分支，经 jsDelivr CDN 嵌入。
 
 如果这个项目对你的 OpenWrt / Wi‑Fi Calling 实验有帮助，欢迎 Star、提交可复现的问题报告，或在 [LINUX.DO](https://linux.do/) 社区交流使用经验。请勿在公开内容中发布个人位置、证书或代理凭据。
 
