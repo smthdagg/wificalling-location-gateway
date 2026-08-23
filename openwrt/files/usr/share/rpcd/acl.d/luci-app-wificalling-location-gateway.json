@@ -12,8 +12,7 @@
           "verify_fingerprint",
           "health",
           "restart_gateway",
-          "node_test",
-          "update_status"
+          "node_test"
         ],
         "file": [
           "read"
@@ -45,15 +44,8 @@
           "cert_info",
           "regen_ca",
           "restart_service",
-          "restart_unified",
-          "support_bundle",
           "verify_fingerprint",
-          "node_test",
-          "restart_gateway",
-          "clear_log",
-          "update_preflight",
-          "update_apply",
-          "update_recover"
+          "node_test"
         ],
         "file": [
           "write"

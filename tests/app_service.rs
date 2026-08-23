@@ -438,44 +438,6 @@ fn status_reports_unavailable_when_probe_fails() {
 }
 
 #[test]
-fn invalid_scope_never_runs_an_unbound_probe_or_publishes_target() {
-    // An unsupported/malformed profile must fail closed in status and
-    // periodic refresh too, not only in control_enable. An empty probe
-    // sequence makes any accidental fallback probe panic this test.
-    let sink = Arc::new(Mutex::new(None));
-    let mut service = WlocService::new(
-        OkRuntime {
-            healthy: true,
-            install_fails: false,
-        },
-        SequenceProbe {
-            results: vec![],
-            index: 0,
-        },
-        SequenceGeo {
-            results: vec![],
-            index: 0,
-        },
-        WlocServiceConfig {
-            node_ref: NodeRef::new("node-1").unwrap(),
-            providers: vec![ProviderRef::new("geo-a").unwrap()],
-            probe_limits: limits(),
-            scope_valid: false,
-            ipv6_ready: true,
-            assigned_device_configured: false,
-            assigned_device: None,
-            reverse_geo_lookup: None,
-        },
-    )
-    .with_patch_sink(Arc::clone(&sink));
-
-    let status = service.status_at(1_000_000).unwrap();
-    assert_eq!(status["exit"]["state"], "unavailable");
-    assert_eq!(status["geo"]["state"], "unavailable");
-    assert!(sink.lock().unwrap().is_none());
-}
-
-#[test]
 fn status_reports_uncertain_when_geo_conflicts() {
     let now = 1_000_000;
     let mut service = WlocService::new(
@@ -832,19 +794,6 @@ fn status_file_and_target_events_are_written() {
         events_text.contains("target_updated"),
         "events must record target updates"
     );
-    let event: serde_json::Value = events_text
-        .lines()
-        .rfind(|line| !line.trim().is_empty())
-        .and_then(|line| serde_json::from_str(line).ok())
-        .expect("target event must be valid JSON");
-    assert_eq!(event["component"], "wloc");
-    assert_eq!(event["profile_scope"], "service");
-    assert_eq!(event["severity"], "info");
-    assert_eq!(event["event_code"], "target_updated");
-    assert!(event["message"].is_string());
-    assert!(event.get("latitude").is_none());
-    assert!(event.get("longitude").is_none());
-    assert!(event.get("assigned_device").is_none());
 
     let _ = std::fs::remove_file(&status_path);
     let _ = std::fs::remove_file(&events_path);

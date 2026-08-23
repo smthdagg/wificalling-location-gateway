@@ -111,18 +111,6 @@ if [ -f "$node_status" ]; then
 	[ "$nodes_unknown" -lt 0 ] && nodes_unknown=0
 fi
 
-# --- v2 profile projection ------------------------------------------------
-# Keep profile state separate from the aggregate process checks. The helper
-# returns only bounded, redacted fields; if it is absent the health document
-# remains valid for v1 packages.
-profiles='[]'
-if [ -x /usr/sbin/wloc-profile-status.sh ]; then
-	profile_json=$(/usr/sbin/wloc-profile-status.sh 2>/dev/null || true)
-	profiles=$(printf '%s\n' "$profile_json" \
-		| sed -n 's/^{"profiles":\(.*\)}$/\1/p')
-	[ -n "$profiles" ] || profiles='[]'
-fi
-
 printf '{"generated_at":%s,' "$now"
 printf '"services":{"wloc":{"running":%s,"socket":%s,"status_fresh":%s,"phase":"%s","exit":"%s","geo":"%s","last_error":%s},' \
 	"$wloc_running" "$wloc_socket" "$wloc_status_fresh" "$wloc_phase" "$wloc_exit" "$wloc_geo" "$wloc_error"
@@ -130,5 +118,5 @@ printf '"gateway":{"running":%s,"monitor":%s,"singbox":%s,"config_present":%s,"c
 	"$monitor_running" "$monitor_running" "$sb_running" "$sb_config" "$sb_config_valid" "$sb_config_age" "$sb_config_stale" "$nft_rules" "$devices"
 printf '"patches":{"psk":%s,"handshake":%s,"compact":%s,"device_guard":%s}}},' \
 	"$patch_psk" "$patch_health" "$patch_compact" "$patch_device_guard"
-printf '"nodes":{"total":%s,"ok":%s,"down":%s,"unknown":%s},"profiles":%s}\n' \
-	"$nodes_total" "$nodes_ok" "$nodes_down" "$nodes_unknown" "$profiles"
+printf '"nodes":{"total":%s,"ok":%s,"down":%s,"unknown":%s}}\n' \
+	"$nodes_total" "$nodes_ok" "$nodes_down" "$nodes_unknown"

@@ -18,13 +18,6 @@ return view.extend({
 		var logEnabled = uci.get('wificalling-gateway', 'main', 'log_enabled');
 		function when(epoch) { return epoch ? new Date(epoch * 1000).toLocaleString() : '-'; }
 		function lines(value) { return value.trim() ? value.trim().split('\n').reverse() : []; }
-		function eventFields(line) {
-			try {
-				var event = JSON.parse(line), fields = event.fields || {};
-				if (event.event_code) return [event.timestamp || 0, event.profile_scope || '-', '-', event.event_code, fields.delta_sent || 0, fields.delta_reply || 0, 'call_or_sms_unknown', fields.state || '-'];
-			} catch (e) {}
-			return line.split('|');
-		}
 		function wfcLabel(v) {
 			switch (v) {
 				case 'registered': return _('Registered');
@@ -49,7 +42,7 @@ return view.extend({
 		}
 		function rows(value) {
 			return lines(value).map(function(line) {
-				var f = eventFields(line);
+				var f = line.split('|');
 				return E('tr', { class: 'tr' }, [when(Number(f[0])), f[1], f[2], wfcLabel(f[7]), activityLabel(f[3]), (f[4] || '0') + ' ↑ / ' + (f[5] || '0') + ' ↓', meaningLabel(f[6])].map(function(x) { return E('td', { class: 'td' }, String(x)); }));
 			});
 		}

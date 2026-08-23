@@ -10,7 +10,6 @@
 
 CTL=/usr/sbin/wloc-ctl
 EXPORT=/usr/sbin/export-mobileconfig.sh
-UPDATE=/usr/sbin/wloc-component-update.sh
 
 ctl_live() {
 	out="$("$CTL" "$@" 2>&1)" && return 0
@@ -56,23 +55,11 @@ list)
 	json_close_object
 	json_add_object restart_gateway
 	json_close_object
-	json_add_object restart_unified
-	json_close_object
 	json_add_object clear_log
 	json_close_object
 	json_add_object verify_fingerprint
 	json_close_object
 	json_add_object health
-	json_close_object
-	json_add_object support_bundle
-	json_close_object
-	json_add_object update_status
-	json_close_object
-	json_add_object update_preflight
-	json_close_object
-	json_add_object update_apply
-	json_close_object
-	json_add_object update_recover
 	json_close_object
 	json_add_object node_test
 	json_close_object
@@ -225,7 +212,6 @@ call)
 	restart_service)
 		# Re-sync the redirect rules first (the followed device may have
 		# changed), then restart the daemon so it reads the new config.
-		/usr/sbin/wloc-profile-redirect.sh stop-all >/dev/null 2>&1 || true
 		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
 		/etc/init.d/wloc-service restart >/dev/null 2>&1
 		sleep 2
@@ -240,12 +226,6 @@ call)
 		echo '{"ok":true}'
 		exit 0
 		;;
-	restart_unified)
-		/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1
-		sleep 2
-		echo '{"ok":true}'
-		exit 0
-		;;
 	health)
 		if [ ! -x /usr/sbin/wloc-health.sh ]; then
 			json_init
@@ -255,14 +235,6 @@ call)
 		fi
 		/usr/sbin/wloc-health.sh
 		exit 0
-		;;
-	support_bundle)
-		if [ ! -x /usr/sbin/wloc-support-bundle.sh ]; then
-			echo '{"error":"support bundle helper is not installed"}'
-			exit 1
-		fi
-		/usr/sbin/wloc-support-bundle.sh
-		exit $?
 		;;
 	clear_log)
 		# Truncate a usage log immediately with a shell redirect (O_TRUNC).
@@ -299,48 +271,11 @@ call)
 		/usr/libexec/wificalling-gateway/node-test.sh "$id"
 		exit 0
 		;;
-	update_status)
-		[ -x "$UPDATE" ] || { echo '{"error":"component update helper is not installed"}'; exit 1; }
-		"$UPDATE" status
-		exit $?
-		;;
-	update_preflight|update_apply)
-		read -r input
-		json_load "$input"
-		json_get_var path path
-		case "$path" in
-			/tmp/wloc-update/*) ;;
-			*) echo '{"error":"update package must be staged under /tmp/wloc-update"}'; exit 1 ;;
-		esac
-		[ -x "$UPDATE" ] || { echo '{"error":"component update helper is not installed"}'; exit 1; }
-		if out="$($UPDATE "${2#update_}" "$path" 2>&1)"; then
-			printf '%s\n' "$out"
-		else
-			json_init
-			json_add_string error "$out"
-			json_dump
-			exit 1
-		fi
-		exit 0
-		;;
-	update_recover)
-		[ -x "$UPDATE" ] || { echo '{"error":"component update helper is not installed"}'; exit 1; }
-		if out="$($UPDATE recover 2>&1)"; then
-			printf '%s\n' "$out"
-		else
-			json_init
-			json_add_string error "$out"
-			json_dump
-			exit 1
-		fi
-		exit 0
-		;;
 	regen_ca)
 		# Regenerate the root CA: remove the persisted key/cert, restart the
 		# daemon (procd respawns and creates a fresh CA + info), then rewrite
 		# the iOS profile. The iPhone must reinstall and re-trust the CA.
 		rm -f /etc/wloc-service/ca.pem /etc/wloc-service/ca.key /etc/wloc-service/ca.info.json
-		/usr/sbin/wloc-profile-redirect.sh stop-all >/dev/null 2>&1 || true
 		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
 		/etc/init.d/wloc-service restart >/dev/null 2>&1
 		sleep 3

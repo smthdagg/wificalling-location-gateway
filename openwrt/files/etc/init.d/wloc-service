@@ -22,27 +22,17 @@ start_service() {
 		"WLOC_CA_CERT=/etc/wloc-service/ca.pem" \
 		"WLOC_CA_KEY=/etc/wloc-service/ca.key" \
 		"WLOC_PROXY_PORT=8443" \
-		"WLOC_DUMP_DIR=/tmp/wloc-dump" \
-		"WLOC_SUPERVISED=${WLOC_SUPERVISED:-0}" \
-		"WLOC_DEFER_REDIRECT=${WLOC_DEFER_REDIRECT:-0}"
-	if [ "${WLOC_SUPERVISED:-0}" != 1 ]; then
-		procd_set_param respawn
-	fi
+		"WLOC_SYNTH_RESPONSE=1" \
+		"WLOC_DUMP_DIR=/tmp/wloc-dump"
+	procd_set_param respawn
 	procd_set_param stdout 1
 	procd_set_param stderr 1
 	procd_close_instance
 
 	# Keep the nftables redirect in sync with the gateway device policies.
-	# The unified supervisor owns this step and installs the redirect only
-	# after both children pass health checks. Legacy standalone startup keeps
-	# the old behavior for rollback compatibility.
-	if [ "${WLOC_SKIP_REDIRECT:-0}" != 1 ]; then
-		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
-	fi
+	/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
 }
 
 stop_service() {
 	rm -f "$SOCKET"
-	[ -x /usr/sbin/wloc-profile-redirect.sh ] && \
-		/usr/sbin/wloc-profile-redirect.sh stop-all >/dev/null 2>&1 || true
 }

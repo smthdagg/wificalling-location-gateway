@@ -22,13 +22,9 @@ done
 ./tests/scripts/test-openwrt-release-packaging.sh
 ./tests/scripts/test-standalone-ax6s-package.sh
 ./tests/scripts/test-release-version.sh
-./tests/scripts/test-unified-supervisor.sh
-./tests/scripts/test-profile-redirect.sh
-./tests/scripts/test-profile-status.sh
-./tests/scripts/test-structured-logs.sh
-./tests/scripts/test-support-bundle.sh
-./tests/scripts/test-component-update.sh
-./tests/scripts/test-existing-ax6s-package.sh
+./tests/scripts/test-monitor-temp-cleanup.sh
+./tests/scripts/test-wloc-synthesis-default.sh
+./tests/scripts/test-wloc-listener-nonblocking.sh
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 ./scripts/scan_secrets.py
 

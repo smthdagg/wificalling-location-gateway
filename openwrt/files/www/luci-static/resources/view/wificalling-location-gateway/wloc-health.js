@@ -25,16 +25,6 @@ var restartGateway = rpc.declare({
 	method: 'restart_gateway'
 });
 
-var createSupportBundle = rpc.declare({
-	object: 'luci.wloc',
-	method: 'support_bundle'
-});
-
-var getUpdateStatus = rpc.declare({ object: 'luci.wloc', method: 'update_status' });
-var preflightUpdate = rpc.declare({ object: 'luci.wloc', method: 'update_preflight', params: [ 'path' ] });
-var applyUpdate = rpc.declare({ object: 'luci.wloc', method: 'update_apply', params: [ 'path' ] });
-var recoverUpdate = rpc.declare({ object: 'luci.wloc', method: 'update_recover' });
-
 function notify(title, message, kind) {
 	ui.addNotification(null, E('p', [ E('strong', title + ': '), message ]), kind);
 }
@@ -64,24 +54,11 @@ return view.extend({
 		var wlocBody = E('div', {}, []);
 		var gwBody = E('div', {}, []);
 		var extraBody = E('div', {}, []);
-		var profileBody = E('tbody', {}, []);
-		var updateBody = E('div', {}, []);
-		var updatePath = E('input', { 'class': 'cbi-input-text', 'style': 'min-width:360px', 'placeholder': '/tmp/wloc-update/package.ipk' });
-
-		function renderUpdateStatus(status) {
-			updateBody.innerHTML = '';
-			status = status || {};
-			var text = (status.phase || '-') + ' / ' + (status.reason || '-');
-			if (status.current_version || status.target_version)
-				text += ' (' + (status.current_version || '-') + ' → ' + (status.target_version || '-') + ')';
-			updateBody.appendChild(statusDot(status.phase === 'applied', text));
-		}
 
 		function renderHealth(h) {
 			wlocBody.innerHTML = '';
 			gwBody.innerHTML = '';
 			extraBody.innerHTML = '';
-			profileBody.innerHTML = '';
 
 			var s = h.services || {};
 			var w = s.wloc || {};
@@ -142,26 +119,15 @@ return view.extend({
 			if (h.error) {
 				row(wlocBody, wlocI18n.t('Health check'), E('span', { style: 'color:#dc2626' }, h.error));
 			}
-			(h.profiles || []).forEach(function(profile) {
-				var good = profile.phase === 'intercepting' || profile.phase === 'disabled';
-				profileBody.appendChild(E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td' }, profile.id),
-					E('td', { 'class': 'td' }, profile.label || '-'),
-					E('td', { 'class': 'td' }, statusDot(good, profile.phase || '-')),
-					E('td', { 'class': 'td' }, profile.reason_code || '-')
-				]));
-			});
 		}
 
 		renderHealth(health);
-		getUpdateStatus().then(renderUpdateStatus).catch(function() { renderUpdateStatus({ reason: wlocI18n.t('Update status unavailable') }); });
 
 		poll.add(function() {
 			return L.resolveDefault(getHealth(), { error: wlocI18n.t('Health check unavailable') }).then(function(h) {
 				renderHealth(h);
-				return getUpdateStatus().then(renderUpdateStatus).catch(function() {});
 			});
-		}, 15);
+		}, 10);
 
 		// One-click service restarts, then refresh the report immediately.
 		function restartAction(call, okText, busyLabel) {
@@ -189,22 +155,6 @@ return view.extend({
 			};
 		}
 
-		var supportButton = E('button', {
-			'class': 'cbi-button cbi-button-apply',
-			click: function() {
-				if (this.disabled) return;
-				this.disabled = true;
-				createSupportBundle().then(function(result) {
-					if (result && result.error) throw new Error(result.error);
-					notify(wlocI18n.t('Support bundle ready'),
-						(result && result.path ? result.path : '/tmp/wloc-support-bundle.tar.gz') +
-						' (' + ((result && result.bytes) || '?') + ' bytes)', 'info');
-				}).catch(function(error) {
-					notify(wlocI18n.t('Support bundle failed'), String(error), 'error');
-				}).then(function() { this.disabled = false; }.bind(this));
-			}
-		}, wlocI18n.t('Generate support bundle'));
-
 		var restartButtons = E('div', { 'class': 'cbi-section', style: 'margin-top:16px' }, [
 			E('h3', { style: 'margin-top:0' }, wlocI18n.t('Restart services')),
 			E('div', {}, [
@@ -225,30 +175,7 @@ return view.extend({
 				}, wlocI18n.t('Restart WLOC service'))
 			]),
 			E('p', { style: 'color:#666;font-size:12px;margin-bottom:0' },
-				wlocI18n.t('Restarting the gateway regenerates the proxy config and briefly interrupts device proxying.')),
-			E('p', { style: 'color:#666;font-size:12px;margin-bottom:0' },
-				wlocI18n.t('Support bundles contain bounded redacted diagnostics only; copy the generated file from /tmp before it expires.'), ' ', supportButton)
-		]);
-
-		function updateAction(call, successText) {
-			return function() {
-				if (this.disabled) return;
-				this.disabled = true;
-				call(updatePath.value).then(function(result) {
-					if (result && result.error) throw new Error(result.error);
-					notify(wlocI18n.t('Component update'), successText, 'info');
-					return getUpdateStatus().then(renderUpdateStatus);
-				}).catch(function(error) {
-					notify(wlocI18n.t('Component update failed'), String(error), 'error');
-				}).then(function() { this.disabled = false; }.bind(this));
-			};
-		}
-
-		var updateSection = E('div', { 'class': 'cbi-section', style: 'margin-top:16px' }, [
-			E('h3', { style: 'margin-top:0' }, wlocI18n.t('Component update')),
-			E('p', {}, wlocI18n.t('Stage a validated IPK under /tmp/wloc-update before checking or applying it.')),
-			E('div', {}, [updatePath, ' ', E('button', { 'class': 'cbi-button', click: updateAction(preflightUpdate, wlocI18n.t('Package preflight passed')) }, wlocI18n.t('Check package')), ' ', E('button', { 'class': 'cbi-button cbi-button-apply', click: updateAction(applyUpdate, wlocI18n.t('Update applied and health checked')) }, wlocI18n.t('Apply update')), ' ', E('button', { 'class': 'cbi-button', click: function() { recoverUpdate().then(function() { notify(wlocI18n.t('Component update'), wlocI18n.t('Interrupted transaction recovered'), 'info'); return getUpdateStatus().then(renderUpdateStatus); }).catch(function(e) { notify(wlocI18n.t('Component update failed'), String(e), 'error'); }); } }, wlocI18n.t('Recover'))]),
-			E('div', { style: 'margin-top:8px' }, updateBody)
+				wlocI18n.t('Restarting the gateway regenerates the proxy config and briefly interrupts device proxying.'))
 		]);
 
 		return E([], [
@@ -264,15 +191,7 @@ return view.extend({
 				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Patches and nodes')),
 				extraBody
 			]),
-			E('div', { 'class': 'cbi-section', style: 'margin-bottom:12px' }, [
-				E('h3', { style: 'margin-top:0' }, wlocI18n.t('Device profiles')),
-				E('table', { 'class': 'table' }, [
-					E('tr', { 'class': 'tr table-titles' }, [wlocI18n.t('ID'), wlocI18n.t('Label'), wlocI18n.t('State'), wlocI18n.t('Reason')].map(function(title) { return E('th', { 'class': 'th' }, title); })),
-					profileBody
-				])
-			]),
-			restartButtons,
-			updateSection
+			restartButtons
 		]);
 	}
 });

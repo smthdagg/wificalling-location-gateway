@@ -30,8 +30,8 @@ Options:
   --arch ARCH                OpenWrt runtime architecture (default: x86_64)
   --service-bin PATH         Static wloc-service binary (required)
   --ctl-bin PATH             Static wloc-ctl binary (required)
-  --gateway-ipk PATH         Pinned Wi-Fi Calling Gateway 1.7 IPK (required to build)
-  --gateway-sha256 SHA256    Expected Gateway IPK digest (required to build)
+  --gateway-ipk PATH         Pinned stable Gateway/integrated IPK (required to build)
+  --gateway-sha256 SHA256    Expected base IPK digest (required to build)
   --out-dir PATH             Output directory
   --plan                     Print the immutable build plan without Docker
 EOF
@@ -96,10 +96,12 @@ chmod 0777 "$stage/output"
 
 tar -xf "$gateway_ipk" -C "$stage/gateway"
 gateway_control=$(tar -xOf "$stage/gateway/control.tar.gz" ./control)
-printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null ||
+if ! printf '%s\n' "$gateway_control" | grep -Fx 'Package: luci-app-wificalling-gateway' >/dev/null &&
+	! printf '%s\n' "$gateway_control" | grep -Fx 'Package: wificalling-location-gateway' >/dev/null; then
 	fail 'Gateway IPK has an unexpected package identity'
-printf '%s\n' "$gateway_control" | grep -E '^Version: (1\.7|1\.2)\.[0-9]+-[0-9]+$' >/dev/null ||
-	fail 'Gateway IPK must be a validated 1.7.x or 1.2.x release'
+fi
+printf '%s\n' "$gateway_control" | grep -E '^Version: (1\.7\.[0-9]+-[0-9]+|1\.2\.[0-9]+-(r)?[0-9]+)$' >/dev/null ||
+	fail 'Gateway IPK must be a validated 1.7.x or stable 1.2.x release'
 tar -tzf "$stage/gateway/data.tar.gz" | while IFS= read -r member; do
 	case "$member" in /*|../*|*/../*|*/..) fail 'Gateway IPK contains an unsafe path' ;; esac
 done
@@ -136,16 +138,11 @@ mkdir -p "$package_dir/files/usr/sbin" "$package_dir/files/etc/init.d" "$package
 cp "$service_bin" "$package_dir/files/usr/sbin/wloc-service"
 cp "$ctl_bin" "$package_dir/files/usr/sbin/wloc-ctl"
 cp "$repo_root/openwrt/files/etc/init.d/wloc-service" "$package_dir/files/etc/init.d/wloc-service"
-cp "$repo_root/openwrt/files/etc/init.d/wificalling-location-gateway" "$package_dir/files/etc/init.d/wificalling-location-gateway"
-mkdir -p "$package_dir/files/usr/libexec/wificalling-location-gateway"
-cp "$repo_root/openwrt/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh" \
-	"$package_dir/files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh"
 cp "$repo_root/openwrt/files/etc/config/wloc-service" "$package_dir/files/etc/config/wloc-service"
-for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh wloc-profile-redirect.sh wloc-profile-status.sh wloc-health.sh wloc-support-bundle.sh wloc-component-update.sh; do
+for helper in export-mobileconfig.sh wloc-redirect-sync.sh wloc-refresh-set.sh wloc-health.sh; do
 	cp "$repo_root/openwrt/files/usr/sbin/$helper" "$package_dir/files/usr/sbin/$helper"
 done
-chmod 0755 "$package_dir/files/usr/sbin/"* "$package_dir/files/etc/init.d/"* \
-	"$package_dir/files/usr/libexec/wificalling-location-gateway/"*
+chmod 0755 "$package_dir/files/usr/sbin/"* "$package_dir/files/etc/init.d/"*
 
 cat > "$package_dir/Makefile" <<EOF
 include \$(TOPDIR)/rules.mk
@@ -179,12 +176,12 @@ define Package/wificalling-location-gateway/postinst
 for required in /usr/bin/sing-box /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd; do
   [ -e "\$\$required" ] || echo "wificalling-location-gateway: prerequisite missing: \$\$required" >&2
 done
-/etc/init.d/wificalling-gateway disable >/dev/null 2>&1 || true
-/etc/init.d/wloc-service disable >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway enable >/dev/null 2>&1 || true
+/etc/init.d/wloc-service enable >/dev/null 2>&1 || true
 mkdir -p /var/run/wificalling-gateway
 chmod 0700 /var/run/wificalling-gateway
-/etc/init.d/wificalling-location-gateway enable >/dev/null 2>&1 || true
-/etc/init.d/wificalling-location-gateway restart >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || true
+/etc/init.d/wloc-service restart >/dev/null 2>&1 || true
 rm -f /tmp/luci-indexcache.*
 /etc/init.d/rpcd reload >/dev/null 2>&1 || true
 exit 0

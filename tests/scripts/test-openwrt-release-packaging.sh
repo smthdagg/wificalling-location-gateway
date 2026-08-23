@@ -23,14 +23,6 @@ grep -F 'mkdir -p /var/run/wificalling-gateway' "$builder" >/dev/null ||
 	fail 'release post-install must create the volatile Gateway runtime directory before restart'
 grep -F 'chmod 0700 /var/run/wificalling-gateway' "$builder" >/dev/null ||
 	fail 'release post-install must restrict the Gateway runtime directory'
-grep -F 'wificalling-location-gateway/unified-supervisor.sh' "$builder" >/dev/null ||
-	fail 'release builder must package the unified supervisor'
-grep -F '/etc/init.d/wificalling-gateway disable' "$builder" >/dev/null ||
-	fail 'release post-install must disable the legacy Gateway owner'
-grep -F '/etc/init.d/wloc-service disable' "$builder" >/dev/null ||
-	fail 'release post-install must disable the legacy WLOC owner'
-grep -F '/etc/init.d/wificalling-location-gateway restart' "$builder" >/dev/null ||
-	fail 'release post-install must restart the unified owner'
 grep -F 'rm -f /tmp/luci-indexcache.*' "$builder" >/dev/null ||
 	fail 'release post-install must invalidate every LuCI menu cache variant'
 if grep -F 'wloc-docker-smoke-deps' "$matrix" >/dev/null; then
@@ -47,6 +39,10 @@ if grep -F 'shasum -a 256 ./wificalling-location-gateway' "$builder" >/dev/null;
 fi
 grep -F 'luci-app-wificalling-gateway.json' "$builder" >/dev/null ||
 	fail 'integrated release builder must remove the standalone Gateway LuCI menu'
+grep -F "Package: wificalling-location-gateway" "$builder" >/dev/null ||
+	fail 'release builder must accept a hash-pinned stable integrated package as its 1.2.x base'
+grep -F "1\\.2\\.[0-9]+-(r)?[0-9]+" "$builder" >/dev/null ||
+	fail 'release builder must accept the stable 1.2.x rN revision format'
 
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"

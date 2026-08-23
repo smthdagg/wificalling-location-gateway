@@ -46,18 +46,8 @@ define Package/wloc-service/install
 	$(INSTALL_DIR) $(1)/usr/sbin
 	$(INSTALL_BIN) $(BIN_DIR)/wloc-service $(1)/usr/sbin/
 	$(INSTALL_BIN) ./files/usr/sbin/export-mobileconfig.sh $(1)/usr/sbin/
-	$(INSTALL_BIN) ./files/usr/sbin/wloc-redirect-sync.sh $(1)/usr/sbin/
-	$(INSTALL_BIN) ./files/usr/sbin/wloc-refresh-set.sh $(1)/usr/sbin/
-	$(INSTALL_BIN) ./files/usr/sbin/wloc-profile-redirect.sh $(1)/usr/sbin/
-	$(INSTALL_BIN) ./files/usr/sbin/wloc-profile-status.sh $(1)/usr/sbin/
-	$(INSTALL_BIN) ./files/usr/sbin/wloc-health.sh $(1)/usr/sbin/
-	$(INSTALL_BIN) ./files/usr/sbin/wloc-support-bundle.sh $(1)/usr/sbin/
-	$(INSTALL_BIN) ./files/usr/sbin/wloc-component-update.sh $(1)/usr/sbin/
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/etc/init.d/wloc-service $(1)/etc/init.d/
-	$(INSTALL_BIN) ./files/etc/init.d/wificalling-location-gateway $(1)/etc/init.d/
-	$(INSTALL_DIR) $(1)/usr/libexec/wificalling-location-gateway
-	$(INSTALL_BIN) ./files/usr/libexec/wificalling-location-gateway/unified-supervisor.sh $(1)/usr/libexec/wificalling-location-gateway/
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_DATA) ./files/etc/config/wloc-service $(1)/etc/config/
 endef

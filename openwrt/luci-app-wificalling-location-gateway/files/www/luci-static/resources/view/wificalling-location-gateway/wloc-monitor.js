@@ -49,7 +49,7 @@ function sourceLabel(v) {
 	return v === 'manual' ? wlocI18n.t('Manual') : (v === 'auto' ? wlocI18n.t('Auto') : (v || '-'));
 }
 
-		function eventLabel(v) {
+function eventLabel(v) {
 	switch (v) {
 		case 'target_updated': return wlocI18n.t('Target updated');
 		case 'rewritten': return wlocI18n.t('WLOC response rewritten');
@@ -155,17 +155,18 @@ return view.extend({
 			});
 			return rows.slice(-20).reverse();
 		}
-		function eventTime(event) { return event.timestamp || event.time; }
 		function logRows(events) {
 			return events.map(function(ev) {
-				var fields = ev.fields || {};
-				var where = fields.city || fields.country_code
-					? (fields.city || '') + (fields.country_code ? ' (' + fields.country_code + ')' : '') : '-';
+				var where = '-';
+				if (ev.city || ev.country_code)
+					where = (ev.city || '') + (ev.country_code ? ' (' + ev.country_code + ')' : '');
+				else if (ev.latitude != null && ev.longitude != null)
+					where = ev.latitude.toFixed(4) + ', ' + ev.longitude.toFixed(4);
 				return E('tr', { class: 'tr' }, [
-					E('td', { class: 'td' }, fmtTime(eventTime(ev))),
-					E('td', { class: 'td' }, eventLabel(ev.event_code || ev.type)),
+					E('td', { class: 'td' }, fmtTime(ev.time)),
+					E('td', { class: 'td' }, eventLabel(ev.type)),
 					E('td', { class: 'td' }, where),
-					E('td', { class: 'td' }, sourceLabel(fields.source || ev.source))
+					E('td', { class: 'td' }, sourceLabel(ev.source))
 				]);
 			});
 		}

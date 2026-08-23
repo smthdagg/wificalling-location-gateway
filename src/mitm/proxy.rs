@@ -8,7 +8,6 @@
 //! unchanged; a malformed WLOC response is never replaced.
 
 use std::collections::HashMap;
-use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
@@ -16,34 +15,15 @@ use http::{HeaderValue, Request, Response};
 use tokio::net::TcpStream;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
-use crate::diagnostics::append_json_line;
 use crate::mitm::{CaBundle, MitmCertResolver, MitmError};
 use crate::wloc::{patch_wloc_response, PatchTarget};
 
 /// The Apple WLOC endpoint path intercepted for patching.
 pub const WLOC_PATH: &str = "/clls/wloc";
-
-/// Resolves a patch target from the source address of an accepted client
-/// connection. Implementations must return `None` for unknown, disabled, or
-/// degraded profiles; the proxy then forwards the original response.
-pub trait PatchTargetResolver: Send + Sync {
-    fn resolve_patch_target(&self, source: IpAddr) -> Option<PatchTarget>;
-}
-
-impl PatchTargetResolver for crate::service::profile_dispatch::ProfilePatchRouter {
-    fn resolve_patch_target(&self, source: IpAddr) -> Option<PatchTarget> {
-        self.resolve_ip(source)
-    }
-}
 /// Upper bound for a single forwarded response body.
 const MAX_FORWARD_BODY_BYTES: usize = 512 * 1024;
 /// Concurrent upstream streams per client connection.
 const MAX_STREAMS: usize = 8;
-/// Resource bounds for the per-client synthesis cache on small gateways.
-const MAX_SYNTHESIZED_CLIENTS: usize = 16;
-const MAX_SYNTHESIZED_CACHE_BYTES: usize = 64 * 1024;
-const MAX_SYNTHESIZED_PAYLOAD_BYTES: usize = 16 * 1024;
-const MAX_DEBUG_SAMPLE_BYTES: usize = 16 * 1024;
 
 /// HTTP/2 MITM proxy bound to one approved hostname's traffic.
 #[derive(Clone)]
@@ -118,28 +98,6 @@ impl MitmProxy {
         client_tcp: TcpStream,
         patch: Option<&PatchTarget>,
     ) -> Result<(), MitmProxyError> {
-        self.handle_connection_with_target(client_tcp, patch.copied())
-            .await
-    }
-
-    /// Serve one connection and select its patch target from the original
-    /// client source address. No default profile is used when resolution
-    /// fails.
-    pub async fn handle_connection_routed(
-        &self,
-        client_tcp: TcpStream,
-        resolver: &dyn PatchTargetResolver,
-    ) -> Result<(), MitmProxyError> {
-        let source = client_tcp.peer_addr().ok().map(|address| address.ip());
-        let patch = source.and_then(|address| resolver.resolve_patch_target(address));
-        self.handle_connection_with_target(client_tcp, patch).await
-    }
-
-    async fn handle_connection_with_target(
-        &self,
-        client_tcp: TcpStream,
-        patch: Option<PatchTarget>,
-    ) -> Result<(), MitmProxyError> {
         let client_addr = client_tcp
             .peer_addr()
             .ok()
@@ -164,12 +122,9 @@ impl MitmProxy {
                 Err(_) => break,
             };
             let (request, mut respond) = request;
-            match self
-                .forward_upstream(request, patch.as_ref(), &client_addr)
-                .await
-            {
+            match self.forward_upstream(request, patch, &client_addr).await {
                 Ok((original_len, patched_body)) => {
-                    self.append_rewrite_event(original_len, patched_body.len());
+                    self.append_rewrite_event(patch, original_len, patched_body.len());
                     let mut send = respond
                         .send_response(Response::new(()), patched_body.is_empty())
                         .map_err(|error| MitmProxyError::H2(error.to_string()))?;
@@ -179,7 +134,7 @@ impl MitmProxy {
                 }
                 Err(error) => {
                     eprintln!("wloc proxy: upstream failure: {error}");
-                    break;
+                    return Err(error);
                 }
             }
         }
@@ -251,7 +206,7 @@ impl MitmProxy {
                                 return Ok((request_body.len(), out));
                             }
                         } else if let Ok(mut cache) = self.synthesized_payloads.lock() {
-                            cache_synthesized_payload(&mut cache, client_addr, payload.to_vec());
+                            cache.insert(client_addr.to_string(), payload.to_vec());
                         }
                         eprintln!(
                             "wloc proxy: synthesized {} -> {} bytes (is_wloc={is_wloc})",
@@ -308,7 +263,7 @@ impl MitmProxy {
     }
 
     /// Append one rewrite event per patched WLOC response.
-    fn append_rewrite_event(&self, before: usize, after: usize) {
+    fn append_rewrite_event(&self, patch: Option<&PatchTarget>, before: usize, after: usize) {
         let Some(events_file) = &self.events_file else {
             return;
         };
@@ -316,21 +271,29 @@ impl MitmProxy {
             return;
         }
         let event = serde_json::json!({
-            "timestamp": std::time::SystemTime::now()
+            "type": "rewritten",
+            "time": std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0),
-            "component": "wloc",
-            "profile_scope": "device-policy",
-            "severity": "info",
-            "event_code": "response_rewritten",
-            "message": "WLOC response rewritten",
-            "fields": {
-                "bytes_before": before,
-                "bytes_after": after,
-            },
+            "latitude": patch.map(|t| t.latitude),
+            "longitude": patch.map(|t| t.longitude),
+            "bytes_before": before,
+            "bytes_after": after,
         });
-        append_json_line(events_file, &event);
+        use std::io::Write as _;
+        let mut line = serde_json::to_string(&event).unwrap_or_default();
+        line.push('\n');
+        if let Some(parent) = events_file.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(events_file)
+        {
+            let _ = file.write_all(line.as_bytes());
+        }
     }
 }
 
@@ -398,23 +361,18 @@ pub(crate) fn dump_wloc_samples(
         .unwrap_or(0);
     let _ = std::fs::create_dir_all(dir);
     let safe = hostname.replace(['/', ':', '.'], "_");
-    write_bounded_sample(
-        &format!("{dir}/{stamp}_{client_addr}_{safe}_req.bin"),
+    let _ = std::fs::write(
+        format!("{dir}/{stamp}_{client_addr}_{safe}_req.bin"),
         request,
     );
-    write_bounded_sample(
-        &format!("{dir}/{stamp}_{client_addr}_{safe}_resp.bin"),
+    let _ = std::fs::write(
+        format!("{dir}/{stamp}_{client_addr}_{safe}_resp.bin"),
         response,
     );
-    write_bounded_sample(
-        &format!("{dir}/{stamp}_{client_addr}_{safe}_patched.bin"),
+    let _ = std::fs::write(
+        format!("{dir}/{stamp}_{client_addr}_{safe}_patched.bin"),
         patched,
     );
-}
-
-fn write_bounded_sample(path: &str, bytes: &[u8]) {
-    let end = bytes.len().min(MAX_DEBUG_SAMPLE_BYTES);
-    let _ = std::fs::write(path, &bytes[..end]);
 }
 
 fn maybe_patch_body(body: &[u8], is_wloc: bool, patch: Option<&PatchTarget>) -> Vec<u8> {
@@ -422,31 +380,6 @@ fn maybe_patch_body(body: &[u8], is_wloc: bool, patch: Option<&PatchTarget>) -> 
         Some(patch) if is_wloc => patch_wloc_response(body, patch),
         _ => body.to_vec(),
     }
-}
-
-fn cache_synthesized_payload(
-    cache: &mut HashMap<String, Vec<u8>>,
-    client_addr: &str,
-    payload: Vec<u8>,
-) {
-    if payload.is_empty() || payload.len() > MAX_SYNTHESIZED_PAYLOAD_BYTES {
-        return;
-    }
-    cache.remove(client_addr);
-    while cache.len() >= MAX_SYNTHESIZED_CLIENTS
-        || cache
-            .values()
-            .map(Vec::len)
-            .sum::<usize>()
-            .saturating_add(payload.len())
-            > MAX_SYNTHESIZED_CACHE_BYTES
-    {
-        let Some(oldest) = cache.keys().next().cloned() else {
-            break;
-        };
-        cache.remove(&oldest);
-    }
-    cache.insert(client_addr.to_owned(), payload);
 }
 
 /// Proxy-level failure; the caller treats any error as "close this
@@ -478,27 +411,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn synthesized_client_cache_has_entry_and_byte_bounds() {
-        let mut cache = HashMap::new();
-        for index in 0..(MAX_SYNTHESIZED_CLIENTS * 2) {
-            cache_synthesized_payload(
-                &mut cache,
-                &format!("192.0.2.{index}"),
-                vec![0_u8; MAX_SYNTHESIZED_PAYLOAD_BYTES / 2],
-            );
-        }
-        assert!(cache.len() <= MAX_SYNTHESIZED_CLIENTS);
-        assert!(cache.values().map(Vec::len).sum::<usize>() <= MAX_SYNTHESIZED_CACHE_BYTES);
-
-        cache_synthesized_payload(
-            &mut cache,
-            "oversized",
-            vec![0_u8; MAX_SYNTHESIZED_PAYLOAD_BYTES + 1],
-        );
-        assert!(!cache.contains_key("oversized"));
-    }
-
-    #[test]
     fn dump_wloc_samples_writes_three_files() {
         let dir = std::env::temp_dir().join(format!("wloc-dump-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -522,25 +434,6 @@ mod tests {
         assert!(names.iter().any(|n| n.ends_with("_req.bin")));
         assert!(names.iter().any(|n| n.ends_with("_resp.bin")));
         assert!(names.iter().any(|n| n.ends_with("_patched.bin")));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn debug_samples_are_bounded() {
-        let dir = std::env::temp_dir().join(format!("wloc-dump-bound-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let large = vec![b'x'; MAX_DEBUG_SAMPLE_BYTES * 2];
-        dump_wloc_samples(
-            dir.to_str().unwrap(),
-            "gs-loc.apple.com",
-            "192.168.31.175",
-            &large,
-            &large,
-            &large,
-        );
-        for entry in std::fs::read_dir(&dir).unwrap() {
-            assert!(entry.unwrap().metadata().unwrap().len() <= MAX_DEBUG_SAMPLE_BYTES as u64);
-        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

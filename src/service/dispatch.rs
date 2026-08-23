@@ -68,10 +68,6 @@ impl DispatchError {
 /// Abstract service handlers behind the control methods. Production adapters
 /// implement this against the real OpenWrt runtime; tests use mocks.
 pub trait ServiceDispatch {
-    /// Admit enabled profile redirects after the shared proxy/listener
-    /// readiness gate. Singleton handlers keep the no-op default.
-    fn activate_profiles(&mut self) {}
-
     /// Return a coordinate-free status snapshot as a JSON value.
     fn status(&mut self) -> Result<Value, DispatchError>;
     /// Start interception behind the transactional safety ordering.
@@ -95,48 +91,6 @@ pub trait ServiceDispatch {
     /// The default is a no-op so handlers without a probe are unaffected.
     fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
         Ok(())
-    }
-}
-
-impl ServiceDispatch for Box<dyn ServiceDispatch> {
-    fn activate_profiles(&mut self) {
-        (**self).activate_profiles();
-    }
-
-    fn status(&mut self) -> Result<Value, DispatchError> {
-        (**self).status()
-    }
-
-    fn enable(&mut self) -> Result<(), DispatchError> {
-        (**self).enable()
-    }
-
-    fn disable(&mut self) -> Result<(), DispatchError> {
-        (**self).disable()
-    }
-
-    fn reload(&mut self) -> Result<(), DispatchError> {
-        (**self).reload()
-    }
-
-    fn set_manual_location(&mut self, params: &RequestParams) -> Result<(), DispatchError> {
-        (**self).set_manual_location(params)
-    }
-
-    fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
-        (**self).clear_manual_location()
-    }
-
-    fn search_location(&mut self, query: &str) -> Result<Value, DispatchError> {
-        (**self).search_location(query)
-    }
-
-    fn refresh_periodic(&mut self) {
-        (**self).refresh_periodic();
-    }
-
-    fn refresh_evidence(&mut self) -> Result<(), DispatchError> {
-        (**self).refresh_evidence()
     }
 }
 
