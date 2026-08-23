@@ -8,6 +8,7 @@ Maintain `wificalling-location-gateway` as the stable, integrated Wi-Fi Calling 
 - Retired standalone Wi-Fi Calling Gateway packages, including every 1.7.x package, must be rejected as build inputs and must not be copied back into this repository.
 - The multi-device/2.0 Beta line is maintained only in the separate Beta repository. It is outside this repository's architecture, source, issues, branches, releases, documentation, packaging, and test scope; do not import or recreate it here.
 - The `2.0` value in an IPK `debian-binary` member is an archive-format marker, not a project version, and remains required for valid IPK output.
+- Package format is per-platform and is a build/packaging rule, not a user concern: OpenWrt 24.10 `.ipk` must be a whole-file gzip-wrapped tar (a bare tar is rejected by `opkg` as malformed); OpenWrt 25.12 dropped the `.ipk` format, so releases there use the native `.apk` (an `.ipk` on 25.x fails with `v2 package format error`). Pick the asset that matches the target's package manager and never rename an IPK into an APK.
 
 ## Source of truth
 
