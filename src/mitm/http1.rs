@@ -67,33 +67,11 @@ pub async fn forward_http1(
     }
     wire.extend_from_slice(b"Connection: close\r\n\r\n");
 
-    let wire_preview: String = wire
-        .iter()
-        .take(600)
-        .map(|b| {
-            if b.is_ascii_graphic() || *b == b' ' {
-                *b as char
-            } else {
-                '.'
-            }
-        })
-        .collect();
-    eprintln!("wloc proxy: forwarding HTTP/1.1 request: {wire_preview}");
-    #[cfg(not(test))]
-    if let Ok(mut dump) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/tmp/wloc-forward.dump")
-    {
-        use std::io::Write as _;
-        let _ = dump.write_all(&wire);
-        let _ = dump.write_all(request_body);
-        let _ = dump.write_all(
-            b"
-====
-",
-        );
-    }
+    eprintln!(
+        "wloc proxy: forwarding HTTP/1.1 request bytes={} body_bytes={}",
+        wire.len(),
+        request_body.len()
+    );
     stream
         .write_all(&wire)
         .await

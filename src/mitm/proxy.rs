@@ -155,9 +155,8 @@ impl MitmProxy {
         let is_wloc =
             request.uri().path() == WLOC_PATH || request.uri().path().ends_with("/clls/wloc");
         eprintln!(
-            "wloc proxy: request from {client_addr} host={hostname} method={} uri={} is_wloc={is_wloc}",
-            request.method(),
-            request.uri()
+            "wloc proxy: request host={hostname} method={} is_wloc={is_wloc}",
+            request.method()
         );
 
         // Read the bounded client request body.
@@ -252,13 +251,6 @@ impl MitmProxy {
             patched.len(),
             patch.is_some()
         );
-        // Debug aid: dump WLOC request/response samples so mismatched
-        // response structures can be inspected on the device.
-        if is_wloc {
-            if let Ok(dir) = std::env::var("WLOC_DUMP_DIR") {
-                dump_wloc_samples(&dir, &hostname, client_addr, &request_body, &body, &patched);
-            }
-        }
         Ok((body.len(), patched))
     }
 
@@ -343,38 +335,6 @@ fn sanitized_forward_request(
     Ok(Request::from_parts(parts, ()))
 }
 
-/// Patch the response body if this is a `/clls/wloc` response; otherwise, or
-/// on any patch failure, forward the original body unchanged (fail-open).
-/// Write one WLOC exchange (request / response / patched response) as raw
-/// files into `dir` for offline inspection.
-pub(crate) fn dump_wloc_samples(
-    dir: &str,
-    hostname: &str,
-    client_addr: &str,
-    request: &[u8],
-    response: &[u8],
-    patched: &[u8],
-) {
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let _ = std::fs::create_dir_all(dir);
-    let safe = hostname.replace(['/', ':', '.'], "_");
-    let _ = std::fs::write(
-        format!("{dir}/{stamp}_{client_addr}_{safe}_req.bin"),
-        request,
-    );
-    let _ = std::fs::write(
-        format!("{dir}/{stamp}_{client_addr}_{safe}_resp.bin"),
-        response,
-    );
-    let _ = std::fs::write(
-        format!("{dir}/{stamp}_{client_addr}_{safe}_patched.bin"),
-        patched,
-    );
-}
-
 fn maybe_patch_body(body: &[u8], is_wloc: bool, patch: Option<&PatchTarget>) -> Vec<u8> {
     match patch {
         Some(patch) if is_wloc => patch_wloc_response(body, patch),
@@ -405,35 +365,3 @@ impl std::fmt::Display for MitmProxyError {
 }
 
 impl std::error::Error for MitmProxyError {}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn dump_wloc_samples_writes_three_files() {
-        let dir = std::env::temp_dir().join(format!("wloc-dump-test-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        dump_wloc_samples(
-            dir.to_str().unwrap(),
-            "gs-loc-cn.apple.com",
-            "192.168.31.175",
-            b"request-body",
-            b"response-body",
-            b"patched-body",
-        );
-        let entries: Vec<_> = std::fs::read_dir(&dir)
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .collect();
-        assert_eq!(entries.len(), 3);
-        let names: Vec<String> = entries
-            .iter()
-            .map(|e| e.file_name().to_string_lossy().into_owned())
-            .collect();
-        assert!(names.iter().any(|n| n.ends_with("_req.bin")));
-        assert!(names.iter().any(|n| n.ends_with("_resp.bin")));
-        assert!(names.iter().any(|n| n.ends_with("_patched.bin")));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}
