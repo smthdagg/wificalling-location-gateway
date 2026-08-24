@@ -95,11 +95,11 @@ case "$dependency_mode" in
 			tar -xf "$gateway_ipk" -C "$gateway_stage/package"
 			gateway_control=$(tar -xOf "$gateway_stage/package/control.tar.gz" ./control)
 			if ! printf '%s\n' "$gateway_control" | grep -Fx 'Package: wificalling-location-gateway' >/dev/null; then
-				echo 'Gateway IPK must be a stable integrated 1.2.x release' >&2
+				echo 'Gateway IPK must be the stable integrated 1.3.0-r1 release' >&2
 				exit 2
 			fi
-			printf '%s\n' "$gateway_control" | grep -E '^Version: 1\.2\.[0-9]+-(r)?[0-9]+$' >/dev/null || {
-				echo 'Gateway IPK must be a stable integrated 1.2.x release' >&2
+			printf '%s\n' "$gateway_control" | grep -Fx 'Version: 1.3.0-r1' >/dev/null || {
+				echo 'Gateway IPK must be the stable integrated 1.3.0-r1 release' >&2
 				exit 2
 			}
 			archive_is_safe "$gateway_stage/package/data.tar.gz" || {

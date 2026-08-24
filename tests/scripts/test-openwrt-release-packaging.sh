@@ -16,9 +16,9 @@ fail() {
 [ -x "$builder" ] || fail "missing executable $builder"
 [ -x "$matrix" ] || fail "missing executable $matrix"
 [ -x "$runtime_builder" ] || fail "missing executable $runtime_builder"
-grep -F '`1.2.x` stable integrated releases are the only permitted build/package baseline.' \
+grep -F 'The `1.3.0-r1` stable integrated release is the permitted build/package baseline;' \
 	"$repo_root/AGENTS.md" >/dev/null ||
-	fail 'project rules must pin the sole stable integrated 1.2.x baseline'
+	fail 'project rules must pin the sole stable integrated 1.3.0-r1 baseline'
 grep -F 'The multi-device/2.0 Beta line is maintained only in the separate Beta repository' \
 	"$repo_root/AGENTS.md" >/dev/null ||
 	fail 'project rules must exclude the independently maintained Beta line'
@@ -52,9 +52,9 @@ fi
 grep -F 'luci-app-wificalling-gateway.json' "$builder" >/dev/null ||
 	fail 'integrated release builder must remove the standalone Gateway LuCI menu'
 grep -F "Package: wificalling-location-gateway" "$builder" >/dev/null ||
-	fail 'release builder must accept a hash-pinned stable integrated package as its 1.2.x base'
-grep -F "1\\.2\\.[0-9]+-(r)?[0-9]+" "$builder" >/dev/null ||
-	fail 'release builder must accept the stable 1.2.x rN revision format'
+	fail 'release builder must accept a hash-pinned stable integrated package as its 1.3.0-r1 base'
+grep -F '1.3.0-r1' "$builder" >/dev/null ||
+	fail 'release builder must accept the stable 1.3.0-r1 revision format'
 if grep -F '1\.7' "$builder" >/dev/null; then
 	fail 'release builder must not accept the retired standalone 1.7 baseline'
 fi
@@ -75,7 +75,7 @@ printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway_1.3.0-r1_x86_64.ip
 printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway-1.3.0-r1.apk (arch: x86_64)' >/dev/null ||
 	fail '25.12 must produce one architecture-specific integrated APK'
 if printf '%s\n' "$plan" | grep -E 'wloc-service[_-]|luci-app-wificalling-location-gateway[_-]' >/dev/null; then
-	fail 'formal 1.2.0 plan must not expose split component packages'
+	fail 'formal 1.3.0 plan must not expose split component packages'
 fi
 printf '%s\n' "$plan" | grep -F 'ghcr.io/openwrt/sdk:x86_64-24.10.8@sha256:b28d5e4087dbd3f815a8bf5440a11e54e6bbd3d7400c3729d872e7940a4a77c1' >/dev/null ||
 	fail '24.10 SDK image must be immutable'

@@ -33,7 +33,7 @@ printf '%s\n' '#!/bin/sh' > "$tmp/gateway/data/etc/init.d/wificalling-gateway"
 printf '%s\n' "'use strict';" > "$tmp/gateway/data/www/luci-static/resources/view/wificalling-gateway/overview.js"
 printf '%s\n' '{"admin/services/wificalling-gateway":{"title":"Wi-Fi Calling Gateway"}}' > \
 	"$tmp/gateway/data/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"
-# The old payload is intentional: the stable 1.2.x upgrade base must be
+# The old payload is intentional: the stable 1.3.0-r1 upgrade base must be
 # overlaid with the current maintained files rather than trusted blindly.
 mkdir -p "$tmp/gateway/data/usr/libexec/wificalling-gateway"
 cat > "$tmp/gateway/data/usr/libexec/wificalling-gateway/compiler.sh" <<'COMPILER'
@@ -268,7 +268,7 @@ if GATEWAY_IPK="$tmp/legacy.ipk" GATEWAY_IPK_SHA256="$legacy_sha" \
 	"$builder" "$version-legacy" ax6s-standalone >"$tmp/out" 2>"$tmp/err"; then
 	fail 'standalone builder must reject the retired 1.7 package baseline'
 fi
-grep -F 'stable integrated 1.2.x release' "$tmp/err" >/dev/null ||
+grep -F 'stable integrated 1.3.0-r1 release' "$tmp/err" >/dev/null ||
 	fail 'legacy baseline rejection must explain the stable integrated requirement'
 
 if GATEWAY_IPK="$tmp/gateway.ipk" GATEWAY_IPK_SHA256=deadbeef \

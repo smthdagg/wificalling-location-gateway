@@ -134,9 +134,9 @@ chmod 0777 "$stage/output"
 tar -xf "$gateway_ipk" -C "$stage/gateway"
 gateway_control=$(tar -xOf "$stage/gateway/control.tar.gz" ./control)
 printf '%s\n' "$gateway_control" | grep -Fx 'Package: wificalling-location-gateway' >/dev/null ||
-	fail 'Gateway IPK must be a stable integrated 1.2.x release'
-printf '%s\n' "$gateway_control" | grep -E '^Version: 1\.2\.[0-9]+-(r)?[0-9]+$' >/dev/null ||
-	fail 'Gateway IPK must be a stable integrated 1.2.x release'
+	fail 'Gateway IPK must be the stable integrated 1.3.0-r1 release'
+printf '%s\n' "$gateway_control" | grep -Fx 'Version: 1.3.0-r1' >/dev/null ||
+	fail 'Gateway IPK must be the stable integrated 1.3.0-r1 release'
 tar -tzf "$stage/gateway/data.tar.gz" | while IFS= read -r member; do
 	case "$member" in /*|../*|*/../*|*/..) fail 'Gateway IPK contains an unsafe path' ;; esac
 done
