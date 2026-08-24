@@ -98,10 +98,11 @@ start_service() {
 	/usr/libexec/$APP/firewall.sh start "$RUNDIR/clients" || { logger -t "$APP" "firewall setup failed"; /usr/libexec/$APP/firewall.sh stop "$RUNDIR/clients"; return 1; }
 	procd_open_instance sing-box
 	# The Lite package owns /usr/bin/sing-box and marks the runtime profile.
-	# Standard deliberately inherits the firmware/package defaults so routers
-	# with ample memory are not constrained by AX6S-specific limits.
+	# Standard deliberately inherits the firmware/package defaults. Lite keeps
+	# one worker and a moderate GC target, but does not impose an artificial
+	# heap ceiling: AX6S has enough total memory for sing-box burst demand.
 	if [ "$(cat /usr/share/wificalling-location-gateway/runtime-variant 2>/dev/null)" = lite ]; then
-		procd_set_param env "GOMAXPROCS=1" "GOMEMLIMIT=24MiB" "GOGC=75"
+		procd_set_param env "GOMAXPROCS=1" "GOGC=75"
 	fi
 	procd_set_param command /usr/bin/sing-box run -c "$RUNDIR/sing-box.json"
 	procd_set_param respawn 3600 5 5

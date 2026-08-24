@@ -251,8 +251,13 @@ cmp "$tmp/sing-box-lite" "$tmp/lite-result/sing-box-lite.unpacked" >/dev/null ||
 	fail 'Lite package must persist the exact hash-pinned sing-box runtime in compressed form'
 [ "$(cat "$tmp/lite-result/data/usr/share/wificalling-location-gateway/runtime-variant")" = lite ] ||
 	fail 'Lite package must install its runtime marker'
-grep -F 'GOMEMLIMIT=24MiB' "$tmp/lite-result/data/etc/init.d/wificalling-gateway" >/dev/null ||
-	fail 'Lite package must apply the AX6S-validated sing-box memory profile'
+if grep -F 'GOMEMLIMIT=' "$tmp/lite-result/data/etc/init.d/wificalling-gateway" >/dev/null; then
+	fail 'Lite package must not apply an artificial sing-box memory ceiling'
+fi
+grep -F 'GOMAXPROCS=1' "$tmp/lite-result/data/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Lite package must retain single-worker scheduling'
+grep -F 'GOGC=75' "$tmp/lite-result/data/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Lite package must retain the moderate GC target'
 
 # The retired standalone 1.7 package must never be accepted as a baseline.
 mkdir -p "$tmp/legacy"

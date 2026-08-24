@@ -138,7 +138,7 @@ Release `v1.3.0-r1` provides two installation variants for each of three targets
 - Standard: `wificalling-location-gateway_1.3.0-r1_aarch64_cortex-a53.ipk`, `wificalling-location-gateway_1.3.0-r1_x86_64.ipk`, `wificalling-location-gateway-1.3.0-r1.apk`
 - Lite: `wificalling-location-gateway-lite_1.3.0-r1_aarch64_cortex-a53.ipk`, `wificalling-location-gateway-lite_1.3.0-r1_x86_64.ipk`, `wificalling-location-gateway-lite-1.3.0-r1.apk`
 
-Choose **Standard** when the firmware already supplies a suitable `/usr/bin/sing-box`. Choose **Lite** for constrained gateways such as AX6S: it stores a hash-pinned compressed sing-box in flash, transparently expands one shared copy into `/tmp`, and applies the validated 24 MiB WCG heap profile. Standard and Lite conflict intentionally and must not be installed together. Both preserve `/etc/config/wificalling-gateway` and `/etc/config/wloc-service`.
+Choose **Standard** when the firmware already supplies a suitable `/usr/bin/sing-box`. Choose **Lite** for constrained gateways such as AX6S: it stores a hash-pinned compressed sing-box in flash, transparently expands one shared copy into `/tmp`, and keeps only the single-worker/moderate-GC runtime profile without an artificial heap ceiling. Standard and Lite conflict intentionally and must not be installed together. Both preserve `/etc/config/wificalling-gateway` and `/etc/config/wloc-service`.
 
 The variant suffix changes runtime ownership only; it does not create a separate product or restore split component packages.
 
@@ -437,7 +437,7 @@ flowchart TD
 - Standard：`wificalling-location-gateway_1.3.0-r1_aarch64_cortex-a53.ipk`、`wificalling-location-gateway_1.3.0-r1_x86_64.ipk`、`wificalling-location-gateway-1.3.0-r1.apk`
 - Lite：`wificalling-location-gateway-lite_1.3.0-r1_aarch64_cortex-a53.ipk`、`wificalling-location-gateway-lite_1.3.0-r1_x86_64.ipk`、`wificalling-location-gateway-lite_1.3.0-r1.apk`
 
-固件已有合适 `/usr/bin/sing-box` 时选择 **Standard**；AX6S 等受限设备推荐 **Lite**：flash 只保存带 SHA256 固定的压缩运行时，首次调用透明解压一份到 `/tmp`，并为 WCG 应用已验证的 24 MiB 堆上限。两种规格故意互斥，不能同时安装；两者都保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
+固件已有合适 `/usr/bin/sing-box` 时选择 **Standard**；AX6S 等受限设备推荐 **Lite**：flash 只保存带 SHA256 固定的压缩运行时，首次调用透明解压一份到 `/tmp`；WCG 仅保留单 worker 和适度 GC 设置，不再人为设置堆上限。两种规格故意互斥，不能同时安装；两者都保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
 
 Lite 后缀只表示运行时所有权与内存策略不同，不是新项目，也不会恢复拆分组件安装。
 

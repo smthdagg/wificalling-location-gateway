@@ -4,7 +4,7 @@ set -eu
 nodes=${1:?node list required}
 # compact_status_marker: static export for the LuCI view (the
 # /ubus JSON-RPC channel truncates larger replies on some firmwares).
-output=/www/wloc-node-status.json
+output=${2:-/www/wloc-node-status.json}
 tmp="${output}.tmp.$$"
 trap 'rm -f "$tmp"' EXIT HUP INT TERM
 

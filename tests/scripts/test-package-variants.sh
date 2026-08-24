@@ -78,8 +78,13 @@ grep -F "provides='wificalling-location-gateway, sing-box" "$ax6s_builder" >/dev
 	fail 'Lite must provide the integrated product and sing-box runtime'
 grep -F "conflicts='wificalling-location-gateway, sing-box'" "$ax6s_builder" >/dev/null ||
 	fail 'Lite must not coexist with the standard product or standard sing-box package'
-grep -F 'GOMEMLIMIT=24MiB' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
-	fail 'Lite runtime profile must retain the AX6S-validated sing-box heap limit'
+if grep -F 'GOMEMLIMIT=' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null; then
+	fail 'Lite runtime profile must not impose an artificial sing-box heap limit'
+fi
+grep -F 'GOMAXPROCS=1' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Lite runtime profile must retain single-worker scheduling'
+grep -F 'GOGC=75' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Lite runtime profile must retain the moderate GC target'
 grep -F '/usr/bin/sing-box' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
 	fail 'both variants must keep the shared sing-box executable contract'
 grep -F '/usr/share/wificalling-location-gateway/sing-box-lite.gz' "$runtime_packager" >/dev/null ||

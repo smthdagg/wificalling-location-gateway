@@ -51,7 +51,10 @@ fi
 # --- wificalling-gateway / sing-box ---------------------------------------
 monitor_pid=$(pgrep -f 'monitor-loop.sh' 2>/dev/null | head -n 1 || true)
 monitor_running=0; [ -n "$monitor_pid" ] && monitor_running=1
-sb_pid=$(pgrep -f '/usr/bin/sing-box run' 2>/dev/null | head -n 1 || true)
+# Standard runs may keep the /usr/bin path, while Lite's wrapper execs the
+# hash-verified /tmp/sing-box-lite target. Match the executable name rather
+# than the wrapper path so the health page does not report a false stop.
+sb_pid=$(pgrep -f 'sing-box.*run' 2>/dev/null | head -n 1 || true)
 sb_running=0; [ -n "$sb_pid" ] && sb_running=1
 
 rundir=/var/run/wificalling-gateway
