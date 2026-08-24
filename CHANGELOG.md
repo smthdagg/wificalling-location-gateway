@@ -10,6 +10,10 @@ three-platform (x86_64 / AX6S / 25.12 apk) release work already on `main`.
 - Version sources aligned to 1.3.0: `VERSION`, `Cargo.toml`, both `openwrt/*/Makefile`
   files, `scripts/build-luci-ipk.sh`, and `build-release-packages.sh` default.
 - Release assertion tests updated to expect the 1.3.0-r1 package names.
+- Lite WCG no longer sets the artificial `GOMEMLIMIT=24MiB`; it keeps the
+  single-worker and moderate-GC settings while allowing burst memory demand.
+- Gateway health detection now recognizes the hash-verified `/tmp/sing-box-lite`
+  process, and node health writes to the monitor-supplied runtime status path.
 
 ## [1.2.2-r5] - 2026-08-23
 

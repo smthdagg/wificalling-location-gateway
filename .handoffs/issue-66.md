@@ -23,8 +23,11 @@ low-memory/low-storage behavior and both UCI configurations.
 - Added a hash-pinned Lite runtime packager. It keeps a compressed payload on
   flash and installs a transparent wrapper that prepares one verified copy in
   tmpfs for WCG and PassWall.
-- Applied `GOMAXPROCS=1`, `GOMEMLIMIT=24MiB`, and `GOGC=75` only to the Lite WCG
-  process; Standard inherits firmware defaults.
+- The original Lite profile applied `GOMAXPROCS=1`, `GOMEMLIMIT=24MiB`, and
+  `GOGC=75`; the follow-up fix removes the artificial heap ceiling while
+  retaining the single-worker and moderate-GC settings.
+- Follow-up fixes corrected Lite `sing-box` health detection and the node
+  health runtime output path.
 - Expanded the pinned Docker matrix to eight Standard/Lite runtime rows and
   verified executable ownership as well as install/start/socket/status.
 - Built all six r5 assets, installed the exact corrected AArch64 Lite asset on
