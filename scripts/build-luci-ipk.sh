@@ -221,6 +221,15 @@ PY
 			else
 				printf '%s\n' '/etc/config/wloc-service' > "$stage/control/conffiles"
 			fi
+			cat > "$stage/control/preinst" <<'PREINST'
+#!/bin/sh
+[ -n "${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
+rm -rf /tmp/wloc-probe
+exit 0
+PREINST
+			cp "$stage/control/preinst" "$stage/control/prerm"
 			cat > "$stage/control/postinst" <<'POSTINST'
 #!/bin/sh
 [ -n "${IPKG_INSTROOT:-}" ] && exit 0

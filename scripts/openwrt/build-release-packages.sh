@@ -189,6 +189,22 @@ endef
 define Package/wificalling-location-gateway/install
 	\$(CP) ./files/. \$(1)/
 endef
+define Package/wificalling-location-gateway/preinst
+#!/bin/sh
+[ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
+rm -rf /tmp/wloc-probe
+exit 0
+endef
+define Package/wificalling-location-gateway/prerm
+#!/bin/sh
+[ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
+rm -rf /tmp/wloc-probe
+exit 0
+endef
 define Package/wificalling-location-gateway/postinst
 #!/bin/sh
 [ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
@@ -242,6 +258,22 @@ define Package/wificalling-location-gateway-lite/conffiles
 endef
 define Package/wificalling-location-gateway-lite/install
 	\$(CP) ./files/. \$(1)/
+endef
+define Package/wificalling-location-gateway-lite/preinst
+#!/bin/sh
+[ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
+rm -rf /tmp/wloc-probe
+exit 0
+endef
+define Package/wificalling-location-gateway-lite/prerm
+#!/bin/sh
+[ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
+rm -rf /tmp/wloc-probe
+exit 0
 endef
 define Package/wificalling-location-gateway-lite/postinst
 #!/bin/sh
