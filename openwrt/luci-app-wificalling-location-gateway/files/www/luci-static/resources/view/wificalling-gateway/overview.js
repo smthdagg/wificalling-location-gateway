@@ -99,10 +99,7 @@ return view.extend({
 					'class': 'btn',
 					style: 'margin-left:12px;white-space:nowrap',
 					click: function() {
-						msg.classList.add('fade-out');
-						window.setTimeout(function() {
-							if (msg.parentNode) msg.parentNode.removeChild(msg);
-						}, 400);
+						if (msg.parentNode) msg.parentNode.removeChild(msg);
 					}
 				}, wlocI18n.t('Close'))
 			]);
@@ -273,14 +270,14 @@ return view.extend({
 								? parseWireguardConf(input.value)
 								: nodeImport.parse(input.value);
 						}
-						catch (err) { ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to parse node link:') + ' ' + err.message), 'error'); return; }
+						catch (err) { ui.hideModal(); testNotify(wlocI18n.t('Unable to parse node link:') + ' ' + err.message, 'error'); return; }
 						var sid = uci.add('wificalling-gateway', 'node');
 						Object.keys(parsed).forEach(function(key) { if (parsed[key] !== '') uci.set('wificalling-gateway', sid, key, parsed[key]); });
 						uci.save().then(function() {
 							ui.hideModal();
 							ui.addNotification(null, E('p', {}, wlocI18n.t('Node imported successfully. Reloading settings…')), 'info');
 							window.setTimeout(function() { window.location.reload(); }, 500);
-						}).catch(function(err) { ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to save imported node:') + ' ' + err.message), 'error'); });
+						}).catch(function(err) { ui.hideModal(); testNotify(wlocI18n.t('Unable to save imported node:') + ' ' + err.message, 'error'); });
 					} }, wlocI18n.t('Import'))
 				])]);
 				} }, wlocI18n.t('Import node link'))

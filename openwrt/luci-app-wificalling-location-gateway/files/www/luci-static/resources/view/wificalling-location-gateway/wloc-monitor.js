@@ -77,7 +77,8 @@ return view.extend({
 		var geoBody = E('tbody', {}, []);
 		// 手动刷新 IP：通知守护进程丢弃缓存的出口探测结果并立即重新
 		// 探测（切换设备节点后无需等待周期巡检），完成后重读状态文件。
-		function refreshIpBtn() {
+		function refreshIpBtn(s) {
+			if (s.geo_source === 'manual') return null;
 			var label = refreshingIp ? wlocI18n.t('Refreshing…') : wlocI18n.t('Refresh IP');
 			return E('button', {
 				class: 'cbi-button cbi-button-apply',
@@ -142,7 +143,7 @@ return view.extend({
 			}
 			return [
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Service phase')), E('td', { class: 'td' }, phaseLabel(s.service_phase))]),
-				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Follow device')), E('td', { class: 'td' }, deviceLabel), E('td', { class: 'td right' }, refreshIpBtn())]),
+				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Follow device')), E('td', { class: 'td' }, deviceLabel), E('td', { class: 'td right' }, refreshIpBtn(s))]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Location mode')), E('td', { class: 'td' }, sourceLabel(s.geo_source))]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('Country')), E('td', { class: 'td' }, g.country_code || '-')]),
 				E('tr', { class: 'tr' }, [E('td', { class: 'td' }, wlocI18n.t('City')), E('td', { class: 'td' }, g.city || '-')]),

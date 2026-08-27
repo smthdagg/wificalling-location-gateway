@@ -7,7 +7,7 @@
 #   manual_lat/lon   coordinates used when geo_source=manual
 #   node_ref         sing-box node tag to follow (auto mode)
 #   assigned_device  LAN IP of the test device whose node binding is probed
-#   probe_interval   max age of a probe observation before re-probing (seconds)
+#   probe_interval   max age for auto evidence; periodic health rechecks it
 #   geo_provider     http (ip-api.com) | stub (deterministic, for staging)
 #   probe_port       local HTTP proxy port used to observe the exit IP
 #

@@ -83,8 +83,9 @@ pub trait ServiceDispatch {
     /// Geocode a place query and return the city name and coordinates
     /// without applying them.
     fn search_location(&mut self, query: &str) -> Result<Value, DispatchError>;
-    /// Periodic housekeeping: refresh probe/geo evidence and rewrite the
-    /// status file so the monitor page stays fresh without API traffic.
+    /// Periodic housekeeping: apply local background results, recheck auto
+    /// location evidence when due, and rewrite the status file. Implementations
+    /// must skip exit/IP checks while manual location is selected.
     /// The default is a no-op so lightweight handlers are unaffected.
     fn refresh_periodic(&mut self) {}
     /// Force an immediate exit/geo re-probe, discarding cached evidence.

@@ -87,6 +87,8 @@ tar -xf "$output" -C "$tmp/result"
 control=$(tar -xOf "$tmp/result/control.tar.gz" ./control)
 conffiles=$(tar -xOf "$tmp/result/control.tar.gz" ./conffiles)
 postinst=$(tar -xOf "$tmp/result/control.tar.gz" ./postinst)
+preinst=$(tar -xOf "$tmp/result/control.tar.gz" ./preinst)
+prerm=$(tar -xOf "$tmp/result/control.tar.gz" ./prerm)
 data_members=$(tar -tzf "$tmp/result/data.tar.gz")
 
 printf '%s\n' "$output" | grep -F "/wificalling-location-gateway_${version}_aarch64_cortex-a53.ipk" >/dev/null ||
@@ -120,6 +122,23 @@ restart_line=$(printf '%s\n' "$postinst" | grep -n -F '/etc/init.d/wificalling-g
 	fail 'standalone post-install must create the Gateway runtime directory before restart'
 printf '%s\n' "$postinst" | grep -F 'rm -f /tmp/luci-indexcache.*' >/dev/null ||
 	fail 'standalone post-install must invalidate every LuCI menu cache variant'
+check_lifecycle() {
+	content=$1
+	phase=$2
+	printf '%s\n' "$content" | grep -F '/etc/init.d/wloc-service stop' >/dev/null ||
+		fail "standalone $phase must stop WLOC before package files change"
+	printf '%s\n' "$content" | grep -F '/etc/init.d/wificalling-gateway stop' >/dev/null ||
+		fail "standalone $phase must stop Gateway before package files change"
+	if printf '%s\n' "$content" | grep -F 'killall -q sing-box' >/dev/null; then
+		fail "standalone $phase must not kill unrelated sing-box services"
+	fi
+}
+check_lifecycle "$preinst" preinst
+check_lifecycle "$prerm" prerm
+for lifecycle in preinst prerm; do
+	tar -tvzf "$tmp/result/control.tar.gz" | grep -E "^-rwxr-xr-x .* \\./$lifecycle$" >/dev/null ||
+		fail "standalone $lifecycle must be executable in the control archive"
+done
 for member in \
 	'./etc/config/wificalling-gateway' \
 	'./etc/init.d/wificalling-gateway' \
@@ -137,6 +156,14 @@ fi
 # Gateway payload (compiler.sh endpoint + legacy branches, init.d field).
 mkdir -p "$tmp/result/data"
 tar -xzf "$tmp/result/data.tar.gz" -C "$tmp/result/data"
+view_suffix=$(printf '%s' "$version" | tr '.-' '__')
+versioned_view="$tmp/result/data/www/luci-static/resources/view/wificalling-gateway/wfc_overview_fix_$view_suffix.js"
+versioned_import="$tmp/result/data/www/luci-static/resources/wificalling-gateway/node-import_fix_$view_suffix.js"
+[ -f "$versioned_view" ] || fail 'standalone package must install a versioned WFC view'
+[ -f "$versioned_import" ] || fail 'standalone package must install a versioned node importer'
+grep -F "require wificalling-gateway.node-import_fix_$view_suffix as nodeImport" \
+	"$versioned_view" >/dev/null ||
+	fail 'versioned WFC view must load the versioned node importer'
 grep -F 'if (f[25]!="") s=s ",\"pre_shared_key\":" q(f[25])' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/compiler.sh" >/dev/null 2>&1 ||
 	fail 'standalone package must patch compiler.sh with pre_shared_key support'

@@ -51,6 +51,16 @@ if grep -F 'shasum -a 256 ./wificalling-location-gateway' "$builder" >/dev/null;
 fi
 grep -F 'luci-app-wificalling-gateway.json' "$builder" >/dev/null ||
 	fail 'integrated release builder must remove the standalone Gateway LuCI menu'
+grep -F 'node-import_fix_' "$builder" >/dev/null ||
+	fail 'release builder must version the node importer to bust browser caches'
+grep -F 'node-import.js' "$builder" >/dev/null ||
+	fail 'release builder must copy the maintained node importer'
+for package in wificalling-location-gateway wificalling-location-gateway-lite; do
+	grep -F "Package/$package/preinst" "$builder" >/dev/null ||
+		fail "$package must stop managed services before upgrade unpack"
+	grep -F "Package/$package/prerm" "$builder" >/dev/null ||
+		fail "$package must stop managed services before removal"
+done
 grep -F "Package: wificalling-location-gateway" "$builder" >/dev/null ||
 	fail 'release builder must accept a hash-pinned stable integrated package as its 1.3.0-r1 base'
 grep -F '1.3.0-r1' "$builder" >/dev/null ||
@@ -70,9 +80,9 @@ plan=$(
 		--ctl-bin "$tmp/wloc-ctl"
 )
 
-printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway_1.3.0-r1_x86_64.ipk' >/dev/null ||
+printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway_1.3.0-r2_x86_64.ipk' >/dev/null ||
 	fail '24.10 must produce one architecture-specific integrated IPK'
-printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway-1.3.0-r1.apk (arch: x86_64)' >/dev/null ||
+printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway-1.3.0-r2.apk (arch: x86_64)' >/dev/null ||
 	fail '25.12 must produce one architecture-specific integrated APK'
 if printf '%s\n' "$plan" | grep -E 'wloc-service[_-]|luci-app-wificalling-location-gateway[_-]' >/dev/null; then
 	fail 'formal 1.3.0 plan must not expose split component packages'

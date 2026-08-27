@@ -6,7 +6,7 @@ OPENWRT_25_SDK='ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 version=1.3.0
-release=1
+release=2
 arch=x86_64
 service_bin=
 ctl_bin=
@@ -149,6 +149,28 @@ cp -R "$repo_root/openwrt/files/." "$package_dir/files/"
 # Overlay the integrated UI, then the architecture-specific WLOC runtime.
 cp -R "$repo_root/openwrt/luci-app-wificalling-location-gateway/files/." "$package_dir/files/"
 rm -f "$package_dir/files/usr/share/luci/menu.d/luci-app-wificalling-gateway.json"
+view_suffix=$(printf '%s-r%s' "$version" "$release" | tr '.-' '__')
+import_name="node-import_fix_$view_suffix"
+wfc_name="wfc_overview_fix_$view_suffix"
+cp "$package_dir/files/www/luci-static/resources/wificalling-gateway/node-import.js" \
+	"$package_dir/files/www/luci-static/resources/wificalling-gateway/$import_name.js"
+sed "s/wificalling-gateway\\.node-import/wificalling-gateway.$import_name/" \
+	"$package_dir/files/www/luci-static/resources/view/wificalling-gateway/overview.js" \
+	> "$package_dir/files/www/luci-static/resources/view/wificalling-gateway/$wfc_name.js"
+python3 - "$package_dir/files/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json" "$wfc_name" <<'PY'
+import json
+import sys
+
+path, wfc_name = sys.argv[1:]
+with open(path, encoding="utf-8") as handle:
+	menu = json.load(handle)
+menu["admin/services/wificalling-location-gateway/wfc"]["action"]["path"] = (
+		f"wificalling-gateway/{wfc_name}"
+)
+with open(path, "w", encoding="utf-8") as handle:
+	json.dump(menu, handle, ensure_ascii=False, indent=2)
+	handle.write("\n")
+PY
 mkdir -p "$package_dir/files/usr/sbin" "$package_dir/files/etc/init.d" "$package_dir/files/etc/config"
 cp "$service_bin" "$package_dir/files/usr/sbin/wloc-service"
 cp "$ctl_bin" "$package_dir/files/usr/sbin/wloc-ctl"
@@ -188,6 +210,22 @@ define Package/wificalling-location-gateway/conffiles
 endef
 define Package/wificalling-location-gateway/install
 	\$(CP) ./files/. \$(1)/
+endef
+define Package/wificalling-location-gateway/preinst
+#!/bin/sh
+[ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
+rm -rf /tmp/wloc-probe
+exit 0
+endef
+define Package/wificalling-location-gateway/prerm
+#!/bin/sh
+[ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
+rm -rf /tmp/wloc-probe
+exit 0
 endef
 define Package/wificalling-location-gateway/postinst
 #!/bin/sh
@@ -242,6 +280,22 @@ define Package/wificalling-location-gateway-lite/conffiles
 endef
 define Package/wificalling-location-gateway-lite/install
 	\$(CP) ./files/. \$(1)/
+endef
+define Package/wificalling-location-gateway-lite/preinst
+#!/bin/sh
+[ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
+rm -rf /tmp/wloc-probe
+exit 0
+endef
+define Package/wificalling-location-gateway-lite/prerm
+#!/bin/sh
+[ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
+rm -rf /tmp/wloc-probe
+exit 0
 endef
 define Package/wificalling-location-gateway-lite/postinst
 #!/bin/sh

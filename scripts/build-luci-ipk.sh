@@ -2,7 +2,7 @@
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
-version=${1:-1.3.0-1}
+version=${1:-1.3.0-r2}
 dependency_mode=${2:-production}
 package=luci-app-wificalling-location-gateway
 source_dir="$root/openwrt/$package/files"
@@ -135,6 +135,7 @@ case "$dependency_mode" in
 		monitor_name="wloc_monitor_fix_$view_suffix"
 		faq_name="wloc_faq_fix_$view_suffix"
 		wfc_name="wfc_overview_fix_$view_suffix"
+		import_name="node-import_fix_$view_suffix"
 		health_name="wloc_health_fix_$view_suffix"
 		# Versioned view names bust the browser's resource cache: the LuCI
 		# menu loads a fresh URL per package version, so an updated settings,
@@ -146,8 +147,11 @@ case "$dependency_mode" in
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$monitor_name.js"
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/faq.js" \
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$faq_name.js"
-		cp "$stage/data/www/luci-static/resources/view/wificalling-gateway/overview.js" \
-			"$stage/data/www/luci-static/resources/view/wificalling-gateway/$wfc_name.js"
+		cp "$stage/data/www/luci-static/resources/wificalling-gateway/node-import.js" \
+			"$stage/data/www/luci-static/resources/wificalling-gateway/$import_name.js"
+		sed "s/wificalling-gateway\\.node-import/wificalling-gateway.$import_name/" \
+			"$stage/data/www/luci-static/resources/view/wificalling-gateway/overview.js" \
+			> "$stage/data/www/luci-static/resources/view/wificalling-gateway/$wfc_name.js"
 		cp "$stage/data/www/luci-static/resources/view/wificalling-location-gateway/wloc-health.js" \
 			"$stage/data/www/luci-static/resources/view/wificalling-location-gateway/$health_name.js"
 		python3 - "$stage/data/usr/share/luci/menu.d/luci-app-wificalling-location-gateway.json" "$view_name" "$monitor_name" "$faq_name" "$wfc_name" "$health_name" <<'PY'
@@ -221,6 +225,16 @@ PY
 			else
 				printf '%s\n' '/etc/config/wloc-service' > "$stage/control/conffiles"
 			fi
+			cat > "$stage/control/preinst" <<'PREINST'
+#!/bin/sh
+[ -n "${IPKG_INSTROOT:-}" ] && exit 0
+/etc/init.d/wloc-service stop >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
+rm -rf /tmp/wloc-probe
+exit 0
+PREINST
+			cp "$stage/control/preinst" "$stage/control/prerm"
+			chmod 0755 "$stage/control/preinst" "$stage/control/prerm"
 			cat > "$stage/control/postinst" <<'POSTINST'
 #!/bin/sh
 [ -n "${IPKG_INSTROOT:-}" ] && exit 0

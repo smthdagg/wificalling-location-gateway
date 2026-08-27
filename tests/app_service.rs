@@ -229,6 +229,13 @@ fn read_status_json(path: &std::path::Path) -> serde_json::Value {
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
+fn current_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
 fn crate_geo_result(city: &str, country: &str, tz: &str) -> ReverseGeoResult {
     ReverseGeoResult {
         city: city.to_owned(),
@@ -240,7 +247,7 @@ fn crate_geo_result(city: &str, country: &str, tz: &str) -> ReverseGeoResult {
 #[test]
 fn probe_failure_reason_is_exposed_in_the_status_file() {
     use wificalling_location_gateway::exitprobe::runtime::ProbeFailure;
-    let now = 1_000_000;
+    let now = current_unix();
     let dir = std::env::temp_dir();
     let status_path = dir.join(format!("wloc-test-probeerr-{}.json", std::process::id()));
     let _ = std::fs::remove_file(&status_path);
@@ -260,6 +267,7 @@ fn probe_failure_reason_is_exposed_in_the_status_file() {
         dir.join("wloc-test-probeerr-events.jsonl"),
     );
 
+    service.force_evidence_refresh();
     service.status().unwrap();
     let status: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&status_path).unwrap()).unwrap();
@@ -271,7 +279,7 @@ fn probe_failure_reason_is_exposed_in_the_status_file() {
 
 #[test]
 fn deleted_followed_node_is_exposed_and_clears_stale_location() {
-    let now = 1_000_000;
+    let now = current_unix();
     let dir = std::env::temp_dir();
     let status_path = dir.join(format!(
         "wloc-test-missing-node-{}.json",
@@ -294,6 +302,7 @@ fn deleted_followed_node_is_exposed_and_clears_stale_location() {
         dir.join("wloc-test-missing-node-events.jsonl"),
     );
 
+    service.force_evidence_refresh();
     service.status().unwrap();
     let status = read_status_json(&status_path);
     assert_eq!(status["exit"]["state"], "unavailable");
@@ -436,7 +445,7 @@ fn fresh_geo(now_unix: u64) -> SequenceGeo {
 
 #[test]
 fn status_reports_verified_exit_and_fresh_geo() {
-    let now = 1_000_000;
+    let now = current_unix();
     let mut service = build(
         OkRuntime {
             healthy: true,
@@ -446,6 +455,7 @@ fn status_reports_verified_exit_and_fresh_geo() {
         fresh_geo(now),
     );
 
+    service.force_evidence_refresh();
     let status = service.status_at(now).unwrap();
     assert_eq!(status["exit"]["state"], "verified");
     assert_eq!(status["geo"]["state"], "fresh");
@@ -470,6 +480,7 @@ fn status_reports_unavailable_when_probe_fails() {
         },
     );
 
+    service.force_evidence_refresh();
     let status = service.status_at(now).unwrap();
     assert_eq!(status["exit"]["state"], "unavailable");
     assert_eq!(status["geo"]["state"], "unavailable");
@@ -477,7 +488,7 @@ fn status_reports_unavailable_when_probe_fails() {
 
 #[test]
 fn status_reports_uncertain_when_geo_conflicts() {
-    let now = 1_000_000;
+    let now = current_unix();
     let mut service = WlocService::new(
         OkRuntime {
             healthy: true,
@@ -508,14 +519,15 @@ fn status_reports_uncertain_when_geo_conflicts() {
         },
     );
 
+    service.force_evidence_refresh();
     let status = service.status_at(now).unwrap();
     assert_eq!(status["exit"]["state"], "verified");
     assert_eq!(status["geo"]["state"], "uncertain");
 }
 
 #[test]
-fn fresh_evidence_is_cached_and_stale_evidence_refreshes() {
-    let now = 1_000_000;
+fn stale_evidence_is_reported_without_automatic_reprobe() {
+    let now = current_unix();
     let mut service = build(
         OkRuntime {
             healthy: true,
@@ -534,6 +546,7 @@ fn fresh_evidence_is_cached_and_stale_evidence_refreshes() {
         },
     );
 
+    service.force_evidence_refresh();
     let first = service.status_at(now).unwrap();
     assert_eq!(first["exit"]["state"], "verified");
 
@@ -541,9 +554,9 @@ fn fresh_evidence_is_cached_and_stale_evidence_refreshes() {
     let cached = service.status_at(now + 30).unwrap();
     assert_eq!(cached["exit"]["state"], "verified");
 
-    // Past the observation age the service re-probes and sees the new exit.
-    let refreshed = service.status_at(now + 61).unwrap();
-    assert_eq!(refreshed["exit"]["state"], "verified");
+    // Past the observation age status remains a read-only operation.
+    let stale = service.status_at(now + 61).unwrap();
+    assert_eq!(stale["exit"]["state"], "stale");
 }
 
 #[test]
@@ -557,7 +570,7 @@ fn control_refresh_forces_an_immediate_reprobe_of_fresh_evidence() {
     use wificalling_location_gateway::service::api::{decode_request, SERVICE_API_ID};
     use wificalling_location_gateway::service::dispatch::dispatch;
 
-    let now = 1_000_000;
+    let now = current_unix();
     let dir = std::env::temp_dir();
     let status_path = dir.join(format!("wloc-test-refresh-{}.json", std::process::id()));
     let _ = std::fs::remove_file(&status_path);
@@ -584,6 +597,7 @@ fn control_refresh_forces_an_immediate_reprobe_of_fresh_evidence() {
     );
 
     // First probe observes EXIT_A.
+    service.force_evidence_refresh();
     service.status_at(now).unwrap();
     let first = read_status_json(&status_path);
     assert_eq!(first["exit"]["ip"], json!(EXIT_A.to_string()));
@@ -604,9 +618,7 @@ fn control_refresh_forces_an_immediate_reprobe_of_fresh_evidence() {
     assert_eq!(parsed["result"], json!({}));
 
     // The status file now carries the new exit IP. (The forced probe runs
-    // against the real clock while the test records use a fake clock, so
-    // the geo record expires and geo is unavailable - the exit IP is the
-    // contract under test.)
+    // against the same current-time window as the test records.)
     let refreshed = read_status_json(&status_path);
     assert_eq!(refreshed["exit"]["ip"], json!(EXIT_B.to_string()));
 
@@ -633,6 +645,269 @@ fn enable_success_drives_state_to_intercepting() {
     let status = service.status_at(now).unwrap();
     assert_eq!(status["service_phase"], "intercepting");
     assert_eq!(status["desired_state"], "enabled");
+}
+
+#[test]
+fn enable_primes_auto_target_before_interception() {
+    let sink = Arc::new(Mutex::new(None));
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        fresh_probe(),
+        fresh_geo(now),
+    )
+    .with_patch_sink(Arc::clone(&sink));
+
+    service.enable().unwrap();
+
+    assert!(
+        sink.lock().unwrap().is_some(),
+        "interception must not start with an empty auto-follow target"
+    );
+}
+
+#[test]
+fn status_and_periodic_health_checks_do_not_reprobe_auto_location() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        fresh_probe(),
+        fresh_geo(now),
+    );
+
+    service.enable().unwrap();
+
+    // Fresh auto evidence is reused by status and by the periodic health
+    // tick; the periodic path only probes again once evidence is stale.
+    let status = service.status_at(now + 301).unwrap();
+    assert_eq!(status["geo_source"], "auto");
+    service.refresh_periodic();
+}
+
+#[test]
+fn periodic_auto_check_refreshes_stale_exit_and_geo() {
+    let now = current_unix();
+    let sink = Arc::new(Mutex::new(None));
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        SequenceProbe {
+            results: vec![Ok(EXIT_A), Ok(EXIT_B)],
+            index: 0,
+        },
+        SequenceGeo {
+            results: vec![
+                Ok(Some((EXIT_A, record(now, 37.77, -122.41)))),
+                Ok(Some((EXIT_B, record(now + 61, 22.32, 114.17)))),
+            ],
+            index: 0,
+        },
+    )
+    .with_patch_sink(Arc::clone(&sink));
+
+    service.enable().unwrap();
+    service.refresh_periodic_at(now + 61);
+
+    let status = service.status_inputs_at(now + 61);
+    assert_eq!(
+        status.exit_state,
+        wificalling_location_gateway::service::status::ExitState::Verified
+    );
+    assert_eq!(
+        status.geo_state,
+        wificalling_location_gateway::service::status::GeoState::Fresh
+    );
+    assert!(
+        status.generation > 0,
+        "auto exit change must advance status generation"
+    );
+    let target = sink
+        .lock()
+        .unwrap()
+        .expect("new auto target must be published");
+    assert_eq!((target.latitude, target.longitude), (22.32, 114.17));
+}
+
+#[test]
+fn periodic_auto_check_does_not_requery_geo_when_exit_ip_is_unchanged() {
+    let now = current_unix();
+    let sink = Arc::new(Mutex::new(None));
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        SequenceProbe {
+            results: vec![Ok(EXIT_A), Ok(EXIT_A)],
+            index: 0,
+        },
+        fresh_geo(now),
+    )
+    .with_patch_sink(Arc::clone(&sink));
+
+    service.enable().unwrap();
+    service.refresh_periodic_at(now + 61);
+
+    let target = sink.lock().unwrap().expect("existing auto target remains");
+    assert_eq!((target.latitude, target.longitude), (37.77, -122.41));
+}
+
+#[test]
+fn periodic_auto_same_ip_does_not_duplicate_target_update_event() {
+    let now = current_unix();
+    let dir = std::env::temp_dir();
+    let status_path = dir.join(format!("wloc-test-same-ip-status-{}", std::process::id()));
+    let events_path = dir.join(format!("wloc-test-same-ip-events-{}", std::process::id()));
+    let _ = std::fs::remove_file(&status_path);
+    let _ = std::fs::remove_file(&events_path);
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        SequenceProbe {
+            results: vec![Ok(EXIT_A), Ok(EXIT_A)],
+            index: 0,
+        },
+        fresh_geo(now),
+    )
+    .with_patch_sink(Arc::new(Mutex::new(None)))
+    .with_state_files(status_path.clone(), events_path.clone());
+
+    service.enable().unwrap();
+    service.refresh_periodic_at(now + 61);
+
+    let events = std::fs::read_to_string(&events_path).unwrap();
+    assert_eq!(events.matches("\"type\":\"target_updated\"").count(), 1);
+    let _ = std::fs::remove_file(&status_path);
+    let _ = std::fs::remove_file(&events_path);
+}
+
+#[test]
+fn periodic_manual_health_check_does_not_probe_or_touch_auto_evidence() {
+    let now = current_unix();
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        SequenceProbe {
+            results: vec![],
+            index: 0,
+        },
+        SequenceGeo {
+            results: vec![],
+            index: 0,
+        },
+    );
+
+    service
+        .set_manual_location(&RequestParams {
+            query: None,
+            latitude: Some(51.5074),
+            longitude: Some(-0.1278),
+        })
+        .unwrap();
+    service.refresh_periodic_at(now + 61);
+
+    let status = service.status_at(now + 61).unwrap();
+    assert_eq!(status["geo_source"], "manual");
+    assert_eq!(status["exit"]["state"], "manual");
+    assert_eq!(status["geo"]["state"], "manual");
+}
+
+#[test]
+fn manual_mode_changes_advance_status_generation_without_ip_probe() {
+    let now = current_unix();
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        SequenceProbe {
+            results: vec![],
+            index: 0,
+        },
+        SequenceGeo {
+            results: vec![],
+            index: 0,
+        },
+    );
+
+    let initial = service.status_inputs_at(now).generation;
+    service
+        .set_manual_location(&RequestParams {
+            query: None,
+            latitude: Some(51.5074),
+            longitude: Some(-0.1278),
+        })
+        .unwrap();
+    let first_manual = service.status_inputs_at(now).generation;
+    service
+        .set_manual_location(&RequestParams {
+            query: None,
+            latitude: Some(22.3193),
+            longitude: Some(114.1694),
+        })
+        .unwrap();
+    let second_manual = service.status_inputs_at(now).generation;
+    service.clear_manual_location().unwrap();
+    let auto = service.status_inputs_at(now).generation;
+
+    assert!(first_manual > initial);
+    assert!(second_manual > first_manual);
+    assert!(auto > second_manual);
+}
+
+#[test]
+fn switching_from_manual_to_auto_refreshes_the_auto_target() {
+    let now = current_unix();
+    let sink = Arc::new(Mutex::new(None));
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        SequenceProbe {
+            results: vec![Ok(EXIT_A), Ok(EXIT_B)],
+            index: 0,
+        },
+        SequenceGeo {
+            results: vec![
+                Ok(Some((EXIT_A, record(now, 37.77, -122.41)))),
+                Ok(Some((EXIT_B, record(now, 22.32, 114.17)))),
+            ],
+            index: 0,
+        },
+    )
+    .with_patch_sink(Arc::clone(&sink));
+
+    service.enable().unwrap();
+    service
+        .set_manual_location(&RequestParams {
+            query: None,
+            latitude: Some(51.5074),
+            longitude: Some(-0.1278),
+        })
+        .unwrap();
+    service.clear_manual_location().unwrap();
+
+    let target = sink.lock().unwrap().expect("auto target must be refreshed");
+    assert_eq!((target.latitude, target.longitude), (22.32, 114.17));
 }
 
 #[test]
@@ -714,7 +989,7 @@ fn status_never_exposes_coordinates_or_device_material() {
 
 #[test]
 fn manual_location_overrides_auto_patch_target() {
-    let now = 1_000_000;
+    let now = current_unix();
     let sink = Arc::new(Mutex::new(None));
     let mut service = build(
         OkRuntime {
@@ -727,6 +1002,7 @@ fn manual_location_overrides_auto_patch_target() {
     .with_patch_sink(Arc::clone(&sink));
 
     // Auto mode publishes the Geo record for the stub exit.
+    service.force_evidence_refresh();
     service.status_at(now).unwrap();
     assert!(
         sink.lock().unwrap().is_some(),
