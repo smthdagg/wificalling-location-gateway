@@ -230,6 +230,7 @@ rm -rf /tmp/wloc-probe
 exit 0
 PREINST
 			cp "$stage/control/preinst" "$stage/control/prerm"
+			chmod 0755 "$stage/control/preinst" "$stage/control/prerm"
 			cat > "$stage/control/postinst" <<'POSTINST'
 #!/bin/sh
 [ -n "${IPKG_INSTROOT:-}" ] && exit 0
