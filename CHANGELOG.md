@@ -2,6 +2,13 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r3] - 2026-08-28
+
+Hotfix for an additional VLESS share-link encoding variant.
+
+- Accept Base64-encoded VLESS authorities using either `auto:UUID@host:port`
+  or `:UUID@host:port`.
+
 ## [1.3.0-r2] - 2026-08-28
 
 Compatibility and stability release for node import and LuCI error handling.
