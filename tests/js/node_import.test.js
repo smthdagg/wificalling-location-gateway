@@ -38,7 +38,7 @@ function main() {
 		['tuic://uuid:secret@example.test:443?sni=example.test', { protocol: 'tuic', uuid: 'uuid', password: 'secret', sni: 'example.test' }],
 		['trojan://user:secret@example.test:443?sni=example.test', { protocol: 'trojan', password: 'secret', sni: 'example.test' }],
 		['vless://uuid@example.test:443?security=tls&sni=example.test', { protocol: 'vless', uuid: 'uuid', security: 'tls', sni: 'example.test' }],
-		['wireguard://peer-public@example.test:51820?private_key=private-key&local_address=10.0.0.2/32', { protocol: 'wireguard', public_key: 'peer-public', private_key: 'private-key', local_address: '10.0.0.2/32' }]
+		['AWG://peer-public@example.test:51820?private_key=private-key&local_address=10.0.0.2/32', { protocol: 'wireguard', public_key: 'peer-public', private_key: 'private-key', local_address: '10.0.0.2/32' }]
 	];
 	commonCases.forEach(function([uri, expected]) {
 		const result = parser.parse(uri);
@@ -59,7 +59,7 @@ function main() {
 	];
 	overviewSources.forEach(function(relative) {
 		const source = fs.readFileSync(path.join(path.resolve(__dirname, '..', '..'), relative), 'utf8');
-		assert(source.includes("ui.hideModal();"), relative + ': import errors must close the modal before showing a notice');
+		assert(/catch \(err\) \{ ui\.hideModal\(\); testNotify\(/.test(source), relative + ': import errors must close the modal before showing a notice');
 		assert(source.includes("if (msg.parentNode) msg.parentNode.removeChild(msg);"), relative + ': notice close must remove the notice immediately');
 	});
 	console.log('VLESS legacy Reality import tests passed');

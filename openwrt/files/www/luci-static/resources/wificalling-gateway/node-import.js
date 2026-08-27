@@ -31,10 +31,14 @@ function common(protocol, url) {
 	};
 }
 
+function userSecret(url) {
+	return decodeURIComponent(url.password || url.username || '');
+}
+
 function parseUrl(uri, protocol) {
 	var url = new URL(uri), p = url.searchParams, out = common(protocol, url);
 	if (protocol === 'anytls' || protocol === 'hysteria2' || protocol === 'trojan') {
-		out.password = decodeURIComponent(url.username || '');
+		out.password = userSecret(url);
 		out.sni = p.get('peer') || p.get('sni') || '';
 		out.insecure = truthy(p.get('insecure') || p.get('allowInsecure'));
 		out.alpn = p.get('alpn') || '';
@@ -95,7 +99,7 @@ function parseUrl(uri, protocol) {
 }
 
 function parseVmess(uri) {
-	var raw = JSON.parse(decodeBase64(uri.slice('vmess://'.length).trim()));
+	var raw = JSON.parse(decodeBase64(uri.slice(uri.indexOf('://') + 3).trim()));
 	if (!raw.add || !raw.port || !raw.id) throw new Error(_('VMess server, port and UUID are required'));
 	var out = {
 		enabled: '1', protocol: 'vmess', label: raw.ps || 'VMess ' + raw.add,
@@ -118,9 +122,9 @@ function parseVmess(uri) {
 
 function parse(uri) {
 	var value = normalizeLink(uri || ''), scheme = value.split(':', 1)[0].toLowerCase();
-	if (scheme === 'vmess') return parseVmess(value);
+	if (scheme === 'vmess') return parseVmess('vmess://' + value.slice(value.indexOf('://') + 3));
 	if (scheme === 'hy2') scheme = 'hysteria2';
-	if (scheme === 'wg') scheme = 'wireguard';
+	if (scheme === 'wg' || scheme === 'awg') scheme = 'wireguard';
 	if (['anytls', 'hysteria2', 'tuic', 'vless', 'trojan', 'wireguard'].indexOf(scheme) < 0)
 		throw new Error(_('Unsupported node link format'));
 	return parseUrl(value, scheme);
