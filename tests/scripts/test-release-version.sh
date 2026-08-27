@@ -18,12 +18,12 @@ grep -F 'webpki-roots = "=1.0.9"' "$repo_root/Cargo.toml" >/dev/null ||
 	fail 'version bumps must not rewrite pinned dependency versions'
 grep -Fx 'PKG_VERSION:=1.3.0' "$repo_root/openwrt/Makefile" >/dev/null ||
 	fail 'OpenWrt runtime version must be 1.3.0'
-grep -Fx 'PKG_RELEASE:=3' "$repo_root/openwrt/Makefile" >/dev/null ||
-	fail 'OpenWrt runtime release must be 3'
+grep -Fx 'PKG_RELEASE:=4' "$repo_root/openwrt/Makefile" >/dev/null ||
+	fail 'OpenWrt runtime release must be 4'
 grep -Fx 'PKG_VERSION:=1.3.0' "$repo_root/openwrt/luci-app-wificalling-location-gateway/Makefile" >/dev/null ||
 	fail 'LuCI package version must be 1.3.0'
-grep -Fx 'PKG_RELEASE:=3' "$repo_root/openwrt/luci-app-wificalling-location-gateway/Makefile" >/dev/null ||
-	fail 'LuCI package release must be 3'
+grep -Fx 'PKG_RELEASE:=4' "$repo_root/openwrt/luci-app-wificalling-location-gateway/Makefile" >/dev/null ||
+	fail 'LuCI package release must be 4'
 
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"
@@ -33,13 +33,13 @@ plan=$(
 		--arch x86_64 --service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl"
 )
 for expected in \
-	'wificalling-location-gateway_1.3.0-r3_x86_64.ipk' \
-	'wificalling-location-gateway-1.3.0-r3.apk'; do
+	'wificalling-location-gateway_1.3.0-r4_x86_64.ipk' \
+	'wificalling-location-gateway-1.3.0-r4.apk'; do
 	printf '%s\n' "$plan" | grep -F "$expected" >/dev/null ||
 		fail "release plan is missing $expected"
 done
 
-grep -F 'version=${1:-1.3.0-r3}' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null ||
-	fail 'AX6S standalone builder default must be 1.3.0 release 3'
+grep -F 'version=${1:-1.3.0-r4}' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null ||
+	fail 'AX6S standalone builder default must be 1.3.0 release 4'
 
 printf '%s\n' 'release version tests passed'

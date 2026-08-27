@@ -34,9 +34,15 @@ return view.extend({
 		wlocI18n.localizeTabs();
 		var nodeParsed;
 		try { nodeParsed = JSON.parse(data[0]); } catch (e) { nodeParsed = { nodes: [] }; }
+		var manualNodeResults = {};
+		function nodeForDisplay(n) {
+			if (!n) return null;
+			var manual = manualNodeResults[n.id];
+			return manual && Date.now() - manual.testedAt < 60000 ? manual.node : n;
+		}
 		function nodeById(id, source) {
 			var nodes = (source || nodeParsed).nodes || [];
-			for (var i = 0; i < nodes.length; i++) if (nodes[i].id === id) return nodes[i];
+			for (var i = 0; i < nodes.length; i++) if (nodes[i].id === id) return nodeForDisplay(nodes[i]);
 			return null;
 		}
 		function quality(n) {
@@ -109,6 +115,25 @@ return view.extend({
 			mc.insertBefore(msg, mc.firstElementChild);
 			return msg;
 		}
+		function updateNodeRow(id, r) {
+			if (!r || !r.state) return;
+			var n = {
+				state: r.state,
+				reason: r.reason,
+				measurement: r.measurement,
+				ping_ms: r.ping_ms
+			};
+			if (n.state === 'tcp_reachable') n.measurement = 'tcp';
+			if (n.state === 'handshake_ok') {
+				n.measurement = 'wg_handshake';
+				n.ping_ms = r.exit_ip;
+			}
+			manualNodeResults[id] = { node: n, testedAt: Date.now() };
+			[['state', nodeState(n)], ['ping', latency(n)], ['quality', quality(n)]].forEach(function(v) {
+				var el = document.getElementById('wfc-node-' + v[0] + '-' + id);
+				if (el) dom.content(el, v[1]);
+			});
+		}
 		function runNodeTest(id, btn) {
 			if (btn.disabled) return;
 			btn.disabled = true;
@@ -117,6 +142,7 @@ return view.extend({
 			nodeTestRpc(id).then(function(r) {
 				btn.disabled = false;
 				btn.textContent = original;
+				updateNodeRow(id, r);
 				if (r && r.state === 'handshake_ok') {
 					testNotify(wlocI18n.t('Handshake OK') + ' — ' + r.exit_ip, 'info');
 				}
@@ -485,7 +511,8 @@ return view.extend({
 			return L.resolveDefault(fetch('/wloc-node-status.json').then(function(r) { return r.text(); }), '{}').then(function(raw) {
 				var current; try { current = JSON.parse(raw); } catch (e) { current = { nodes: [] }; }
 				(current.nodes || []).forEach(function(n) {
-					[['state', nodeState(n)], ['ping', latency(n)], ['quality', quality(n)]].forEach(function(v) {
+					var displayNode = nodeForDisplay(n);
+					[['state', nodeState(displayNode)], ['ping', latency(displayNode)], ['quality', quality(displayNode)]].forEach(function(v) {
 						var el = document.getElementById('wfc-node-' + v[0] + '-' + n.id); if (el) dom.content(el, v[1]);
 					});
 				});
