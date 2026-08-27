@@ -2,6 +2,13 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r4] - 2026-08-28
+
+Hotfix for stale node metrics after a manual node test.
+
+- Refresh the node status, ping/latency, and quality cells immediately from
+  the `node_test` result.
+
 ## [1.3.0-r3] - 2026-08-28
 
 Hotfix for an additional VLESS share-link encoding variant.
