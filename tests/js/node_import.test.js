@@ -41,6 +41,14 @@ function main() {
 	assert.strictEqual(encodedAuthorityResult.port, '443');
 	assert.strictEqual(encodedAuthorityResult.security, 'reality');
 
+	const emptyPrefixAuthority = Buffer.from(':uuid@example.test:443').toString('base64').replace(/=+$/, '');
+	const emptyPrefixResult = parser.parse(
+		'vless://' + emptyPrefixAuthority + '?tls=1&peer=example.test&xtls=2&pbk=public-key&sid=shortid'
+	);
+	assert.strictEqual(emptyPrefixResult.uuid, 'uuid');
+	assert.strictEqual(emptyPrefixResult.server, 'example.test');
+	assert.strictEqual(emptyPrefixResult.port, '443');
+
 	const commonCases = [
 		['anytls://user:secret@example.test:443?peer=example.test', { protocol: 'anytls', password: 'secret', sni: 'example.test' }],
 		['hysteria2://user:secret@example.test:443?sni=example.test', { protocol: 'hysteria2', password: 'secret', sni: 'example.test' }],
