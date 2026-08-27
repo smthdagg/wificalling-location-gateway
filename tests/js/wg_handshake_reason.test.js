@@ -103,6 +103,10 @@ function main() {
 			`${relative}: manual test results must have a row-update helper`);
 		assert(source.includes('updateNodeRow(id, r);'),
 			`${relative}: manual test results must refresh the node row`);
+		assert(source.includes('manualNodeResults'),
+			`${relative}: polling must not immediately overwrite a fresh manual result`);
+		assert(source.includes('function nodeForDisplay'),
+			`${relative}: manual results need an expiry before live status resumes`);
 	});
 
 	i18nSources.forEach(function(relative) {
