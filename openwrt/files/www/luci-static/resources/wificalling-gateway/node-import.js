@@ -17,6 +17,12 @@ function truthy(value) {
 	return /^(1|true|yes)$/i.test(value || '') ? '1' : '0';
 }
 
+function normalizeLink(value) {
+	// Some subscription/export tools escape URI delimiters for Markdown or
+	// config files (for example `vless\\://` and `pbk=abc\\_def`).
+	return value.trim().replace(/\\(?=[:/?#&=_])/g, '');
+}
+
 function common(protocol, url) {
 	if (!url.hostname || !url.port) throw new Error(_('Server and port are required'));
 	return {
@@ -47,15 +53,18 @@ function parseUrl(uri, protocol) {
 		out.congestion = p.get('congestion_control') || p.get('congestion') || 'bbr';
 		out.udp_mode = p.get('udp_relay_mode') || 'native';
 	} else if (protocol === 'vless') {
-			out.uuid = decodeURIComponent(url.username || '');
-			out.flow = p.get('flow') || '';
-			out.security = p.get('security') || '';
-			out.sni = p.get('sni') || '';
-			// pbk/sid are base64url in practice, but some generators emit
-			// standard base64, which URLSearchParams would corrupt the same
-			// way (see pinSHA256): restoring '+' is a no-op on base64url.
-			out.public_key = (p.get('pbk') || p.get('publicKey') || '').replace(/ /g, '+');
-			out.short_id = (p.get('sid') || p.get('shortId') || '').replace(/ /g, '+');
+		out.uuid = decodeURIComponent(url.username || '');
+		out.flow = p.get('flow') || '';
+		// pbk/sid are base64url in practice, but some generators emit
+		// standard base64, which URLSearchParams would corrupt the same
+		// way (see pinSHA256): restoring '+' is a no-op on base64url.
+		out.public_key = (p.get('pbk') || p.get('publicKey') || '').replace(/ /g, '+');
+		out.short_id = (p.get('sid') || p.get('shortId') || '').replace(/ /g, '+');
+		out.security = p.get('security') || '';
+		if (!out.security && out.public_key && out.short_id) out.security = 'reality';
+		if (!out.security && truthy(p.get('tls')) === '1') out.security = 'tls';
+		out.sni = p.get('sni') || p.get('peer') || '';
+		if (!out.flow && p.get('xtls') === '2') out.flow = 'xtls-rprx-vision';
 		out.fingerprint = p.get('fp') || p.get('fingerprint') || 'chrome';
 		var vless_type = p.get('type') || '';
 		if (vless_type === 'xhttp') {
@@ -108,7 +117,7 @@ function parseVmess(uri) {
 }
 
 function parse(uri) {
-	var value = (uri || '').trim(), scheme = value.split(':', 1)[0].toLowerCase();
+	var value = normalizeLink(uri || ''), scheme = value.split(':', 1)[0].toLowerCase();
 	if (scheme === 'vmess') return parseVmess(value);
 	if (scheme === 'hy2') scheme = 'hysteria2';
 	if (scheme === 'wg') scheme = 'wireguard';
