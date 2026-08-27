@@ -96,6 +96,13 @@ function main() {
 			`${relative}: the test result banner must be rendered by a helper with an explicit close button`);
 		assert(source.includes("wlocI18n.t('Close')"),
 			`${relative}: the test result banner must have a close button`);
+		// A successful manual test must update the row immediately; the
+		// notification alone is not enough because the status export is polled
+		// independently and may still contain the previous result.
+		assert(source.includes('function updateNodeRow'),
+			`${relative}: manual test results must have a row-update helper`);
+		assert(source.includes('updateNodeRow(id, r);'),
+			`${relative}: manual test results must refresh the node row`);
 	});
 
 	i18nSources.forEach(function(relative) {
