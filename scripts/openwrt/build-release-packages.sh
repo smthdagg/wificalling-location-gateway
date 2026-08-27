@@ -6,7 +6,7 @@ OPENWRT_25_SDK='ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 version=1.3.0
-release=2
+release=3
 arch=x86_64
 service_bin=
 ctl_bin=

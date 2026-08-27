@@ -134,7 +134,7 @@ function parse(uri) {
 		if (authority.indexOf('@') < 0) {
 			try {
 				var decodedAuthority = decodeBase64(authority);
-				var legacyAuthority = decodedAuthority.match(/^auto:([^@]+)@(.+)$/);
+				var legacyAuthority = decodedAuthority.match(/^(?:auto:|:)([^@]+)@(.+)$/);
 				if (legacyAuthority) {
 					value = 'vless://' + encodeURIComponent(legacyAuthority[1]) + '@' + legacyAuthority[2] +
 						(queryStart < 0 ? '' : value.slice(queryStart));
