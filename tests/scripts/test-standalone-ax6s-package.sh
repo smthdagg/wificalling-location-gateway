@@ -87,6 +87,8 @@ tar -xf "$output" -C "$tmp/result"
 control=$(tar -xOf "$tmp/result/control.tar.gz" ./control)
 conffiles=$(tar -xOf "$tmp/result/control.tar.gz" ./conffiles)
 postinst=$(tar -xOf "$tmp/result/control.tar.gz" ./postinst)
+preinst=$(tar -xOf "$tmp/result/control.tar.gz" ./preinst)
+prerm=$(tar -xOf "$tmp/result/control.tar.gz" ./prerm)
 data_members=$(tar -tzf "$tmp/result/data.tar.gz")
 
 printf '%s\n' "$output" | grep -F "/wificalling-location-gateway_${version}_aarch64_cortex-a53.ipk" >/dev/null ||
@@ -120,6 +122,19 @@ restart_line=$(printf '%s\n' "$postinst" | grep -n -F '/etc/init.d/wificalling-g
 	fail 'standalone post-install must create the Gateway runtime directory before restart'
 printf '%s\n' "$postinst" | grep -F 'rm -f /tmp/luci-indexcache.*' >/dev/null ||
 	fail 'standalone post-install must invalidate every LuCI menu cache variant'
+check_lifecycle() {
+	content=$1
+	phase=$2
+	printf '%s\n' "$content" | grep -F '/etc/init.d/wloc-service stop' >/dev/null ||
+		fail "standalone $phase must stop WLOC before package files change"
+	printf '%s\n' "$content" | grep -F '/etc/init.d/wificalling-gateway stop' >/dev/null ||
+		fail "standalone $phase must stop Gateway before package files change"
+	if printf '%s\n' "$content" | grep -F 'killall -q sing-box' >/dev/null; then
+		fail "standalone $phase must not kill unrelated sing-box services"
+	fi
+}
+check_lifecycle "$preinst" preinst
+check_lifecycle "$prerm" prerm
 for member in \
 	'./etc/config/wificalling-gateway' \
 	'./etc/init.d/wificalling-gateway' \

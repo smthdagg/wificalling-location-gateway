@@ -51,6 +51,12 @@ if grep -F 'shasum -a 256 ./wificalling-location-gateway' "$builder" >/dev/null;
 fi
 grep -F 'luci-app-wificalling-gateway.json' "$builder" >/dev/null ||
 	fail 'integrated release builder must remove the standalone Gateway LuCI menu'
+for package in wificalling-location-gateway wificalling-location-gateway-lite; do
+	grep -F "Package/$package/preinst" "$builder" >/dev/null ||
+		fail "$package must stop managed services before upgrade unpack"
+	grep -F "Package/$package/prerm" "$builder" >/dev/null ||
+		fail "$package must stop managed services before removal"
+done
 grep -F "Package: wificalling-location-gateway" "$builder" >/dev/null ||
 	fail 'release builder must accept a hash-pinned stable integrated package as its 1.3.0-r1 base'
 grep -F '1.3.0-r1' "$builder" >/dev/null ||
