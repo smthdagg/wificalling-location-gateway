@@ -40,7 +40,7 @@ The core boundary of the project is "**independent, precise, and revertible**": 
 ## Features
 
 - Statically linked Rust daemon optimized for OpenWrt musl targets and small release size.
-- Auto-follows the country, city, timezone, and coordinates of the node bound to the device; after a node switch the monitor follows within about 10 seconds, and a one-click "Refresh IP" button re-probes immediately.
+- Auto-follows the country, city, timezone, and coordinates of the node bound to the device; in auto mode periodic health checks re-probe only when the cached exit evidence expires and update Geo only when the exit IP changes. Manual mode is independent of the Gateway IP and never performs IP checks. A one-click "Refresh IP" button re-probes immediately after a node switch.
 - Manual place search, latitude/longitude entry, and saved location presets.
 - The certificate link, DNS hijack, and TPROXY rules are generated from the router's actual LAN IP at runtime — no more hardcoded 192.168.31.x, so any LAN subnet works out of the box.
 - Locally generated, persisted WLOC root CA with an iPhone `.mobileconfig` install entry and fingerprint verification.
@@ -353,7 +353,7 @@ Wi‑Fi Calling Location Gateway 将两个原本分离的流程组织在同一�
 ## 主要能力
 
 - Rust 静态守护进程，针对 OpenWrt 的 musl 环境和小体积发布配置优化。
-- 自动跟随设备所绑定代理节点的出口国家、城市、时区和坐标；切换设备节点后约 10 秒内自动跟随，监控页也可一键“刷新 IP”立即重探测。
+- 自动跟随设备所绑定代理节点的出口国家、城市、时区和坐标；自动模式的健康轮询仅在缓存出口证据过期时重新核对 IP，只有 IP 变化才更新 Geo。手动模式与网关 IP 完全独立，不会核对 IP。切换设备节点后可在监控页点击“刷新 IP”立即重探测。
 - 手动地点搜索、经纬度输入和常用位置预设。
 - 证书与拦截全程适配任意局域网网段：证书链接、DNS 劫持和 TPROXY 规则按路由器实际 LAN IP 动态生成，不再写死 192.168.31.x。
 - 本地生成并持久化 WLOC 根证书，提供 iPhone `.mobileconfig` 安装入口与指纹核验。

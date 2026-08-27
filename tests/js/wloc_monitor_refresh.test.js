@@ -25,17 +25,17 @@ function find(node, predicate) {
 	return find(node.children, predicate);
 }
 
-function status(exitIp, error) {
+function status(exitIp, error, geoSource) {
 	return {
 		service_phase: 'intercepting',
 		assigned_device: '192.168.31.175',
-		geo_source: 'auto',
+		geo_source: geoSource || 'auto',
 		exit: { state: exitIp ? 'verified' : 'unavailable', ip: exitIp, last_error: error || null },
 		geo: { state: exitIp ? 'fresh' : 'unavailable' }
 	};
 }
 
-async function runRefresh(sourcePath, nextStatus) {
+async function runRefresh(sourcePath, nextStatus, initialStatus) {
 	const source = fs.readFileSync(sourcePath, 'utf8');
 	const calls = { ctl: 0, notifications: [] };
 	const E = function(tag, attrs, children) {
@@ -76,10 +76,14 @@ async function runRefresh(sourcePath, nextStatus) {
 		{ resolveDefault: function(value) { return value; } },
 		E
 	);
-	const tree = page.render([JSON.stringify(status('203.0.113.10')), '', null]);
+	const tree = page.render([JSON.stringify(initialStatus || status('203.0.113.10')), '', null]);
 	const button = find(tree, function(node) {
 		return node.tag === 'button' && textOf(node).indexOf('Refresh IP') >= 0;
 	});
+	if (initialStatus && initialStatus.geo_source === 'manual') {
+		assert.strictEqual(button, null, 'manual mode must not show an IP refresh action');
+		return calls;
+	}
 	assert(button, 'Refresh IP button not found');
 	const result = button.attrs.click();
 	assert(result && typeof result.then === 'function', 'refresh click must return its Promise');
@@ -111,6 +115,9 @@ async function main() {
 			level: 'error',
 			text: 'IP refresh failed: followed device node is missing; select and apply a WCG node'
 		}]);
+
+		const manual = await runRefresh(sourcePath, status(null, null, 'manual'), status(null, null, 'manual'));
+		assert.strictEqual(manual.ctl, 0);
 	}
 	console.log('WLOC monitor refresh feedback tests passed');
 }

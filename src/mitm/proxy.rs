@@ -96,7 +96,7 @@ impl MitmProxy {
     pub async fn handle_connection(
         &self,
         client_tcp: TcpStream,
-        patch: Option<&PatchTarget>,
+        patch_state: Arc<Mutex<Option<PatchTarget>>>,
     ) -> Result<(), MitmProxyError> {
         let client_addr = client_tcp
             .peer_addr()
@@ -122,9 +122,15 @@ impl MitmProxy {
                 Err(_) => break,
             };
             let (request, mut respond) = request;
-            match self.forward_upstream(request, patch, &client_addr).await {
+            // Refresh the target for every request: iOS can reuse this HTTP/2
+            // connection after the exit/IP association has changed.
+            let patch = patch_state.lock().ok().and_then(|guard| *guard);
+            match self
+                .forward_upstream(request, patch.as_ref(), &client_addr)
+                .await
+            {
                 Ok((original_len, patched_body)) => {
-                    self.append_rewrite_event(patch, original_len, patched_body.len());
+                    self.append_rewrite_event(patch.as_ref(), original_len, patched_body.len());
                     let mut send = respond
                         .send_response(Response::new(()), patched_body.is_empty())
                         .map_err(|error| MitmProxyError::H2(error.to_string()))?;

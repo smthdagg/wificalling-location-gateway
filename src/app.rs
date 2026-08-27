@@ -1,11 +1,10 @@
 //! Production service composition.
 //!
 //! [`WlocService`] ties the state machine, transactional runtime control, exit
-//! probing, and Geo resolution into a working [`ServiceDispatch`]. Status
-//! refreshes evidence through the bounded observation cache; enable and
-//! disable drive the runtime through the transactional control path and keep
-//! the state machine in sync. No WLOC response patching, CA, or interception
-//! is implemented here.
+//! probing, and Geo resolution into a working [`ServiceDispatch`]. Enable and
+//! explicit refresh drive evidence acquisition; periodic health reporting
+//! rechecks only automatic location evidence, while manual location is local
+//! state. No WLOC response patching, CA, or interception is implemented here.
 
 use std::net::IpAddr;
 use std::path::PathBuf;
@@ -214,25 +213,37 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             self.probe_limits,
         ) {
             Ok(observation) => {
+                let previous_exit_ip = self.last_exit_ip();
                 self.exit_evidence = ExitEvidence::Verified(observation);
                 self.last_probe_fingerprint = fingerprint;
                 self.last_probe_error = None;
                 let exit_ip = self
                     .last_exit_ip()
                     .expect("fresh observation always carries an exit IP");
-                eprintln!(
-                    "wloc refresh: probing exit {exit_ip} with {} provider(s)",
-                    self.providers.len()
-                );
-                self.geo_resolution =
-                    resolve_geo(&mut self.geo, exit_ip, &self.providers, now_unix);
-                eprintln!("wloc refresh: geo result {:?}", self.geo_resolution);
+                if previous_exit_ip != Some(exit_ip) {
+                    self.advance_generation();
+                }
+                let geo_refresh_needed = previous_exit_ip != Some(exit_ip)
+                    || !matches!(
+                        &self.geo_resolution,
+                        GeoResolution::Fresh(record) if record.expires_at_unix > now_unix
+                    );
+                if geo_refresh_needed {
+                    eprintln!(
+                        "wloc refresh: probing exit {exit_ip} with {} provider(s)",
+                        self.providers.len()
+                    );
+                    self.geo_resolution =
+                        resolve_geo(&mut self.geo, exit_ip, &self.providers, now_unix);
+                    eprintln!("wloc refresh: geo result {:?}", self.geo_resolution);
+                }
                 self.publish_patch_target();
             }
             Err(error) => {
                 self.exit_evidence = ExitEvidence::Unavailable;
                 self.geo_resolution = GeoResolution::Unavailable;
                 self.last_probe_error = Some(error.to_string());
+                self.publish_patch_target();
             }
         }
     }
@@ -252,12 +263,26 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                 _ => None,
             },
         };
-        if let Some(sink) = &self.patch_sink {
-            if let Ok(mut guard) = sink.lock() {
-                *guard = target;
-            }
+        let changed = match &self.patch_sink {
+            Some(sink) => match sink.lock() {
+                Ok(mut guard) => {
+                    let changed = *guard != target;
+                    if changed {
+                        *guard = target;
+                    }
+                    changed
+                }
+                Err(_) => true,
+            },
+            None => true,
+        };
+        if changed {
+            self.append_target_event(target);
         }
-        self.append_target_event(target);
+    }
+
+    fn advance_generation(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
     }
 
     /// Append a target-change event to the usage log.
@@ -407,6 +432,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
         // timeout (never on this path).
         self.manual_geo = None;
         self.geo_generation += 1;
+        self.advance_generation();
         self.spawn_manual_geo_lookup(latitude, longitude);
         self.publish_patch_target();
         self.refresh_state_file();
@@ -467,14 +493,23 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
 
     /// Return to automatic node-following location.
     pub fn clear_manual_location(&mut self) -> Result<(), crate::service::dispatch::DispatchError> {
+        if !matches!(self.geo_source, GeoSource::Manual { .. }) {
+            return Ok(());
+        }
+        let refresh_auto_target = self.state.phase() != ServicePhase::Disabled;
         self.geo_source = GeoSource::Auto;
         self.manual_geo = None;
         self.geo_generation += 1;
+        self.advance_generation();
         if let Ok(mut slot) = self.manual_geo_pending.lock() {
             *slot = None;
         }
-        self.publish_patch_target();
-        self.refresh_state_file();
+        if refresh_auto_target {
+            self.force_evidence_refresh();
+        } else {
+            self.publish_patch_target();
+            self.refresh_state_file();
+        }
         Ok(())
     }
 
@@ -488,6 +523,14 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
         self.last_probe_fingerprint = None;
         self.refresh_evidence_at(current_unix());
         self.refresh_state_file();
+    }
+
+    /// Test hook for a deterministic periodic health tick.
+    #[doc(hidden)]
+    pub fn refresh_periodic_at(&mut self, now_unix: u64) {
+        self.consume_pending_manual_geo();
+        self.refresh_evidence_at(now_unix);
+        self.refresh_state_file_at(now_unix);
     }
 
     /// The generation of the current manual target (test hook).
@@ -514,11 +557,16 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
         }
     }
 
+    /// Refresh the root-local status file at a supplied time.
+    fn refresh_state_file_at(&self, now_unix: u64) {
+        let inputs = self.status_inputs_at(now_unix);
+        self.write_status_file(&inputs);
+    }
+
     /// Refresh the root-local status file immediately so the LuCI UI sees a
     /// control change without waiting for the next status poll.
     fn refresh_state_file(&self) {
-        let inputs = self.status_inputs_at(current_unix());
-        self.write_status_file(&inputs);
+        self.refresh_state_file_at(current_unix());
     }
 
     fn last_exit_ip(&self) -> Option<IpAddr> {
@@ -535,6 +583,12 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             // healthy "manual" state instead of unknown/unavailable.
             GeoSource::Manual { .. } => (ExitState::Manual, None),
             GeoSource::Auto => match &self.exit_evidence {
+                ExitEvidence::Verified(observation)
+                    if now_unix.saturating_sub(observation.checked_at_unix())
+                        > self.probe_limits.max_observation_age.as_secs() =>
+                {
+                    (ExitState::Stale, Some(observation.checked_at_unix()))
+                }
                 ExitEvidence::Verified(observation) => {
                     (ExitState::Verified, Some(observation.checked_at_unix()))
                 }
@@ -577,7 +631,6 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
 
     /// Serve a status snapshot at an explicit time (testable, deterministic).
     pub fn status_at(&mut self, now_unix: u64) -> Result<Value, DispatchError> {
-        self.refresh_evidence_at(now_unix);
         let inputs = self.status_inputs_at(now_unix);
         self.write_status_file(&inputs);
         let bytes = encode_status(&inputs).map_err(|_| DispatchError::Unavailable)?;
@@ -618,6 +671,11 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
         if self.state.phase() != ServicePhase::Disabled {
             return Err(DispatchError::InvalidConfig);
         }
+        // Prime the device -> exit IP -> Geo association before the runtime
+        // installs interception. Otherwise the first WLOC request after a
+        // restart can pass through with an empty target while the first
+        // periodic refresh is still running.
+        self.refresh_evidence_at(current_unix());
         control_enable(&mut self.runtime, self.scope_valid, self.ipv6_ready)
             .map_err(map_control_error)?;
         self.apply_enable_events();
@@ -665,9 +723,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
     }
 
     fn refresh_periodic(&mut self) {
-        self.consume_pending_manual_geo();
-        self.refresh_evidence_at(current_unix());
-        self.refresh_state_file();
+        self.refresh_periodic_at(current_unix());
     }
 
     fn refresh_evidence(&mut self) -> Result<(), DispatchError> {

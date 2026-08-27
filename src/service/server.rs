@@ -36,7 +36,8 @@ impl<S: ServiceDispatch> ControlServer<S> {
 
     /// Accept and serve connections until the listener is closed, while
     /// running periodic housekeeping (`refresh_periodic`) every
-    /// `refresh_interval` so the status file stays fresh without API traffic.
+    /// `refresh_interval`; implementations decide whether the selected
+    /// location source permits an exit/IP check.
     pub async fn serve(mut self, listener: UnixListener, refresh_interval: Duration) {
         let mut ticker = tokio::time::interval(refresh_interval);
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);

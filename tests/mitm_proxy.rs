@@ -21,6 +21,8 @@ const SF_LAT: i64 = 3_777_490_000;
 const SF_LON: i64 = -12_241_940_000;
 const LONDON_LAT: f64 = 51.5074;
 const LONDON_LON: f64 = -0.1278;
+const TOKYO_LAT: f64 = 35.6762;
+const TOKYO_LON: f64 = 139.6503;
 
 async fn spawn_http1_upstream(listener: TcpListener, config: rustls::ServerConfig, body: Vec<u8>) {
     tokio::spawn(async move {
@@ -44,6 +46,37 @@ async fn spawn_http1_upstream(listener: TcpListener, config: rustls::ServerConfi
         tls.write_all(head.as_bytes()).await.unwrap();
         tls.write_all(&body).await.unwrap();
         let _ = tls.shutdown().await;
+    });
+}
+
+async fn spawn_repeating_http1_upstream(
+    listener: TcpListener,
+    config: rustls::ServerConfig,
+    body: Vec<u8>,
+    requests: usize,
+) {
+    tokio::spawn(async move {
+        let tls = TlsAcceptor::from(Arc::new(config));
+        for _ in 0..requests {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut tls = tls.accept(stream).await.unwrap();
+            let mut buf = [0_u8; 4096];
+            let mut read = 0;
+            loop {
+                let n = tls.read(&mut buf[read..]).await.unwrap();
+                read += n;
+                if buf[..read].windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            tls.write_all(head.as_bytes()).await.unwrap();
+            tls.write_all(&body).await.unwrap();
+            let _ = tls.shutdown().await;
+        }
     });
 }
 
@@ -172,14 +205,16 @@ async fn wloc_response_is_patched_through_the_proxy() {
         .with_events_file(events_path.clone());
     let proxy_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let proxy_port = proxy_listener.local_addr().unwrap().port();
-    let target = PatchTarget::new(LONDON_LAT, LONDON_LON);
+    let patch_state = Arc::new(std::sync::Mutex::new(Some(PatchTarget::new(
+        LONDON_LAT, LONDON_LON,
+    ))));
     tokio::spawn(async move {
         loop {
             if let Ok((stream, _)) = proxy_listener.accept().await {
                 let proxy = proxy.clone();
-                let target = target;
+                let patch_state = Arc::clone(&patch_state);
                 tokio::spawn(async move {
-                    let _ = proxy.handle_connection(stream, Some(&target)).await;
+                    let _ = proxy.handle_connection(stream, patch_state).await;
                 });
             }
         }
@@ -226,6 +261,86 @@ async fn wloc_response_is_patched_through_the_proxy() {
 }
 
 #[tokio::test]
+async fn patch_target_is_refreshed_for_each_request_on_one_connection() {
+    let upstream_ca = CaBundle::generate().unwrap();
+    let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_port = upstream_listener.local_addr().unwrap().port();
+    spawn_repeating_http1_upstream(
+        upstream_listener,
+        server_config(&upstream_ca),
+        synthetic_wloc_body(SF_LAT, SF_LON),
+        2,
+    )
+    .await;
+
+    let mitm_ca = CaBundle::generate().unwrap();
+    let proxy = MitmProxy::new(&mitm_ca, upstream_ca.root_store().unwrap())
+        .unwrap()
+        .with_upstream_override("127.0.0.1", upstream_port);
+    let proxy_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_port = proxy_listener.local_addr().unwrap().port();
+    let patch_state = Arc::new(std::sync::Mutex::new(Some(PatchTarget::new(
+        LONDON_LAT, LONDON_LON,
+    ))));
+    let listener_state = Arc::clone(&patch_state);
+    tokio::spawn(async move {
+        let (stream, _) = proxy_listener.accept().await.unwrap();
+        proxy
+            .handle_connection(stream, listener_state)
+            .await
+            .unwrap();
+    });
+
+    let client_tcp = TcpStream::connect(("127.0.0.1", proxy_port)).await.unwrap();
+    let connector = TlsConnector::from(Arc::new(client_config(&mitm_ca)));
+    let server_name = rustls::pki_types::ServerName::try_from("gs-loc.apple.com").unwrap();
+    let client_tls = connector.connect(server_name, client_tcp).await.unwrap();
+    let (mut send_request, connection) = h2::client::Builder::new()
+        .handshake::<_, Bytes>(client_tls)
+        .await
+        .unwrap();
+    tokio::spawn(async move {
+        let _ = connection.await;
+    });
+
+    let request = Request::builder()
+        .method("GET")
+        .uri("https://gs-loc.apple.com/clls/wloc")
+        .body(())
+        .unwrap();
+    let (response_future, _send) = send_request.send_request(request, true).unwrap();
+    let mut response = response_future.await.unwrap();
+    let mut body = Vec::new();
+    while let Some(chunk) = response.body_mut().data().await {
+        body.extend_from_slice(&chunk.unwrap());
+    }
+    assert_eq!(
+        extract_wifi_latitude(&body),
+        Some(coord_to_int(LONDON_LAT)),
+        "the first request uses the initial target"
+    );
+
+    *patch_state.lock().unwrap() = Some(PatchTarget::new(TOKYO_LAT, TOKYO_LON));
+
+    let request = Request::builder()
+        .method("GET")
+        .uri("https://gs-loc.apple.com/clls/wloc")
+        .body(())
+        .unwrap();
+    let (response_future, _send) = send_request.send_request(request, true).unwrap();
+    let mut response = response_future.await.unwrap();
+    let mut body = Vec::new();
+    while let Some(chunk) = response.body_mut().data().await {
+        body.extend_from_slice(&chunk.unwrap());
+    }
+    assert_eq!(
+        extract_wifi_latitude(&body),
+        Some(coord_to_int(TOKYO_LAT)),
+        "a reused client connection must use the refreshed target"
+    );
+}
+
+#[tokio::test]
 async fn non_wloc_path_passes_through_unchanged() {
     // Same setup but the upstream returns a plain body for a non-WLOC path.
     let upstream_ca = CaBundle::generate().unwrap();
@@ -246,14 +361,16 @@ async fn non_wloc_path_passes_through_unchanged() {
         .with_upstream_override("127.0.0.1", upstream_port);
     let proxy_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let proxy_port = proxy_listener.local_addr().unwrap().port();
-    let target = PatchTarget::new(LONDON_LAT, LONDON_LON);
+    let patch_state = Arc::new(std::sync::Mutex::new(Some(PatchTarget::new(
+        LONDON_LAT, LONDON_LON,
+    ))));
     tokio::spawn(async move {
         loop {
             if let Ok((stream, _)) = proxy_listener.accept().await {
                 let proxy = proxy.clone();
-                let target = target;
+                let patch_state = Arc::clone(&patch_state);
                 tokio::spawn(async move {
-                    let _ = proxy.handle_connection(stream, Some(&target)).await;
+                    let _ = proxy.handle_connection(stream, patch_state).await;
                 });
             }
         }
@@ -303,10 +420,12 @@ async fn upstream_connect_failure_is_reported_to_proxy_health() {
         .with_upstream_override("127.0.0.1", unavailable_port);
     let proxy_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let proxy_port = proxy_listener.local_addr().unwrap().port();
-    let target = PatchTarget::new(LONDON_LAT, LONDON_LON);
+    let patch_state = Arc::new(std::sync::Mutex::new(Some(PatchTarget::new(
+        LONDON_LAT, LONDON_LON,
+    ))));
     let handler = tokio::spawn(async move {
         let (stream, _) = proxy_listener.accept().await.unwrap();
-        proxy.handle_connection(stream, Some(&target)).await
+        proxy.handle_connection(stream, patch_state).await
     });
 
     let client_tcp = TcpStream::connect(("127.0.0.1", proxy_port)).await.unwrap();
