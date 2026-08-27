@@ -127,6 +127,21 @@ function parse(uri) {
 	if (scheme === 'wg' || scheme === 'awg') scheme = 'wireguard';
 	if (['anytls', 'hysteria2', 'tuic', 'vless', 'trojan', 'wireguard'].indexOf(scheme) < 0)
 		throw new Error(_('Unsupported node link format'));
+	if (scheme === 'vless') {
+		var authorityStart = value.indexOf('://') + 3;
+		var queryStart = value.indexOf('?', authorityStart);
+		var authority = value.slice(authorityStart, queryStart < 0 ? value.length : queryStart);
+		if (authority.indexOf('@') < 0) {
+			try {
+				var decodedAuthority = decodeBase64(authority);
+				var legacyAuthority = decodedAuthority.match(/^auto:([^@]+)@(.+)$/);
+				if (legacyAuthority) {
+					value = 'vless://' + encodeURIComponent(legacyAuthority[1]) + '@' + legacyAuthority[2] +
+						(queryStart < 0 ? '' : value.slice(queryStart));
+				}
+			} catch (e) {}
+		}
+	}
 	return parseUrl(value, scheme);
 }
 

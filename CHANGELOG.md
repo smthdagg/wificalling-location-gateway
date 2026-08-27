@@ -2,6 +2,20 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r2] - 2026-08-28
+
+Compatibility and stability release for node import and LuCI error handling.
+
+- Accept escaped and legacy VLESS Reality share links, including `peer`, `tls`,
+  `xtls`, `pbk`, and `sid` parameters.
+- Accept VLESS links whose `auto:UUID@host:port` authority is Base64-encoded.
+- Preserve passwords for URI user-info imports across AnyTLS, Hysteria2, TUIC,
+  and Trojan, and accept case-insensitive protocol names and WireGuard aliases.
+- Keep import errors visible above the modal and make the error close action
+  immediate and reliable.
+- Validate all six release assets with the eight-case OpenWrt installation
+  matrix and upgrade the AX6S Lite package in place.
+
 ## [1.3.0-r1] - 2026-08-24
 
 Bump the release line to 1.3.0-r1. Carries the Standard/Lite packaging and

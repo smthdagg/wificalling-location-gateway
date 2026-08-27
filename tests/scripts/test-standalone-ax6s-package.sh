@@ -156,6 +156,14 @@ fi
 # Gateway payload (compiler.sh endpoint + legacy branches, init.d field).
 mkdir -p "$tmp/result/data"
 tar -xzf "$tmp/result/data.tar.gz" -C "$tmp/result/data"
+view_suffix=$(printf '%s' "$version" | tr '.-' '__')
+versioned_view="$tmp/result/data/www/luci-static/resources/view/wificalling-gateway/wfc_overview_fix_$view_suffix.js"
+versioned_import="$tmp/result/data/www/luci-static/resources/wificalling-gateway/node-import_fix_$view_suffix.js"
+[ -f "$versioned_view" ] || fail 'standalone package must install a versioned WFC view'
+[ -f "$versioned_import" ] || fail 'standalone package must install a versioned node importer'
+grep -F "require wificalling-gateway.node-import_fix_$view_suffix as nodeImport" \
+	"$versioned_view" >/dev/null ||
+	fail 'versioned WFC view must load the versioned node importer'
 grep -F 'if (f[25]!="") s=s ",\"pre_shared_key\":" q(f[25])' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/compiler.sh" >/dev/null 2>&1 ||
 	fail 'standalone package must patch compiler.sh with pre_shared_key support'
