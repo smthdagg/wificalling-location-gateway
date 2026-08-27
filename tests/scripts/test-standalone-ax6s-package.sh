@@ -135,6 +135,10 @@ check_lifecycle() {
 }
 check_lifecycle "$preinst" preinst
 check_lifecycle "$prerm" prerm
+for lifecycle in preinst prerm; do
+	tar -tvzf "$tmp/result/control.tar.gz" | grep -E "^-rwxr-xr-x .* \\./$lifecycle$" >/dev/null ||
+		fail "standalone $lifecycle must be executable in the control archive"
+done
 for member in \
 	'./etc/config/wificalling-gateway' \
 	'./etc/init.d/wificalling-gateway' \
