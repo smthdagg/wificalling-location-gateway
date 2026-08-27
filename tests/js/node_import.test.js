@@ -31,6 +31,37 @@ function main() {
 	assert.strictEqual(parsed.public_key, 'public-key_value');
 	assert.strictEqual(parsed.short_id, 'shortid');
 	assert.strictEqual(parsed.fingerprint, 'random');
+
+	const commonCases = [
+		['anytls://user:secret@example.test:443?peer=example.test', { protocol: 'anytls', password: 'secret', sni: 'example.test' }],
+		['hysteria2://user:secret@example.test:443?sni=example.test', { protocol: 'hysteria2', password: 'secret', sni: 'example.test' }],
+		['tuic://uuid:secret@example.test:443?sni=example.test', { protocol: 'tuic', uuid: 'uuid', password: 'secret', sni: 'example.test' }],
+		['trojan://user:secret@example.test:443?sni=example.test', { protocol: 'trojan', password: 'secret', sni: 'example.test' }],
+		['vless://uuid@example.test:443?security=tls&sni=example.test', { protocol: 'vless', uuid: 'uuid', security: 'tls', sni: 'example.test' }],
+		['wireguard://peer-public@example.test:51820?private_key=private-key&local_address=10.0.0.2/32', { protocol: 'wireguard', public_key: 'peer-public', private_key: 'private-key', local_address: '10.0.0.2/32' }]
+	];
+	commonCases.forEach(function([uri, expected]) {
+		const result = parser.parse(uri);
+		Object.keys(expected).forEach(function(key) {
+			assert.strictEqual(result[key], expected[key], uri + ': incorrect ' + key);
+		});
+	});
+
+	const vmessPayload = Buffer.from(JSON.stringify({ add: 'example.test', port: 443, id: 'uuid', tls: 'tls', net: 'ws', host: 'example.test', path: '/' })).toString('base64');
+	const vmess = parser.parse('VMESS://' + vmessPayload);
+	assert.strictEqual(vmess.protocol, 'vmess');
+	assert.strictEqual(vmess.transport, 'ws');
+	assert.strictEqual(vmess.security, 'tls');
+
+	const overviewSources = [
+		'openwrt/files/www/luci-static/resources/view/wificalling-gateway/overview.js',
+		'openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-gateway/overview.js'
+	];
+	overviewSources.forEach(function(relative) {
+		const source = fs.readFileSync(path.join(path.resolve(__dirname, '..', '..'), relative), 'utf8');
+		assert(source.includes("ui.hideModal();"), relative + ': import errors must close the modal before showing a notice');
+		assert(source.includes("if (msg.parentNode) msg.parentNode.removeChild(msg);"), relative + ': notice close must remove the notice immediately');
+	});
 	console.log('VLESS legacy Reality import tests passed');
 }
 
