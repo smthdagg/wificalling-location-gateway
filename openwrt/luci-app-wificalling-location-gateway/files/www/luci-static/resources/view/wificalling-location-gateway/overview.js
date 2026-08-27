@@ -109,6 +109,24 @@ return view.extend({
 			mc.insertBefore(msg, mc.firstElementChild);
 			return msg;
 		}
+		function updateNodeRow(id, r) {
+			if (!r || !r.state) return;
+			var n = {
+				state: r.state,
+				reason: r.reason,
+				measurement: r.measurement,
+				ping_ms: r.ping_ms
+			};
+			if (n.state === 'tcp_reachable') n.measurement = 'tcp';
+			if (n.state === 'handshake_ok') {
+				n.measurement = 'wg_handshake';
+				n.ping_ms = r.exit_ip;
+			}
+			[['state', nodeState(n)], ['ping', latency(n)], ['quality', quality(n)]].forEach(function(v) {
+				var el = document.getElementById('wfc-node-' + v[0] + '-' + id);
+				if (el) dom.content(el, v[1]);
+			});
+		}
 		function runNodeTest(id, btn) {
 			if (btn.disabled) return;
 			btn.disabled = true;
@@ -117,6 +135,7 @@ return view.extend({
 			nodeTestRpc(id).then(function(r) {
 				btn.disabled = false;
 				btn.textContent = original;
+				updateNodeRow(id, r);
 				if (r && r.state === 'handshake_ok') {
 					testNotify(wlocI18n.t('Handshake OK') + ' — ' + r.exit_ip, 'info');
 				}
