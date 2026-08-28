@@ -100,17 +100,17 @@ lan_ip() {
 }
 
 ROUTER_IP=$(lan_ip)
-[ -n "$ROUTER_IP" ] && valid_ipv4 "$ROUTER_IP" || {
+if [ -z "$ROUTER_IP" ] || ! valid_ipv4 "$ROUTER_IP"; then
     echo "wloc-redirect-sync: cannot determine the router LAN IP" >&2
     exit 1
-}
+fi
 case "$PROXY_PORT" in
     ''|*[!0-9]*) echo "wloc-redirect-sync: invalid proxy port" >&2; exit 1;;
 esac
-[ "$PROXY_PORT" -ge 1 ] && [ "$PROXY_PORT" -le 65535 ] || {
+if [ "$PROXY_PORT" -lt 1 ] || [ "$PROXY_PORT" -gt 65535 ]; then
     echo "wloc-redirect-sync: proxy port out of range" >&2
     exit 1
-}
+fi
 
 dns_changed=0
 for host in $HOSTS; do
@@ -144,12 +144,12 @@ EOF
 }
 
 mac_for_ip() {
-    local ip="$1" mac
-    mac=$(awk -v target="$ip" '$3 == target { print $2; exit }' /tmp/dhcp.leases 2>/dev/null || true)
-    if ! valid_mac "$mac"; then
-        mac=$(ip neigh show "$ip" dev br-lan 2>/dev/null | awk '$2 == "lladdr" { print $3; exit }')
+    _wloc_ip=$1
+    _wloc_mac=$(awk -v target="$_wloc_ip" '$3 == target { print $2; exit }' /tmp/dhcp.leases 2>/dev/null || true)
+    if ! valid_mac "$_wloc_mac"; then
+        _wloc_mac=$(ip neigh show "$_wloc_ip" dev br-lan 2>/dev/null | awk '$2 == "lladdr" { print $3; exit }')
     fi
-    valid_mac "$mac" && printf '%s' "$mac"
+    valid_mac "$_wloc_mac" && printf '%s' "$_wloc_mac"
 }
 
 macs=

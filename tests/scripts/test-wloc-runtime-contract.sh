@@ -76,7 +76,7 @@ if printf '%s\n' "$stop_block" | grep -F 'firewall.sh stop' >/dev/null; then
 fi
 grep -F 'valid_ipv4 "$ROUTER_IP"' "$redirect" >/dev/null ||
 	{ echo 'redirect sync must validate the router IPv4 before nft writes' >&2; exit 1; }
-grep -F '[ "$PROXY_PORT" -le 65535 ]' "$redirect" >/dev/null ||
+grep -F '[ "$PROXY_PORT" -gt 65535 ]' "$redirect" >/dev/null ||
 	{ echo 'TPROXY port must be range-validated' >&2; exit 1; }
 if grep -F 'bind_tproxy_listener_v6' "$daemon" >/dev/null ||
 	grep -F 'proxy_listener_v6' "$daemon" >/dev/null; then
