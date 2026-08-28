@@ -2,6 +2,23 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r8] - 2026-08-28
+
+Standardized automatic WLOC location refresh after manual mode changes.
+
+- Switching from manual location back to automatic node-following now always
+  refreshes the exit IP and Geo target, including while the service is disabled.
+- Added regression coverage for the disabled-service transition and aligned the
+  three-platform package release metadata to r8.
+
+### 中文说明
+
+标准化手动定位与自动跟随定位的切换行为。
+
+- 从手动定位切回自动跟随时，无论服务当前是否启用，都会重新刷新出口 IP
+  与 Geo 目标，避免使用空目标或旧定位。
+- 增加 disabled 状态切换回归测试，并将三平台包发布元数据统一为 r8。
+
 ## [1.3.0-r7] - 2026-08-28
 
 Node health and AX6S stability release. This release consolidates the r5/r6
