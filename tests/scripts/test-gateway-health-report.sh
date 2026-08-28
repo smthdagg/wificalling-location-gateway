@@ -26,4 +26,10 @@ grep -F 'output=${2:-/www/wloc-node-status.json}' "$node_health" >/dev/null ||
 grep -F '"$RUNDIR/nodes" "/www/wloc-node-status.json"' "$init" >/dev/null ||
 	fail 'monitor-loop must publish node health to the LuCI-readable status file'
 
+# r7/r8 use the single-process proxy-path checker instead of the retired
+# standalone WireGuard handshake helper.  The health badge must recognize the
+# maintained implementation rather than report a false red after every boot.
+grep -F "grep -q 'node_proxy_test' /usr/libexec/wificalling-gateway/node-health.sh && patch_health=1" "$health" >/dev/null ||
+	fail 'Gateway health must recognize the maintained single-process node health check'
+
 printf 'gateway health report checks passed\n'
