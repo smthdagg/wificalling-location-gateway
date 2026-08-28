@@ -1,18 +1,12 @@
 'use strict';
 
-// Regression guards for the WireGuard handshake-failure diagnostics:
+// Regression guards for single-process node probing:
 //
-// 1. node-health.sh must emit a machine-readable reason for failed
-//    handshakes (config_missing / timeout / unreachable) so the status
-//    view can tell a bad node apart from a dead server.
-// 2. The overview view must render that reason next to "Handshake
-//    failed" instead of a bare "Offline".
-// 3. The handshake probe must forward the reserved field (WARP-style
-//    endpoints), derive its probe port with a busybox-safe hash, and
-//    serialize concurrent monitor ticks so two runs cannot race on the
-//    same probe port and hand each other the wrong exit IP.
-// 4. The shared i18n table must carry the reason strings in both
-//    languages.
+// 1. Node health and manual tests must use the loopback inbound of the
+//    existing Gateway sing-box, never launch a temporary process.
+// 2. The compiler must expose a private, per-node test inbound routed to the
+//    corresponding outbound.
+// 3. The existing UI and translations remain present for older cached data.
 
 const assert = require('assert');
 const fs = require('fs');
@@ -30,22 +24,22 @@ function main() {
 		'openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/wificalling-location-gateway/i18n.js'
 	];
 
-	// The patch source that generates node-health.sh's handshake test.
+	// The patch source must synchronize the complete single-process probe set.
 	const patch = fs.readFileSync(path.join(root, 'scripts/openwrt/patch-wireguard-health.sh'), 'utf8');
-	assert(patch.includes("reason=config_missing") || patch.includes('config_missing'),
-		'patch-wireguard-health.sh: missing-key handshakes must be classified as config_missing');
-	assert(patch.includes("handshake did not complete"),
-		'patch-wireguard-health.sh: unanswered handshakes must be classified as timeout');
-	assert(patch.includes('reason=unreachable'),
-		'patch-wireguard-health.sh: failed test launches must be classified as unreachable');
-	assert(patch.includes('reserved=$(uci -q get'),
-		'patch-wireguard-health.sh: the probe must forward the reserved field');
-	assert(patch.includes("md5sum | cut -c1-4"),
-		'patch-wireguard-health.sh: the probe port must use a busybox-safe hash (cksum is absent on ImmortalWrt)');
-	assert(patch.includes('wg-health.lock'),
-		'patch-wireguard-health.sh: concurrent monitor ticks must be serialized');
-	assert(patch.includes('kill -0'),
-		'patch-wireguard-health.sh: a lock left by a killed tick must be reclaimed');
+	assert(patch.includes('node-health.sh'),
+		'patch-wireguard-health.sh: the health helper must be synchronized');
+	assert(patch.includes('compiler.sh'),
+		'patch-wireguard-health.sh: the compiler must be synchronized with the helper');
+	assert(!patch.includes('sing-box run'),
+		'patch-wireguard-health.sh: the patch must not start a second sing-box');
+
+	const compiler = fs.readFileSync(path.join(root, 'openwrt/files/usr/libexec/wificalling-gateway/compiler.sh'), 'utf8');
+	assert(compiler.includes('127.0.0.1'),
+		'compiler.sh: probe inbounds must be loopback-only');
+	assert(compiler.includes('inbound'),
+		'compiler.sh: probe routes must select by inbound tag');
+	assert(compiler.includes('probe_port_by_id'),
+		'compiler.sh: probe ports must be tied to node ids');
 
 	// The compact-status patch must carry the reason into the public export.
 	const compact = fs.readFileSync(path.join(root, 'scripts/openwrt/patch-node-status-compact.sh'), 'utf8');

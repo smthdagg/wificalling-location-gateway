@@ -18,8 +18,14 @@ wireguard_style() {
 	if [ "$major" -eq 1 ] && [ "$minor" -lt 11 ]; then printf 'legacy'; else printf 'endpoint'; fi
 }
 
+probe_port() {
+	local id="$1" hash
+	hash=$(printf '%s' "$id" | md5sum | cut -c1-4)
+	printf '%d' "$((20000 + (0x$hash % 10000)))"
+}
+
 append_node() {
-	local s="$1" enabled label protocol server port password sni insecure alpn uuid congestion udp_mode public_key short_id fingerprint security transport path host flow alter_id credential auxiliary pin_sha256 private_key local_address reserved mtu
+	local s="$1" enabled label protocol server port password sni insecure alpn uuid congestion udp_mode public_key short_id fingerprint security transport path host flow alter_id credential auxiliary pin_sha256 private_key local_address reserved mtu pre_shared_key test_port
 	config_get_bool enabled "$s" enabled 1
 	[ "$enabled" -eq 1 ] || return 0
 	config_get label "$s" label "$s"; config_get protocol "$s" protocol
@@ -46,10 +52,12 @@ append_node() {
 		trojan) credential=$password; auxiliary= ;;
 		wireguard) credential=$private_key; auxiliary= ;;
 	esac
+	test_port=$(probe_port "$s")
+	printf 'probe|%s|%s\n' "$s" "$test_port" >> "$RUNDIR/normalized.conf"
 	printf 'node|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$s" "$protocol" "$server" "$port" "$credential" "$sni" "$insecure" "$alpn" "$auxiliary" "$congestion" "$udp_mode" "$public_key" "$short_id" "$fingerprint" "$security" "$transport" "$path" "$host" "$pin_sha256" "$private_key" "$local_address" "$reserved" "$mtu" "$pre_shared_key" >> "$RUNDIR/normalized.conf"
 	local safe_label
 	safe_label=$(printf '%s' "$label" | tr '|' ' ')
-	printf '%s|%s|%s|%s|%s\n' "$s" "$safe_label" "$protocol" "$server" "$port" >> "$RUNDIR/nodes"
+	printf '%s|%s|%s|%s|%s|%s\n' "$s" "$safe_label" "$protocol" "$server" "$port" "$test_port" >> "$RUNDIR/nodes"
 }
 
 append_ip() { DEVICE_IPS="${DEVICE_IPS}${DEVICE_IPS:+,}$1"; }

@@ -1,13 +1,10 @@
 #!/bin/sh
 # node-test.sh — manual connection test for one proxy node.
 #
-# WireGuard nodes run the same handshake probe the monitor loop uses (the
-# function is extracted from the patched node-health.sh, so there is
-# exactly one implementation), bypassing the 60s result cache so the user
-# gets a fresh answer on demand. Every other protocol gets a TCP
-# reachability probe of the node's server:port (tcping when installed,
-# busybox nc otherwise). Prints one JSON object; always exits 0 so rpcd
-# forwards the reply untouched.
+# Every protocol is tested through the loopback HTTP inbound of the already
+# running Gateway sing-box. The inbound is compiled with a fixed route to
+# this node's existing outbound, so no second sing-box process is needed.
+# Prints one JSON object; always exits 0 so rpcd forwards the reply untouched.
 
 set -eu
 
@@ -20,62 +17,15 @@ if [ -z "$server" ] || [ -z "$port" ]; then
 	exit 0
 fi
 
-proto=$(uci -q get "wificalling-gateway.$id.protocol") || true
-if [ "$proto" = wireguard ]; then
-	health=/usr/libexec/wificalling-gateway/node-health.sh
-	[ -f "$health" ] || {
-		printf '{"state":"failed","reason":"no_health_script"}\n'
-		exit 0
-	}
-
-	# Extract the handshake function from the patched monitor script so
-	# the manual test and the monitor loop share one implementation.
-	func=$(mktemp /tmp/wg-test-func.XXXXXX)
-	trap 'rm -f "$func"' EXIT HUP INT TERM
-	awk '/^wg_handshake_test\(\)/,/^}/' "$health" > "$func"
-	. "$func"
-
-	# The monitor loop may be mid-test right now; wait for its lock so
-	# this run is authoritative (a handshake takes up to ~8s, give it 20s).
-	n=0
-	while [ -d /tmp/wg-health.lock ]; do
-		n=$((n + 1))
-		[ "$n" -ge 40 ] && {
-			printf '{"state":"failed","reason":"busy"}\n'
-			exit 0
-		}
-		sleep 1
-	done
-
-	# Bypass the 60s cache: the cached result is exactly what the user
-	# is asking to re-check.
-	rm -f "/tmp/wg-health-$id"
-
-	if exit_ip=$(wg_handshake_test "$id" "$server" "$port"); then
-		printf '{"state":"handshake_ok","exit_ip":"%s"}\n' "$exit_ip"
-	else
-		reason=$(sed -n '3p' "/tmp/wg-health-$id" 2>/dev/null || echo unreachable)
-		printf '{"state":"handshake_failed","reason":"%s"}\n' "$reason"
-	fi
+test_port=$(printf '%s' "$id" | md5sum | cut -c1-4)
+test_port=$((20000 + (0x$test_port % 10000)))
+result=$(curl -sS --max-time 8 -x "http://127.0.0.1:$test_port" \
+	-w '\n%{time_total}' 'http://ip-api.com/json?fields=query' 2>/dev/null || true)
+seconds=$(printf '%s\n' "$result" | tail -n 1)
+ms=$(printf '%s\n' "$seconds" | awk '/^[0-9]+(\.[0-9]+)?$/ { printf "%.2f", $1 * 1000 }')
+[ -n "$ms" ] || {
+	printf '{"state":"unreachable","reason":"proxy_failed"}\n'
 	exit 0
-fi
-
-# Non-WireGuard protocols: TCP reachability of the node server.
-if command -v tcping >/dev/null 2>&1; then
-	ms=$(tcping -c 1 -t 2 -p "$port" "$server" 2>/dev/null |
-		sed -n 's/.*time=\([0-9][0-9.]*\)[[:space:]]*ms.*/\1/p' | head -n 1)
-	if [ -n "$ms" ]; then
-		printf '{"state":"tcp_reachable","ping_ms":"%s"}\n' "$ms"
-	else
-		printf '{"state":"unreachable","reason":"tcp_failed"}\n'
-	fi
-elif command -v nc >/dev/null 2>&1; then
-	if nc -w 3 "$server" "$port" >/dev/null 2>&1; then
-		printf '{"state":"tcp_reachable","ping_ms":null}\n'
-	else
-		printf '{"state":"unreachable","reason":"tcp_failed"}\n'
-	fi
-else
-	printf '{"state":"failed","reason":"no_tcp_probe"}\n'
-fi
+}
+printf '{"state":"proxy_reachable","measurement":"proxy","ping_ms":"%s"}\n' "$ms"
 exit 0

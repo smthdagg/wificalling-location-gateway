@@ -68,7 +68,7 @@ return view.extend({
 				var reason = wgFailReason(n.reason);
 				return wlocI18n.t('Handshake failed') + (reason ? ' (' + reason + ')' : '');
 			}
-			if (n.state === 'reachable' || n.state === 'tcp_reachable') return wlocI18n.t('Alive');
+			if (n.state === 'reachable' || n.state === 'tcp_reachable' || n.state === 'proxy_reachable') return wlocI18n.t('Alive');
 			if (n.state === 'unreachable') return wlocI18n.t('Offline');
 			return wlocI18n.t('Unknown');
 		}
@@ -149,7 +149,7 @@ return view.extend({
 				else if (r && r.state === 'handshake_failed') {
 					testNotify(wlocI18n.t('Handshake failed') + ' (' + wgFailReason(r.reason) + ')', 'error', wgFailDetail(r.reason));
 				}
-				else if (r && r.state === 'tcp_reachable') {
+				else if (r && (r.state === 'tcp_reachable' || r.state === 'proxy_reachable')) {
 					testNotify(wlocI18n.t('Alive') + (r.ping_ms ? ' — ' + r.ping_ms + ' ms' : ''), 'info');
 				}
 				else if (r && r.state === 'unreachable') {

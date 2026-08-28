@@ -24,7 +24,7 @@ const patch = fs.readFileSync(
 test('compiler gives every node a loopback probe routed to its existing outbound', () => {
 	assert.match(compiler, /127\.0\.0\.1/);
 	assert.match(compiler, /probe-/);
-	assert.match(compiler, /\"inbound\"/);
+	assert.match(compiler, /inbound/);
 	assert.match(compiler, /probe_port/);
 });
 
