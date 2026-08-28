@@ -100,6 +100,7 @@ patch_psk=0; patch_health=0; patch_compact=0; patch_device_guard=0
 }
 [ -f /usr/libexec/wificalling-gateway/node-health.sh ] && {
 	grep -q 'wg_handshake_test' /usr/libexec/wificalling-gateway/node-health.sh && patch_health=1
+	grep -q 'node_icmp_test' /usr/libexec/wificalling-gateway/node-health.sh && patch_health=1
 	grep -q 'compact_status_marker' /usr/libexec/wificalling-gateway/node-health.sh && patch_compact=1
 }
 

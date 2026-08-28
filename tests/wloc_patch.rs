@@ -6,7 +6,7 @@
 
 use wificalling_location_gateway::wloc::{
     coord_to_int, encode_length_delimited_field, encode_varint_field, patch_payload,
-    patch_wloc_response, synthesize_wloc_response, PatchTarget, WLOC_MARKER,
+    patch_wloc_response, PatchTarget, WLOC_MARKER,
 };
 
 const LAT: f64 = 51.5074; // London
@@ -16,13 +16,18 @@ fn target() -> PatchTarget {
     PatchTarget::new(LAT, LON)
 }
 
-/// Build a Location sub-message with the given coordinate varints plus an
-/// unknown field (7) to verify byte-for-byte preservation.
+/// Build a Location with fields that must remain Apple-provided.
 fn location_payload(lat: i64, lon: i64) -> Vec<u8> {
     [
         encode_varint_field(1, lat),
         encode_varint_field(2, lon),
+        encode_varint_field(3, 555),
+        encode_varint_field(4, 3),
+        encode_varint_field(5, 530),
+        encode_varint_field(6, 1000),
         encode_length_delimited_field(7, b"unknown-kept"),
+        encode_varint_field(11, 63),
+        encode_varint_field(12, 467),
     ]
     .concat()
 }
@@ -53,7 +58,9 @@ fn root_payload() -> Vec<u8> {
         coord_to_int(-74.0060),
     ));
     [
-        encode_varint_field(3, 999), // root drop field
+        encode_varint_field(3, 999),
+        encode_varint_field(4, 111),
+        encode_varint_field(33, 222),
         encode_length_delimited_field(2, &wifi),
         encode_length_delimited_field(22, &cell),
         encode_length_delimited_field(9, b"preserved-root"),
@@ -140,16 +147,39 @@ fn invalid_coordinates_are_rejected_fail_open() {
 // --- Location sub-message ---
 
 #[test]
-fn location_unknown_fields_are_preserved_byte_for_byte() {
+fn location_rewrites_only_coordinates_and_horizontal_accuracy() {
     let original = location_payload(coord_to_int(37.7749), coord_to_int(-122.4194));
-    let patched = patch_payload(&original, &target()).unwrap();
-
-    // Field 7 (unknown) must survive byte-for-byte.
-    let kept = fields_of(&patched)
-        .into_iter()
-        .find(|(number, _, _)| *number == 7)
-        .expect("unknown field must survive");
-    assert_eq!(kept.2, encode_length_delimited_field(7, b"unknown-kept"));
+    let root = encode_length_delimited_field(1, &original);
+    let patched = patch_payload(&root, &target()).unwrap();
+    let patched_location = strip_length_prefix(&fields_of(&patched)[0].2);
+    let patched_fields = fields_of(&patched_location);
+    assert_eq!(
+        decode_varint_field(&patched_fields.iter().find(|(n, _, _)| *n == 1).unwrap().2),
+        coord_to_int(LAT)
+    );
+    assert_eq!(
+        decode_varint_field(&patched_fields.iter().find(|(n, _, _)| *n == 2).unwrap().2),
+        coord_to_int(LON)
+    );
+    assert_eq!(
+        decode_varint_field(&patched_fields.iter().find(|(n, _, _)| *n == 3).unwrap().2),
+        39
+    );
+    for field in [4, 5, 6, 7, 11, 12] {
+        assert_eq!(
+            patched_fields
+                .iter()
+                .find(|(n, _, _)| *n == field)
+                .unwrap()
+                .2,
+            fields_of(&original)
+                .iter()
+                .find(|(n, _, _)| *n == field)
+                .unwrap()
+                .2,
+            "Apple field {field} must be byte-for-byte preserved"
+        );
+    }
 }
 
 // --- Recursive wifi / cell patching (through a root payload) ---
@@ -270,7 +300,7 @@ fn cell_response_location_is_replaced() {
 }
 
 #[test]
-fn missing_wifi_location_is_appended() {
+fn missing_wifi_location_is_not_added() {
     let wifi = encode_length_delimited_field(1, b"bssid-only"); // no field 2
     let root = encode_length_delimited_field(2, &wifi);
     let patched = patch_payload(&root, &target()).unwrap();
@@ -282,11 +312,12 @@ fn missing_wifi_location_is_appended() {
         .expect("wifi field must remain");
     let wifi_value = strip_length_prefix(&wifi.2);
     let nested = fields_of(&wifi_value);
-    let location = nested
-        .iter()
-        .find(|(number, wire, _)| *number == 2 && *wire == 2)
-        .expect("location must be appended to wifi");
-    assert!(!location.2.is_empty());
+    assert!(
+        !nested
+            .iter()
+            .any(|(number, wire, _)| *number == 2 && *wire == 2),
+        "a missing Apple Location must not be fabricated"
+    );
 }
 
 // --- Root payload ---
@@ -298,7 +329,7 @@ fn root_location_field_is_patched() {
     let root_location = location_payload(coord_to_int(10.0), coord_to_int(20.0));
     let mut payload = Vec::new();
     payload.extend(encode_length_delimited_field(1, &root_location));
-    payload.extend(encode_varint_field(3, 999)); // dropped field
+    payload.extend(encode_varint_field(3, 999));
 
     let patched = patch_payload(&payload, &target()).unwrap();
     let fields = fields_of(&patched);
@@ -309,58 +340,20 @@ fn root_location_field_is_patched() {
     let location = location_of_field(&root.2);
     assert_eq!(location.0, coord_to_int(LAT));
     assert_eq!(location.1, coord_to_int(LON));
-    assert!(!fields.iter().any(|(number, _, _)| *number == 3));
+    assert!(fields.iter().any(|(number, _, _)| *number == 3));
 }
 
 #[test]
-fn synthesize_response_from_request_without_upstream() {
-    // A request with a WifiDevice is turned into a response with the patched
-    // WifiDevice - no upstream needed. The real client frames requests in
-    // the Wloc10 envelope, and the synthesized response must use the
-    // standard gs-loc header.
-    let request = wloc10_envelope(&root_payload());
-    let synthesized = synthesize_wloc_response(&request, &target()).unwrap();
-    assert_eq!(&synthesized[..6], &[0x00, 0x01, 0x00, 0x00, 0x00, 0x01]);
-    let new_len = u32::from_be_bytes([
-        synthesized[6],
-        synthesized[7],
-        synthesized[8],
-        synthesized[9],
-    ]) as usize;
-    assert_eq!(synthesized.len(), 10 + new_len);
-    let fields = fields_of(&synthesized[10..10 + new_len]);
-    let wifi = fields
-        .iter()
-        .find(|(number, wire, _)| *number == 2 && *wire == 2)
-        .expect("WifiDevice from the request must be reused");
-    let wifi_value = strip_length_prefix(&wifi.2);
-    let location = fields_of(&wifi_value)
-        .into_iter()
-        .find(|(number, wire, _)| *number == 2 && *wire == 2)
-        .expect("WifiDevice must contain a Location");
-    let (lat, lon) = location_of_field(&location.2);
-    assert_eq!(lat, coord_to_int(LAT));
-    assert_eq!(lon, coord_to_int(LON));
-    assert!(
-        fields.iter().all(|(number, _, _)| *number == 2),
-        "synthesized response must contain only WifiDevice fields"
-    );
-}
-
-#[test]
-fn synthesize_rejects_invalid_request() {
-    assert!(synthesize_wloc_response(b"not-protobuf", &target()).is_err());
-}
-
-#[test]
-fn root_drop_fields_are_removed_and_others_preserved() {
+fn root_fields_are_preserved() {
     let patched = patch_payload(&root_payload(), &target()).unwrap();
     let fields = fields_of(&patched);
 
     assert!(
-        !fields.iter().any(|(number, _, _)| *number == 3),
-        "root drop field 3 must be removed"
+        fields.iter().any(|(number, _, _)| *number == 3),
+        "root field 3 must be preserved"
     );
+    assert!(fields.iter().any(|(number, _, _)| *number == 4));
+    assert!(fields.iter().any(|(number, _, _)| *number == 33));
     assert!(
         fields.iter().any(|(number, _, _)| *number == 9),
         "non-drop root field 9 must be preserved"

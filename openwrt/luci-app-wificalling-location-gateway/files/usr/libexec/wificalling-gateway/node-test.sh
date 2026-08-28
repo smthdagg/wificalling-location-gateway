@@ -1,9 +1,5 @@
 #!/bin/sh
-# node-test.sh — manual connection test for one proxy node.
-#
-# Every protocol is tested through the loopback HTTP inbound of the already
-# running Gateway sing-box. The inbound is compiled with a fixed route to
-# this node's existing outbound, so no second sing-box process is needed.
+# node-test.sh — manual endpoint latency test for one proxy node.
 # Prints one JSON object; always exits 0 so rpcd forwards the reply untouched.
 
 set -eu
@@ -17,15 +13,11 @@ if [ -z "$server" ] || [ -z "$port" ]; then
 	exit 0
 fi
 
-test_port=$(printf '%s' "$id" | md5sum | cut -c1-4)
-test_port=$((20000 + (0x$test_port % 10000)))
-result=$(curl -sS --max-time 8 -x "http://127.0.0.1:$test_port" \
-	-w '\n%{time_total}' 'http://ip-api.com/json?fields=query' 2>/dev/null || true)
-seconds=$(printf '%s\n' "$result" | tail -n 1)
-ms=$(printf '%s\n' "$seconds" | awk '/^[0-9]+(\.[0-9]+)?$/ { printf "%.2f", $1 * 1000 }')
+result=$(ping -q -c 1 -W 2 "$server" 2>/dev/null || true)
+ms=$(printf '%s\n' "$result" | sed -n 's/.*= [0-9.]*\/\([0-9.]*\)\/[0-9.]* ms.*/\1/p')
 [ -n "$ms" ] || {
-	printf '{"state":"unreachable","reason":"proxy_failed"}\n'
+	printf '{"state":"unreachable","reason":"icmp_failed"}\n'
 	exit 0
 }
-printf '{"state":"proxy_reachable","measurement":"proxy","ping_ms":"%s"}\n' "$ms"
+printf '{"state":"reachable","measurement":"icmp","ping_ms":"%s"}\n' "$ms"
 exit 0

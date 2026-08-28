@@ -2,7 +2,7 @@
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
-version=${1:-1.3.0-r8}
+version=${1:-1.3.0-r9}
 dependency_mode=${2:-production}
 package=luci-app-wificalling-location-gateway
 source_dir="$root/openwrt/$package/files"
@@ -228,9 +228,31 @@ PY
 			cat > "$stage/control/preinst" <<'PREINST'
 #!/bin/sh
 [ -n "${IPKG_INSTROOT:-}" ] && exit 0
+wait_for_managed_processes() {
+	i=0
+	while [ "$i" -lt 15 ]; do
+		running=
+		for cmdline in /proc/[0-9]*/cmdline; do
+			[ -r "$cmdline" ] || continue
+			first=$(tr '\000' '\n' < "$cmdline" 2>/dev/null | sed -n '1p')
+			case "$first" in
+				*/wloc-service) running=1; break;;
+				*/sing-box|*/sing-box-lite)
+					tr '\000' ' ' < "$cmdline" 2>/dev/null | grep -F '/var/run/wificalling-gateway/sing-box.json' >/dev/null && running=1
+					[ -n "$running" ] && break;;
+			esac
+		done
+		[ -z "$running" ] && return 0
+		sleep 1
+		i=$((i + 1))
+	done
+	logger -t wificalling-location-gateway 'managed process did not exit before package operation'
+	return 1
+}
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
-rm -rf /tmp/wloc-probe
+wait_for_managed_processes || exit 1
+rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256 /tmp/sing-box-lite.new.* /tmp/node-health-*
 exit 0
 PREINST
 			cp "$stage/control/preinst" "$stage/control/prerm"
@@ -240,7 +262,6 @@ PREINST
 [ -n "${IPKG_INSTROOT:-}" ] && exit 0
 /etc/init.d/wificalling-gateway enable >/dev/null 2>&1 || true
 /etc/init.d/wloc-service enable >/dev/null 2>&1 || true
-killall -q wloc-service >/dev/null 2>&1 || true
 rm -f /var/run/wloc-service/control.sock
 mkdir -p /var/run/wificalling-gateway
 chmod 0700 /var/run/wificalling-gateway

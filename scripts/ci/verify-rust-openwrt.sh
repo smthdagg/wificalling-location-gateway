@@ -63,7 +63,13 @@ done
 
 mkdir -p "$download_dir" "$output_dir"
 
-if ! docker image inspect "$RUST_IMAGE" >/dev/null 2>&1; then
+# Docker accepts tag@digest for `run` but some clients reject that form for
+# `image inspect`; inspect the local tag, and accept a digest-only pull (CI
+# fetches by digest and may or may not alias the tag), while all build
+# containers still use the immutable digest reference above.
+rust_image_tag=${RUST_IMAGE%@*}
+if ! docker image inspect "$rust_image_tag" >/dev/null 2>&1 &&
+    ! docker image inspect "$RUST_IMAGE" >/dev/null 2>&1; then
     fail "pinned build image is missing; fetch it explicitly with: docker pull --platform linux/amd64 $RUST_IMAGE"
 fi
 

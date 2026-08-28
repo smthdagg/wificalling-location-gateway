@@ -407,7 +407,7 @@ async fn non_wloc_path_passes_through_unchanged() {
 }
 
 #[tokio::test]
-async fn upstream_connect_failure_is_reported_to_proxy_health() {
+async fn upstream_connect_failure_resets_only_its_stream() {
     // Reserve a local port and close it so the proxy gets a deterministic
     // connection-refused error instead of depending on an external network.
     let unavailable = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -436,12 +436,12 @@ async fn upstream_connect_failure_is_reported_to_proxy_health() {
         .handshake::<_, Bytes>(client_tls)
         .await
         .unwrap();
-    tokio::spawn(async move {
+    let driver = tokio::spawn(async move {
         let _ = connection.await;
     });
 
-    // Use a non-WLOC path so this test remains about upstream error
-    // propagation even when local WLOC synthesis is enabled in production.
+    // Use a non-WLOC path so this test stays focused on upstream error
+    // propagation rather than response rewriting.
     let request = Request::builder()
         .method("GET")
         .uri("https://gs-loc.apple.com/health-check")
@@ -450,15 +450,17 @@ async fn upstream_connect_failure_is_reported_to_proxy_health() {
     let (response_future, _send) = send_request.send_request(request, true).unwrap();
     assert!(
         response_future.await.is_err(),
-        "the client connection must close"
+        "the failed stream must be reset"
     );
+    drop(send_request);
+    driver.abort();
 
     let result = tokio::time::timeout(std::time::Duration::from_secs(2), handler)
         .await
         .expect("proxy handler should finish")
         .expect("proxy task should not panic");
     assert!(
-        result.is_err(),
-        "an upstream failure must reach the caller so proxy health records a failure"
+        result.is_ok(),
+        "one failed stream must not fail the connection"
     );
 }

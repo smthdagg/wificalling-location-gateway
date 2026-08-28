@@ -2,20 +2,18 @@
 //!
 //! Reads the Wi-Fi Calling Gateway's running sing-box configuration
 //! (`/var/run/wificalling-gateway/sing-box.json`), finds the outbound bound to
-//! the assigned test device, builds a minimal temporary configuration that
-//! reuses that outbound behind a local HTTP proxy, starts a second sing-box
-//! instance, and asks an IP echo service through it to learn the node's real
-//! exit IP. The temporary instance is always cleaned up.
+//! the assigned test device, and asks an IP echo service through the matching
+//! loopback probe inbound already owned by the running Gateway sing-box.
 //!
-//! Parsing and probe-config generation are pure functions tested offline; the
-//! process orchestration runs only on the router.
+//! Parsing and port selection are pure functions tested offline; network I/O
+//! runs through the existing Gateway listener on the router.
 
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use super::runtime::{ExitProbeRuntime, ProbeFailure};
 use super::ExitProbeError;
@@ -24,7 +22,6 @@ use super::ExitProbeError;
 #[derive(Clone, Debug)]
 pub struct SingBoxOutbound {
     pub tag: String,
-    raw: Value,
 }
 
 /// A parsed sing-box wireguard endpoint (sing-box 1.13+ keeps wireguard
@@ -32,7 +29,6 @@ pub struct SingBoxOutbound {
 #[derive(Clone, Debug)]
 pub struct SingBoxEndpoint {
     pub tag: String,
-    raw: Value,
 }
 
 /// The parsed configuration pieces the probe needs.
@@ -147,10 +143,7 @@ pub fn parse_singbox_config(document: &Value) -> SingBoxConfig {
                 .iter()
                 .filter_map(|item| {
                     let tag = item.get("tag")?.as_str()?.to_owned();
-                    Some(SingBoxOutbound {
-                        tag,
-                        raw: item.clone(),
-                    })
+                    Some(SingBoxOutbound { tag })
                 })
                 .collect()
         })
@@ -163,10 +156,7 @@ pub fn parse_singbox_config(document: &Value) -> SingBoxConfig {
                 .iter()
                 .filter_map(|item| {
                     let tag = item.get("tag")?.as_str()?.to_owned();
-                    Some(SingBoxEndpoint {
-                        tag,
-                        raw: item.clone(),
-                    })
+                    Some(SingBoxEndpoint { tag })
                 })
                 .collect()
         })
@@ -177,51 +167,26 @@ pub fn parse_singbox_config(document: &Value) -> SingBoxConfig {
     }
 }
 
-/// Build a minimal probe configuration: a local HTTP inbound plus the target
-/// node (a regular outbound, or a wireguard endpoint re-emitted from the
-/// Gateway config) and a direct fallback. For endpoints the sing-box 1.13
-/// model routes through the endpoint by naming it as `route.final` (the same
-/// shape the node-health handshake probe uses).
-pub fn build_probe_config(
-    config: &SingBoxConfig,
-    node_tag: &str,
-    listen_port: u16,
-) -> Result<String, ProbeFailure> {
-    let inbound = json!({
-        "type": "http",
-        "tag": "probe",
-        "listen": "127.0.0.1",
-        "listen_port": listen_port
-    });
-
-    if let Some(outbound) = config.outbounds.iter().find(|o| o.tag == node_tag) {
-        let mut outbounds = vec![outbound.raw.clone()];
-        outbounds.push(json!({"type": "direct", "tag": "direct"}));
-        let probe = json!({
-            "log": {"level": "warn"},
-            "inbounds": [inbound],
-            "outbounds": outbounds,
-            "route": {
-                "final": node_tag
-            }
-        });
-        return serde_json::to_string(&probe).map_err(|_| ProbeFailure::InvalidData);
-    }
-
-    if let Some(endpoint) = config.endpoints.iter().find(|e| e.tag == node_tag) {
-        let probe = json!({
-            "log": {"level": "warn"},
-            "inbounds": [inbound],
-            "endpoints": [endpoint.raw.clone()],
-            "outbounds": [{"type": "direct", "tag": "direct"}],
-            "route": {
-                "final": node_tag
-            }
-        });
-        return serde_json::to_string(&probe).map_err(|_| ProbeFailure::InvalidData);
-    }
-
-    Err(ProbeFailure::Unreachable)
+/// Find the loopback HTTP inbound compiled for an existing node. The Gateway
+/// owns these listeners; WLOC must reuse one instead of starting a probe
+/// sing-box process of its own.
+pub fn existing_probe_port(document: &Value, node_tag: &str) -> Option<u16> {
+    let node_id = node_tag
+        .strip_prefix("node-")
+        .or_else(|| node_tag.strip_prefix("wg-"))?;
+    let expected_tag = format!("probe-{node_id}");
+    document
+        .get("inbounds")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|inbound| {
+            inbound.get("type").and_then(Value::as_str) == Some("http")
+                && inbound.get("tag").and_then(Value::as_str) == Some(expected_tag.as_str())
+                && inbound.get("listen").and_then(Value::as_str) == Some("127.0.0.1")
+        })
+        .and_then(|inbound| inbound.get("listen_port").and_then(Value::as_u64))
+        .and_then(|port| u16::try_from(port).ok())
+        .filter(|port| (1024..=65535).contains(port))
 }
 
 /// Ask an IP echo service through the local HTTP proxy and return the exit IP.
@@ -281,10 +246,7 @@ pub fn parse_wan_ips(text: &str) -> Vec<IpAddr> {
 pub struct SingBoxProbe {
     config_path: PathBuf,
     device_ip: IpAddr,
-    probe_port: u16,
-    work_dir: PathBuf,
     timeout: Duration,
-    singbox_bin: String,
     /// Gateway device-policy UCI file (test-injectable). Used to resolve
     /// the bound node for devices that have no route rule (e.g. disabled
     /// Wi-Fi Calling policies), so follow-device still probes their node.
@@ -292,19 +254,11 @@ pub struct SingBoxProbe {
 }
 
 impl SingBoxProbe {
-    pub fn new(
-        config_path: PathBuf,
-        device_ip: IpAddr,
-        probe_port: u16,
-        work_dir: PathBuf,
-    ) -> Self {
+    pub fn new(config_path: PathBuf, device_ip: IpAddr) -> Self {
         Self {
             config_path,
             device_ip,
-            probe_port,
-            work_dir,
             timeout: Duration::from_secs(15),
-            singbox_bin: "/usr/bin/sing-box".to_owned(),
             uci_config_path: PathBuf::from("/etc/config/wificalling-gateway"),
         }
     }
@@ -352,63 +306,14 @@ impl SingBoxProbe {
         Err(ProbeFailure::BoundNodeMissing)
     }
 
-    /// Probe the node's real exit IP through a temporary sing-box instance.
+    /// Probe the node's real exit IP through the running Gateway sing-box.
     fn probe_with_node(&self, outbound_tag: &str) -> Result<IpAddr, ProbeFailure> {
         let text =
             std::fs::read_to_string(&self.config_path).map_err(|_| ProbeFailure::Unreachable)?;
         let document: Value = serde_json::from_str(&text).map_err(|_| ProbeFailure::InvalidData)?;
-        let config = parse_singbox_config(&document);
-        let probe_config = build_probe_config(&config, outbound_tag, self.probe_port)?;
-
-        std::fs::create_dir_all(&self.work_dir).map_err(|_| ProbeFailure::Unreachable)?;
-        let config_path = self.work_dir.join("probe-config.json");
-        std::fs::write(&config_path, probe_config).map_err(|_| ProbeFailure::Unreachable)?;
-
-        let mut child = Command::new(&self.singbox_bin)
-            .args(["run", "-c"])
-            .arg(&config_path)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|_| ProbeFailure::Unreachable)?;
-
-        // Give sing-box a moment to bind the probe listener, then query.
-        std::thread::sleep(Duration::from_millis(800));
-        let mut result = query_exit_ip(self.probe_port, self.timeout);
-
-        // Classify a failed probe from sing-box's stderr (DNS failures,
-        // timeouts, unreachable servers) so the monitor can show the reason.
-        // Kill the child first: reading its stderr to EOF while it is still
-        // running would block forever.
-        let _ = child.kill();
-        let _ = child.wait();
-        if result.is_err() {
-            if let Some(mut stderr) = child.stderr.take() {
-                let mut text = String::new();
-                use std::io::Read;
-                let _ = stderr.read_to_string(&mut text);
-                result = Err(classify_probe_stderr(&text));
-            }
-        }
-        let _ = std::fs::remove_file(&config_path);
-        result
-    }
-}
-
-/// Classify a failed probe from sing-box stderr output: DNS lookup errors,
-/// connection timeouts, and everything else (unreachable).
-fn classify_probe_stderr(stderr: &str) -> ProbeFailure {
-    if stderr.contains("lookup")
-        && (stderr.contains("empty result")
-            || stderr.contains("no such host")
-            || stderr.contains("NXDOMAIN")
-            || stderr.contains("i/o timeout"))
-    {
-        ProbeFailure::DnsLookupFailed
-    } else if stderr.contains("timeout") || stderr.contains("timed out") {
-        ProbeFailure::Timeout
-    } else {
-        ProbeFailure::Unreachable
+        let probe_port =
+            existing_probe_port(&document, outbound_tag).ok_or(ProbeFailure::BoundNodeMissing)?;
+        query_exit_ip(probe_port, self.timeout)
     }
 }
 
@@ -488,6 +393,7 @@ fn _keep_error_link(error: ExitProbeError) -> ExitProbeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     fn sample_document() -> Value {
         json!({
@@ -504,19 +410,16 @@ mod tests {
     }
 
     #[test]
-    fn parse_outbounds_and_build_probe_config() {
-        let doc = sample_document();
-        let config = parse_singbox_config(&doc);
-        assert_eq!(config.outbounds.len(), 2);
-        assert_eq!(config.outbounds[0].tag, "node-hk");
-
-        let probe = build_probe_config(&config, "node-hk", 18080).unwrap();
-        let probe: Value = serde_json::from_str(&probe).unwrap();
-        assert_eq!(probe["inbounds"][0]["type"], "http");
-        assert_eq!(probe["inbounds"][0]["listen_port"], 18080);
-        assert_eq!(probe["route"]["final"], "node-hk");
-        assert_eq!(probe["outbounds"].as_array().unwrap().len(), 2);
-        assert_eq!(probe["outbounds"][0]["tag"], "node-hk");
+    fn existing_probe_port_is_selected_for_the_followed_node() {
+        let document = json!({
+            "inbounds": [
+                {"type": "http", "tag": "probe-a", "listen": "127.0.0.1", "listen_port": 23456},
+                {"type": "http", "tag": "probe-b", "listen": "127.0.0.1", "listen_port": 24567}
+            ]
+        });
+        assert_eq!(existing_probe_port(&document, "node-a"), Some(23456));
+        assert_eq!(existing_probe_port(&document, "wg-b"), Some(24567));
+        assert_eq!(existing_probe_port(&document, "node-missing"), None);
     }
 
     #[test]
@@ -530,51 +433,6 @@ mod tests {
             select_outbound_tag(&doc, IpAddr::V4(Ipv4Addr::new(192, 168, 31, 176))),
             None
         );
-    }
-
-    #[test]
-    fn unknown_outbound_is_rejected() {
-        let doc = sample_document();
-        let config = parse_singbox_config(&doc);
-        assert_eq!(
-            build_probe_config(&config, "missing", 18080),
-            Err(ProbeFailure::Unreachable)
-        );
-    }
-
-    #[test]
-    fn wireguard_endpoint_probe_config_is_built() {
-        // sing-box 1.13 keeps wireguard peers in `endpoints`: the probe
-        // config must re-emit the endpoint and route through it, exactly
-        // like the node-health handshake probe.
-        let doc = json!({
-            "outbounds": [{"type": "direct", "tag": "direct"}],
-            "endpoints": [{
-                "type": "wireguard",
-                "tag": "node-wgtest",
-                "address": ["10.48.48.64/21"],
-                "private_key": "abc",
-                "peers": [{"address": "1.2.3.4", "port": 51820, "public_key": "def"}]
-            }]
-        });
-        let config = parse_singbox_config(&doc);
-        assert_eq!(config.endpoints.len(), 1);
-        assert_eq!(config.endpoints[0].tag, "node-wgtest");
-
-        let probe = build_probe_config(&config, "node-wgtest", 18080).unwrap();
-        let probe: Value = serde_json::from_str(&probe).unwrap();
-        assert_eq!(probe["endpoints"][0]["tag"], "node-wgtest");
-        assert_eq!(probe["endpoints"][0]["type"], "wireguard");
-        assert_eq!(probe["route"]["final"], "node-wgtest");
-        assert_eq!(probe["outbounds"].as_array().unwrap().len(), 1);
-        assert_eq!(probe["outbounds"][0]["type"], "direct");
-        assert!(probe
-            .get("outbounds")
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|o| { o.get("type").and_then(Value::as_str) != Some("wireguard") }));
     }
 
     #[test]
@@ -598,8 +456,6 @@ mod tests {
         let mut probe = SingBoxProbe::new(
             config_path.clone(),
             IpAddr::V4(Ipv4Addr::new(192, 168, 31, 176)),
-            18080,
-            dir.join("wloc-singbox-wg-endpoint-work"),
         );
         probe.uci_config_path = uci_path.clone();
         // Selection resolves to the wireguard endpoint tag; the sing-box
@@ -625,23 +481,21 @@ mod tests {
     }
 
     #[test]
-    fn load_outbound_tag_falls_back_without_route_rules() {
+    fn missing_existing_probe_inbound_fails_closed() {
         let doc = json!({"outbounds": [
             {"type": "hysteria2", "tag": "node-a"},
             {"type": "direct", "tag": "direct"}
-        ]});
+        ], "route": {"rules": [
+            {"source_ip_cidr": ["192.168.31.176/32"], "outbound": "node-a"}
+        ]}});
         let dir = std::env::temp_dir();
         let config_path = dir.join("wloc-singbox-fallback.json");
         std::fs::write(&config_path, doc.to_string()).unwrap();
         let mut probe = SingBoxProbe::new(
             config_path.clone(),
             IpAddr::V4(Ipv4Addr::new(192, 168, 31, 176)),
-            18080,
-            dir.join("wloc-singbox-fallback-work"),
         );
-        // Falls back to node-a (first non-direct), then the sing-box spawn
-        // fails on this host -> Unreachable.
-        let _ = probe.probe_exit_ip();
+        assert_eq!(probe.probe_exit_ip(), Err(ProbeFailure::BoundNodeMissing));
         std::fs::remove_file(&config_path).unwrap();
         let _ = std::fs::remove_dir_all(dir.join("wloc-singbox-fallback-work"));
     }
@@ -750,8 +604,6 @@ config device
         let mut probe = SingBoxProbe::new(
             config_path.clone(),
             IpAddr::V4(Ipv4Addr::new(192, 168, 31, 175)),
-            18_082,
-            dir.join("wloc-singbox-fp-work"),
         );
         probe.uci_config_path = uci_path.clone();
 
@@ -804,8 +656,6 @@ config device
         let mut probe = SingBoxProbe::new(
             config_path.clone(),
             IpAddr::V4(Ipv4Addr::new(192, 168, 31, 176)),
-            18080,
-            dir.join("wloc-singbox-bound-node-work"),
         );
         probe.uci_config_path = uci_path.clone();
         // load_outbound_tag must select the bound node tag; the sing-box
@@ -835,8 +685,6 @@ config device
         let mut probe = SingBoxProbe::new(
             config_path.clone(),
             IpAddr::V4(Ipv4Addr::new(192, 168, 31, 175)),
-            18_083,
-            dir.join(format!("wloc-deleted-node-work-{suffix}")),
         );
         probe.uci_config_path = uci_path.clone();
 
@@ -875,8 +723,6 @@ config device
         let mut probe = SingBoxProbe::new(
             config_path.clone(),
             IpAddr::V4(Ipv4Addr::new(192, 168, 31, 175)),
-            18_084,
-            dir.join(format!("wloc-deleted-device-work-{suffix}")),
         );
         probe.uci_config_path = uci_path.clone();
 
@@ -890,72 +736,6 @@ config device
     }
 
     #[test]
-    fn probe_does_not_hang_when_singbox_stderr_stays_open() {
-        use std::time::Instant;
-        // A probe child that keeps writing to stderr but never exits must
-        // not block the caller: the child is killed before its stderr is
-        // drained (regression: read_to_string before kill deadlocked).
-        let dir = std::env::temp_dir();
-        let fake_bin = dir.join("wloc-fake-singbox.sh");
-        std::fs::write(
-            &fake_bin,
-            "#!/bin/sh\nwhile true; do echo 'lookup bad-node.invalid: empty result' >&2; sleep 1; done\n",
-        )
-        .unwrap();
-        let mut perms = std::fs::metadata(&fake_bin).unwrap().permissions();
-        use std::os::unix::fs::PermissionsExt;
-        perms.set_mode(0o755);
-        std::fs::set_permissions(&fake_bin, perms).unwrap();
-
-        let config_path = dir.join("wloc-singbox-hang.json");
-        std::fs::write(&config_path, sample_document().to_string()).unwrap();
-        let mut probe = SingBoxProbe::new(
-            config_path.clone(),
-            IpAddr::V4(Ipv4Addr::new(192, 168, 31, 175)),
-            18_081,
-            dir.join("wloc-singbox-hang-work"),
-        );
-        probe.timeout = Duration::from_millis(300);
-        probe.singbox_bin = fake_bin.to_string_lossy().into_owned();
-
-        let started = Instant::now();
-        let result = probe.probe_exit_ip();
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), ProbeFailure::DnsLookupFailed);
-        assert!(
-            started.elapsed() < Duration::from_secs(10),
-            "probe must return promptly, not hang on a live stderr pipe"
-        );
-        std::fs::remove_file(&config_path).unwrap();
-        std::fs::remove_file(&fake_bin).unwrap();
-        let _ = std::fs::remove_dir_all(dir.join("wloc-singbox-hang-work"));
-    }
-
-    #[test]
-    fn classify_probe_stderr_distinguishes_dns_timeout_and_unreachable() {
-        assert_eq!(
-            classify_probe_stderr("lookup aws-link3.liangxin1.xyz: empty result"),
-            ProbeFailure::DnsLookupFailed
-        );
-        assert_eq!(
-            classify_probe_stderr("lookup node.example.com on 127.0.0.1:53: i/o timeout"),
-            ProbeFailure::DnsLookupFailed
-        );
-        assert_eq!(
-            classify_probe_stderr("dial tcp 1.2.3.4:443: i/o timeout"),
-            ProbeFailure::Timeout
-        );
-        assert_eq!(
-            classify_probe_stderr("dial tcp 1.2.3.4:443: connect: connection refused"),
-            ProbeFailure::Unreachable
-        );
-        assert_eq!(
-            classify_probe_stderr("random sing-box startup noise"),
-            ProbeFailure::Unreachable
-        );
-    }
-
-    #[test]
     fn load_outbound_tag_reads_the_gateway_config() {
         let dir = std::env::temp_dir();
         let config_path = dir.join("wloc-singbox-load-test.json");
@@ -963,11 +743,9 @@ config device
         let mut probe = SingBoxProbe::new(
             config_path.clone(),
             IpAddr::V4(Ipv4Addr::new(192, 168, 31, 175)),
-            18080,
-            dir.join("wloc-singbox-load-work"),
         );
-        // load_outbound_tag picks node-hk from the route rule; the subsequent
-        // sing-box spawn fails on this host, which is fine (Unreachable).
+        // load_outbound_tag picks node-hk from the route rule; the missing
+        // loopback inbound then fails closed.
         let _ = probe.probe_exit_ip();
         std::fs::remove_file(&config_path).unwrap();
         let _ = std::fs::remove_dir_all(dir.join("wloc-singbox-load-work"));

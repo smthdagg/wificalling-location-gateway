@@ -68,7 +68,7 @@
 5. 只拦截该设备访问：
    - `gs-loc.apple.com`
    - `gs-loc-cn.apple.com`
-6. 支持 Apple WLOC 所需 TLS、HTTP/2、二进制/protobuf 响应解析和修改。
+6. 支持 Apple WLOC 所需 TLS、HTTP/2、二进制/protobuf 响应解析和修改，覆盖六个已确认的精确运行时域名。
 7. 返回合理的城市级低精度位置。
 8. 不运行 Shadowrocket 时，iPhone 网络定位随节点出口变化。
 9. 不影响普通 HTTPS、UDP 500/4500、Wi-Fi Calling 注册和真实通话。
@@ -210,7 +210,7 @@ CA 生命周期必须自动化验收：
 
 - 私钥始终 0600；
 - LuCI、日志、支持包和普通配置备份不包含私钥；
-- leaf certificate SAN 只能是两个精确 Apple hostname；
+- leaf certificate SAN 只能是六个精确 WLOC hostname；
 - CA 重新生成后必须清空旧 leaf cache；
 - stop 操作先撤销 redirect，再停止引擎；
 - 卸载时询问是否删除 CA，避免无提示破坏用户已信任的证书链。
@@ -491,7 +491,7 @@ Gateway 1.7/后续版本只声明可选集成，不把引擎设为强制依赖�
 ### 9.4 OpenWrt 集成
 
 - 只匹配指定设备；
-- 只匹配两个 WLOC 域名；
+- 只匹配六个精确 WLOC 域名；
 - 独立 nft table，不修改 `wificalling_gateway`；
 - WLOC A/AAAA 地址变化与 IPv6 路径；
 - 普通 HTTPS 不进 MITM；
@@ -525,7 +525,7 @@ Gateway 1.7/后续版本只声明可选集成，不把引擎设为强制依赖�
 
 - 用户明确授权测试自己的 iPhone 和局域网；
 - UI 明确说明存在 TLS MITM；
-- 只拦截两个 Apple WLOC 域名；
+- 只拦截六个精确 WLOC 域名；
 - CA 私钥只在路由器本地；
 - 不记录完整 WLOC 请求、Wi-Fi/BSSID/cell 原始数据；
 - 不记录节点密钥；

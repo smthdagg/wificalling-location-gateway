@@ -188,12 +188,12 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
 
     /// Probe and resolve evidence when the cached observation is missing,
     /// stale, or the last probe failed.
-    fn refresh_evidence_at(&mut self, now_unix: u64) {
+    fn refresh_evidence_at(&mut self, now_unix: u64) -> bool {
         // Manual mode pins the location to the preset coordinates; exit
         // probing exists only to drive auto-follow, so it is skipped
         // entirely in manual mode (no reverse probe, no misleading IP).
         if matches!(self.geo_source, GeoSource::Manual { .. }) {
-            return;
+            return true;
         }
         let fingerprint = self.probe.config_fingerprint();
         let fresh = matches!(
@@ -203,7 +203,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                     <= self.probe_limits.max_observation_age.as_secs()
         );
         if !probe_needed(fresh, fingerprint, self.last_probe_fingerprint) {
-            return;
+            return matches!(self.geo_resolution, GeoResolution::Fresh(_));
         }
 
         match observe_exit(
@@ -238,12 +238,14 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                     eprintln!("wloc refresh: geo result {:?}", self.geo_resolution);
                 }
                 self.publish_patch_target();
+                matches!(self.geo_resolution, GeoResolution::Fresh(_))
             }
             Err(error) => {
                 self.exit_evidence = ExitEvidence::Unavailable;
                 self.geo_resolution = GeoResolution::Unavailable;
                 self.last_probe_error = Some(error.to_string());
                 self.publish_patch_target();
+                false
             }
         }
     }
@@ -313,7 +315,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             "latitude": target.map(|t| t.latitude),
             "longitude": target.map(|t| t.longitude),
         });
-        append_line(events_file, &event);
+        crate::service::append_event_line(events_file, &event);
     }
 
     /// Write the root-local status JSON (includes GPS for the admin UI).
@@ -515,7 +517,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     pub fn force_evidence_refresh(&mut self) {
         self.exit_evidence = ExitEvidence::None;
         self.last_probe_fingerprint = None;
-        self.refresh_evidence_at(current_unix());
+        let _ = self.refresh_evidence_at(current_unix());
         self.refresh_state_file();
     }
 
@@ -523,8 +525,42 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     #[doc(hidden)]
     pub fn refresh_periodic_at(&mut self, now_unix: u64) {
         self.consume_pending_manual_geo();
-        self.refresh_evidence_at(now_unix);
+        if !self.refresh_runtime_health() {
+            self.refresh_state_file_at(now_unix);
+            return;
+        }
+        let _ = self.refresh_evidence_at(now_unix);
+        if self.desired_state == DesiredState::Enabled
+            && self.state.phase() == ServicePhase::Disabled
+        {
+            let _ = self.enable();
+        }
         self.refresh_state_file_at(now_unix);
+    }
+
+    /// Withdraw interception when the shared Gateway engine disappears. Keep
+    /// the desired state enabled so the next healthy periodic tick can restore
+    /// it after procd restarts sing-box.
+    fn refresh_runtime_health(&mut self) -> bool {
+        if !matches!(
+            self.state.phase(),
+            ServicePhase::Starting | ServicePhase::ReadyPassThrough | ServicePhase::Intercepting
+        ) {
+            return true;
+        }
+        let healthy = self.runtime.engine_healthy().unwrap_or(false);
+        if healthy {
+            return true;
+        }
+        eprintln!("wloc-service: shared Gateway engine is unhealthy; withdrawing interception");
+        if control_disable(&mut self.runtime).is_ok() {
+            for event in [ServiceEvent::BeginDisable, ServiceEvent::EngineStopped] {
+                if let Ok(next) = reduce(&self.state, event) {
+                    self.state = next;
+                }
+            }
+        }
+        false
     }
 
     /// The generation of the current manual target (test hook).
@@ -665,11 +701,20 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
         if self.state.phase() != ServicePhase::Disabled {
             return Err(DispatchError::InvalidConfig);
         }
+        // A daemon restart starts with an in-memory Disabled state while a
+        // previous process may have left a redirect behind. Always withdraw
+        // that stale state before rejecting an unsafe scope configuration.
+        if !self.scope_valid || !self.assigned_device_configured {
+            control_disable(&mut self.runtime).map_err(map_control_error)?;
+            return Err(DispatchError::InvalidConfig);
+        }
         // Prime the device -> exit IP -> Geo association before the runtime
         // installs interception. Otherwise the first WLOC request after a
         // restart can pass through with an empty target while the first
         // periodic refresh is still running.
-        self.refresh_evidence_at(current_unix());
+        if !self.refresh_evidence_at(current_unix()) {
+            return Err(DispatchError::Unavailable);
+        }
         control_enable(&mut self.runtime, self.scope_valid, self.ipv6_ready)
             .map_err(map_control_error)?;
         self.apply_enable_events();
@@ -678,9 +723,6 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
     }
 
     fn disable(&mut self) -> Result<(), DispatchError> {
-        if self.state.phase() == ServicePhase::Disabled {
-            return Ok(());
-        }
         control_disable(&mut self.runtime).map_err(map_control_error)?;
         for event in [ServiceEvent::BeginDisable, ServiceEvent::EngineStopped] {
             match reduce(&self.state, event) {
@@ -735,24 +777,6 @@ fn probe_needed(
     last_fingerprint: Option<u64>,
 ) -> bool {
     !fresh || current_fingerprint != last_fingerprint
-}
-
-/// Append one JSON line to an append-only log file (bounded to avoid
-/// unbounded growth).
-fn append_line(path: &std::path::Path, value: &serde_json::Value) {
-    use std::io::Write as _;
-    let mut line = serde_json::to_string(value).unwrap_or_default();
-    line.push('\n');
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-    {
-        let _ = file.write_all(line.as_bytes());
-    }
 }
 
 #[cfg(test)]

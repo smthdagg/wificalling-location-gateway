@@ -9,7 +9,6 @@
 #   assigned_device  LAN IP of the test device whose node binding is probed
 #   probe_interval   max age for auto evidence; periodic health rechecks it
 #   geo_provider     http (ip-api.com) | stub (deterministic, for staging)
-#   probe_port       local HTTP proxy port used to observe the exit IP
 #
 # Presets below are saved manual locations managed from LuCI; selecting one
 # copies its coordinates into manual_lat/manual_lon and sets geo_source.
@@ -25,7 +24,6 @@ config wloc-service 'main'
 	# wificalling-gateway config instead of any fixed example address.
 	option probe_interval '300'
 	option geo_provider 'http'
-	option probe_port '18080'
 
 config preset 'london'
 	option label 'London'

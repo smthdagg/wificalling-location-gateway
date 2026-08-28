@@ -89,8 +89,8 @@ fn enable_installs_redirect_only_after_engine_health_and_watchdog() {
 }
 
 #[test]
-fn invalid_scope_or_ipv6_policy_performs_no_runtime_operation() {
-    for (scope_valid, ipv6_ready) in [(false, true), (true, false), (false, false)] {
+fn invalid_scope_performs_no_runtime_operation() {
+    for (scope_valid, ipv6_ready) in [(false, true), (false, false)] {
         let mut runtime = FakeRuntime::default();
         assert_eq!(
             enable(&mut runtime, scope_valid, ipv6_ready),
@@ -98,6 +98,15 @@ fn invalid_scope_or_ipv6_policy_performs_no_runtime_operation() {
         );
         assert!(runtime.operations.is_empty());
     }
+}
+
+#[test]
+fn disabled_ipv6_does_not_block_ipv4_interception() {
+    let mut runtime = FakeRuntime {
+        healthy: true,
+        ..FakeRuntime::default()
+    };
+    assert!(enable(&mut runtime, true, false).is_ok());
 }
 
 #[test]

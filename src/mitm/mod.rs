@@ -2,7 +2,7 @@
 //!
 //! Generates an in-memory root CA and per-host leaf certificates at runtime on
 //! the router; the private keys are never persisted, exported, or committed.
-//! The rustls resolver serves a leaf only for the two approved Apple hostnames
+//! The rustls resolver serves a leaf only for the six approved WLOC hostnames
 //! (fail-closed), so no other domain can ever be impersonated.
 
 pub mod http1;
@@ -149,7 +149,7 @@ impl CaBundle {
     }
 
     /// Issue a server-auth leaf certificate for `hostname`. **Fail-closed**:
-    /// only the two approved Apple WLOC hostnames can be issued.
+    /// only the six approved WLOC hostnames can be issued.
     pub fn issue_leaf(&self, hostname: &str) -> Result<LeafCertificate, MitmError> {
         if !APPROVED_WLOC_HOSTS.contains(&hostname) {
             return Err(MitmError::HostNotApproved(hostname.to_owned()));
@@ -227,9 +227,13 @@ impl MitmCertResolver {
 impl ResolvesServerCert for MitmCertResolver {
     fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<RustlsCertifiedKey>> {
         let server_name = client_hello.server_name()?;
-        // rustls gives the SNI without a trailing dot; normalize before lookup.
+        // DNS names are case-insensitive. Trim the optional root dot and
+        // compare without changing the exact allowlist.
         let hostname = server_name.trim_end_matches('.');
-        self.leaves.get(hostname).cloned()
+        self.leaves
+            .iter()
+            .find(|(approved, _)| approved.eq_ignore_ascii_case(hostname))
+            .map(|(_, leaf)| Arc::clone(leaf))
     }
 }
 

@@ -11,7 +11,7 @@ device set, an exact-WLOC destination set, a kernel-expiring live-lease set,
 and a redirect predicate. Both address families must be healthy before either
 can intercept. There is no IPv4-only degraded interception mode.
 
-The alternative—suppressing AAAA only for the assigned device and the two WLOC
+The alternative—suppressing AAAA only for the assigned device and the six WLOC
 names—is rejected for this design. The known AX6S constraints (memory, storage,
 and existing IPv4-only Gateway policy) do not establish that two small IPv6
 sets and a symmetric rule are infeasible. Full dual stack also avoids a special
@@ -32,7 +32,7 @@ A connection is eligible only when every predicate is true:
 1. its source is the currently assigned single test device in the matching
    IPv4 or IPv6 source set;
 2. its destination is a current, unexpired A or AAAA address learned from
-   exactly `gs-loc.apple.com` or `gs-loc-cn.apple.com`;
+   exactly one of the six approved WLOC hostnames;
 3. it is TCP destination port 443;
 4. the matching assigned-device key has a live kernel timeout element; and
 5. TLS ingress independently confirms one exact approved hostname before any
@@ -68,7 +68,7 @@ ownership.
 
 ## DNS rotation and reload
 
-Only answers originating from the two complete names may enter a generation.
+Only answers originating from the six complete names may enter a generation.
 Only syntactically valid A and AAAA records are accepted. Each element expires
 at its authoritative record TTL; expired addresses cannot be copied into a new
 generation. An update builds both family sets off-path and atomically replaces
@@ -112,7 +112,7 @@ calling reboot the rollback mechanism.
 
 Enable is fail-closed until its final two operations:
 
-1. validate one device, two exact names, TCP 443, object ownership, and bounds;
+1. validate one device, six exact names, TCP 443, object ownership, and bounds;
 2. build and validate current A and AAAA generations;
 3. prove the unified IPv4/IPv6 path and device binding;
 4. start the engine in pass-through mode and prove engine health;

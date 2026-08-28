@@ -47,8 +47,12 @@ impl<S: ServiceDispatch> ControlServer<S> {
                     self.handler.refresh_periodic();
                 }
                 accepted = listener.accept() => {
-                    if let Ok((stream, _)) = accepted {
-                        self.handle_connection(stream).await;
+                    match accepted {
+                        Ok((stream, _)) => self.handle_connection(stream).await,
+                        Err(error) => {
+                            eprintln!("wloc control socket accept failed: {error}");
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        }
                     }
                 }
             }

@@ -32,10 +32,10 @@ plan=$(
 )
 
 for expected in \
-	'wificalling-location-gateway_1.3.0-r8_x86_64.ipk' \
-	'wificalling-location-gateway-lite_1.3.0-r8_x86_64.ipk' \
-	'wificalling-location-gateway-1.3.0-r8.apk' \
-	'wificalling-location-gateway-lite-1.3.0-r8.apk'; do
+	'wificalling-location-gateway_1.3.0-r9_x86_64.ipk' \
+	'wificalling-location-gateway-lite_1.3.0-r9_x86_64.ipk' \
+	'wificalling-location-gateway-1.3.0-r9.apk' \
+	'wificalling-location-gateway-lite-1.3.0-r9.apk'; do
 	printf '%s\n' "$plan" | grep -F "$expected" >/dev/null ||
 		fail "dual-variant plan is missing $expected"
 done
@@ -78,13 +78,26 @@ grep -F "provides='wificalling-location-gateway, sing-box" "$ax6s_builder" >/dev
 	fail 'Lite must provide the integrated product and sing-box runtime'
 grep -F "conflicts='wificalling-location-gateway, sing-box'" "$ax6s_builder" >/dev/null ||
 	fail 'Lite must not coexist with the standard product or standard sing-box package'
-if grep -F 'GOMEMLIMIT=' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null; then
-	fail 'Lite runtime profile must not impose an artificial sing-box heap limit'
-fi
+grep -F 'GOMEMLIMIT=48MiB' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Lite runtime profile must keep enough headroom for Passwall and the router kernel'
 grep -F 'GOMAXPROCS=1' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
 	fail 'Lite runtime profile must retain single-worker scheduling'
-grep -F 'GOGC=75' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
-	fail 'Lite runtime profile must retain the moderate GC target'
+grep -F 'GOGC=50' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Lite runtime profile must reclaim memory before AX6S reaches OOM pressure'
+grep -F 'minimum_available_kib=32768' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Gateway must reserve enough RAM to avoid an installation-time OOM'
+grep -F 'minimum_available_kib=65536' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Lite cold start must reserve RAM for its tmpfs runtime image'
+grep -F 'MemAvailable' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Gateway memory preflight must use the kernel available-memory metric'
+grep -F 'rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256' "$ax6s_builder" >/dev/null ||
+	fail 'AX6S package lifecycle must remove its stopped tmpfs runtime before upgrade'
+grep -F 'rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256' "$release_builder" >/dev/null ||
+	fail 'release package lifecycle must remove its stopped tmpfs runtime before upgrade'
+grep -F '/tmp/node-health-*' "$ax6s_builder" >/dev/null ||
+	fail 'AX6S package lifecycle must clear stale node-health cache before upgrade'
+grep -F '/tmp/node-health-*' "$release_builder" >/dev/null ||
+	fail 'release package lifecycle must clear stale node-health cache before upgrade'
 grep -F '/usr/bin/sing-box' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
 	fail 'both variants must keep the shared sing-box executable contract'
 grep -F '/usr/share/wificalling-location-gateway/sing-box-lite.gz' "$runtime_packager" >/dev/null ||

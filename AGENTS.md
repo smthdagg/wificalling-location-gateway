@@ -53,13 +53,45 @@ Issue-specific ownership overrides this table. Ownership is a time-limited lease
 
 Use `scripts/agent-takeover.sh <issue> <agent> <slug> <capabilities> [ttl-minutes]` to start or resume work. Use `scripts/agent-handoff.sh <issue> <agent> <capabilities>` to release a resumable checkpoint.
 
+## AX6S upgrade and debugging cleanup gate
+
+Every package upgrade or debugging session performed on a real AX6S must end
+with the following cleanup and evidence check before the device is handed back
+or a release is accepted:
+
+1. Record `free`, `df -h /tmp /overlay`, the relevant process list, and the
+   package version before testing. Treat `/tmp` as RAM: uploaded IPKs, extracted
+   runtimes, logs, and test outputs consume memory, not just disk space.
+2. Keep large upload artifacts in `/root` when possible. If `/tmp` is required,
+   maintain an explicit list of files created by the session and remove those
+   files after installation/testing, including failed or superseded IPKs. Use
+   short, bounded commands or a cleanup trap so SSH command truncation cannot
+   silently skip cleanup.
+3. Never run a blanket `rm -rf /tmp` on a live gateway. Preserve the active
+   `/tmp/sing-box-lite`, its checksum marker, `/var/run` sockets/configuration,
+   PassWall runtime state, and user files; remove only session-owned temporary
+   artifacts after verifying their exact paths.
+4. After cleanup, verify the package/service version, service health, control
+   socket, and steady-state process count. There must be no transient probe,
+   duplicate sing-box, shell, curl, or package-install process left behind;
+   any second long-lived sing-box owned by an explicitly enabled service such
+   as PassWall must be identified and included in the memory budget.
+5. Repeat `free` and `df -h /tmp /overlay`. The post-test available memory must
+   return to the pre-test baseline within 10 MiB and remain at least 32 MiB;
+   otherwise block the release and investigate. Do not use `drop_caches` to hide
+   leaked files or processes.
+6. If OOM or a service crash occurs, save the relevant `logread`/kernel OOM
+   evidence before cleanup, identify the triggering operation, then clean and
+   re-measure. A test is not complete while stale packages or temporary
+   runtimes remain in `/tmp`.
+
 ## Hard gates
 
 - Do not implement WLOC response patching before the Phase 0 authorized-fixture and license ADR Issues are closed.
 - Never commit CA private keys, node credentials, captured device identifiers, raw production traffic, tokens, or precise user location. Local pre-push scanning and CI reduce accidental leaks but cannot stop an authorized writer who bypasses the workflow.
 - All parser and network inputs require size, time, concurrency, and schema limits.
 - Unknown protocol, invalid Geo data, or engine failure must not produce a default fake coordinate.
-- WLOC interception must remain limited to the assigned test device, two exact Apple hostnames, and TCP 443.
+- WLOC interception must remain limited to the assigned test device, six exact WLOC hostnames, and TCP 443.
 - Never intercept UDP 500/4500 or modify the integrated WCG nftables table.
 - Changes under `internal/ca/`, `internal/proxy/`, `openwrt/`, or `.github/workflows/` require security review.
 

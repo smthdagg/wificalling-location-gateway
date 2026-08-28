@@ -15,14 +15,16 @@ pub mod service;
 pub mod tls_h2;
 pub mod wloc;
 
-/// Approved WLOC hostnames whose traffic may be intercepted. The Apple names
-/// CNAME to the autonavi bluedot service, so a real request can arrive with
-/// either the Apple or the bluedot hostname as its SNI/Host.
-pub const APPROVED_WLOC_HOSTS: [&str; 4] = [
+/// Approved WLOC hostnames whose traffic may be intercepted. Keep this an
+/// exact-name list: iOS may use either Apple compatibility name or a CNAME
+/// target as the TLS SNI/Host observed on the router.
+pub const APPROVED_WLOC_HOSTS: [&str; 6] = [
     "gs-loc.apple.com",
     "gs-loc-cn.apple.com",
+    "gsp-ssl.ls.apple.com",
     "bluedot.is.autonavi.com",
     "bluedot.is.autonavi.com.gds.alibabadns.com",
+    "gspe19-cn-ssl-ls-apple-com.v.aaplimg.com",
 ];
 pub const MAX_WLOC_BODY_BYTES: u64 = 512 * 1024;
 const MIN_H2_FRAME_SIZE: u32 = 16 * 1024;

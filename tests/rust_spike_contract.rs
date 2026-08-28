@@ -1,6 +1,6 @@
 use wificalling_location_gateway::{
     build_tls_stack, inspect_candidate, roundtrip_synthetic_probe, run_h2_prior_knowledge_smoke,
-    CandidateMeta, GateDecision, MAX_WLOC_BODY_BYTES,
+    CandidateMeta, GateDecision, APPROVED_WLOC_HOSTS, MAX_WLOC_BODY_BYTES,
 };
 
 #[test]
@@ -25,6 +25,19 @@ fn exact_wloc_hosts_are_the_only_candidates() {
         content_length: Some(128),
     };
     assert_eq!(GateDecision::Candidate, inspect_candidate(&secondary_host));
+
+    for hostname in APPROVED_WLOC_HOSTS {
+        let candidate = CandidateMeta {
+            source_ip: "192.0.2.10".to_string(),
+            hostname: hostname.to_string(),
+            content_length: Some(128),
+        };
+        assert_eq!(
+            GateDecision::Candidate,
+            inspect_candidate(&candidate),
+            "approved host {hostname} must remain a candidate",
+        );
+    }
 }
 
 #[test]

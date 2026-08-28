@@ -7,7 +7,7 @@
 //! Fail-open: any interception error forwards the original upstream response
 //! unchanged; a malformed WLOC response is never replaced.
 
-use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
@@ -24,6 +24,9 @@ pub const WLOC_PATH: &str = "/clls/wloc";
 const MAX_FORWARD_BODY_BYTES: usize = 512 * 1024;
 /// Concurrent upstream streams per client connection.
 const MAX_STREAMS: usize = 8;
+/// A client that opens an HTTP/2 stream but never finishes its POST must not
+/// occupy one of the router's eight proxy slots for the full connection life.
+const REQUEST_BODY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// HTTP/2 MITM proxy bound to one approved hostname's traffic.
 #[derive(Clone)]
@@ -33,14 +36,11 @@ pub struct MitmProxy {
     /// Test hook: override the TCP connect target while keeping the approved
     /// hostname for SNI and the Host header. Production uses hostname:443.
     upstream_override: Option<(String, u16)>,
+    /// Per-host public DNS answers used only when local DNS maps the approved
+    /// name back to this router for TPROXY ingress.
+    upstream_override_file: Option<std::path::PathBuf>,
     /// Append-only rewrite log (one JSON line per patched response).
     events_file: Option<std::path::PathBuf>,
-    /// Per-client cache of the last synthesized BlockBSSIDApple payload
-    /// (visible APs at the target). Coordinate queries (kind 3) carry no
-    /// BSSIDs of their own, so they are answered from here instead of with
-    /// an empty block - that is what makes older iOS accept the target on
-    /// the first try instead of retrying for several refresh cycles.
-    synthesized_payloads: Arc<Mutex<HashMap<String, Vec<u8>>>>,
 }
 
 impl MitmProxy {
@@ -72,8 +72,8 @@ impl MitmProxy {
             tls_config: Arc::new(server),
             upstream_connector: TlsConnector::from(Arc::new(client)),
             upstream_override: None,
+            upstream_override_file: None,
             events_file: None,
-            synthesized_payloads: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -90,6 +90,12 @@ impl MitmProxy {
         self
     }
 
+    /// Read host-specific public upstream answers before each request.
+    pub fn with_upstream_override_file(mut self, path: std::path::PathBuf) -> Self {
+        self.upstream_override_file = Some(path);
+        self
+    }
+
     /// Serve one accepted client TCP connection: TLS terminate, run the H2
     /// server, and proxy each request to the upstream, patching WLOC
     /// responses. Returns once the client connection closes.
@@ -98,11 +104,13 @@ impl MitmProxy {
         client_tcp: TcpStream,
         patch_state: Arc<Mutex<Option<PatchTarget>>>,
     ) -> Result<(), MitmProxyError> {
-        let client_addr = client_tcp
-            .peer_addr()
+        // TPROXY preserves the client's original Apple destination as the
+        // accepted socket's local address. Reuse it so a stale first DNS
+        // result can never pin every request to a dead CDN address.
+        let original_destination = client_tcp
+            .local_addr()
             .ok()
-            .map(|addr| addr.ip().to_string())
-            .unwrap_or_else(|| "-".to_owned());
+            .filter(is_usable_original_destination);
         let client_tls = TlsAcceptor::from(Arc::clone(&self.tls_config))
             .accept(client_tcp)
             .await
@@ -122,27 +130,52 @@ impl MitmProxy {
                 Err(_) => break,
             };
             let (request, mut respond) = request;
-            // Refresh the target for every request: iOS can reuse this HTTP/2
-            // connection after the exit/IP association has changed.
-            let patch = patch_state.lock().ok().and_then(|guard| *guard);
-            match self
-                .forward_upstream(request, patch.as_ref(), &client_addr)
-                .await
-            {
-                Ok((original_len, patched_body)) => {
-                    self.append_rewrite_event(patch.as_ref(), original_len, patched_body.len());
-                    let mut send = respond
-                        .send_response(Response::new(()), patched_body.is_empty())
-                        .map_err(|error| MitmProxyError::H2(error.to_string()))?;
-                    if !patched_body.is_empty() {
-                        let _ = send.send_data(Bytes::from(patched_body), true);
+            let proxy = self.clone();
+            let patch_state = Arc::clone(&patch_state);
+            tokio::spawn(async move {
+                // iOS opens speculative POST streams beside the stream that
+                // carries the actual Wi-Fi scan. Keep one idle stream from
+                // delaying the other (the H2 server caps this at MAX_STREAMS).
+                let patch = patch_state.lock().ok().and_then(|guard| *guard);
+                match proxy
+                    .forward_upstream(request, patch.as_ref(), original_destination)
+                    .await
+                {
+                    Ok((status, headers, original_len, patched_body, rewritten)) => {
+                        proxy.append_rewrite_event(
+                            patch.as_ref(),
+                            original_len,
+                            patched_body.len(),
+                            rewritten,
+                        );
+                        let mut response = Response::new(());
+                        *response.status_mut() = status;
+                        for (name, value) in headers {
+                            if let Some(name) = name {
+                                if !matches!(
+                                    name.as_str(),
+                                    "connection"
+                                        | "content-length"
+                                        | "keep-alive"
+                                        | "proxy-connection"
+                                        | "transfer-encoding"
+                                        | "upgrade"
+                                ) {
+                                    response.headers_mut().append(name, value);
+                                }
+                            }
+                        }
+                        if let Ok(mut send) =
+                            respond.send_response(response, patched_body.is_empty())
+                        {
+                            if !patched_body.is_empty() {
+                                let _ = send.send_data(Bytes::from(patched_body), true);
+                            }
+                        }
                     }
+                    Err(error) => eprintln!("wloc proxy: upstream failure: {error}"),
                 }
-                Err(error) => {
-                    eprintln!("wloc proxy: upstream failure: {error}");
-                    return Err(error);
-                }
-            }
+            });
         }
         Ok(())
     }
@@ -155,8 +188,8 @@ impl MitmProxy {
         &self,
         request: Request<h2::RecvStream>,
         patch: Option<&PatchTarget>,
-        client_addr: &str,
-    ) -> Result<(usize, Vec<u8>), MitmProxyError> {
+        original_destination: Option<SocketAddr>,
+    ) -> Result<(http::StatusCode, http::HeaderMap, usize, Vec<u8>, bool), MitmProxyError> {
         let hostname = approved_host(&request)?;
         let is_wloc =
             request.uri().path() == WLOC_PATH || request.uri().path().ends_with("/clls/wloc");
@@ -168,7 +201,10 @@ impl MitmProxy {
         // Read the bounded client request body.
         let mut request_body = Vec::new();
         let (parts, mut client_body) = request.into_parts();
-        while let Some(chunk) = client_body.data().await {
+        while let Some(chunk) = tokio::time::timeout(REQUEST_BODY_TIMEOUT, client_body.data())
+            .await
+            .map_err(|_| MitmProxyError::Upstream("request body timeout".into()))?
+        {
             let chunk = chunk.map_err(|error| MitmProxyError::H2(error.to_string()))?;
             request_body.extend_from_slice(&chunk);
             if request_body.len() > MAX_FORWARD_BODY_BYTES {
@@ -179,93 +215,69 @@ impl MitmProxy {
         }
         eprintln!("wloc proxy: request body {} bytes", request_body.len());
 
-        // WLOC synthesis: when enabled, answer directly from the request
-        // instead of forwarding to Apple (millisecond responses, like local
-        // proxy apps). Set WLOC_SYNTH_RESPONSE=1 to activate.
-        if is_wloc && std::env::var("WLOC_SYNTH_RESPONSE").as_deref() == Ok("1") {
-            if let Some(target) = patch {
-                let request_body = request_body.clone();
-                match crate::wloc::synthesize_wloc_response(&request_body, target) {
-                    Ok(patched) => {
-                        let (kind, payload) =
-                            crate::wloc::synthesized_parts(&patched).unwrap_or((1, &[][..]));
-                        if payload.is_empty() {
-                            // Coordinate query (kind 3): answer with the last
-                            // known visible devices instead of an empty block,
-                            // so the phone gets its APs at the target without
-                            // waiting for the next BSSID round trip.
-                            if let Some(cached) = self
-                                .synthesized_payloads
-                                .lock()
-                                .ok()
-                                .and_then(|cache| cache.get(client_addr).cloned())
-                            {
-                                let mut out = Vec::with_capacity(10 + cached.len());
-                                out.extend([0x00, 0x01, 0x00, 0x00, 0x00, kind]);
-                                out.extend((cached.len() as u32).to_be_bytes());
-                                out.extend(cached);
-                                eprintln!(
-                                    "wloc proxy: synthesized kind={kind} from cache -> {} bytes",
-                                    out.len()
-                                );
-                                return Ok((request_body.len(), out));
-                            }
-                        } else if let Ok(mut cache) = self.synthesized_payloads.lock() {
-                            cache.insert(client_addr.to_string(), payload.to_vec());
-                        }
-                        eprintln!(
-                            "wloc proxy: synthesized {} -> {} bytes (is_wloc={is_wloc})",
-                            request_body.len(),
-                            patched.len()
-                        );
-                        return Ok((request_body.len(), patched));
-                    }
-                    // Fail open: any synthesis error falls through to the
-                    // upstream forwarding path below.
-                    Err(_) => eprintln!("wloc proxy: synthesis failed, forwarding upstream"),
-                }
-            }
-        }
-
-        let (connect_host, connect_port) = match &self.upstream_override {
-            Some((host, port)) => (host.clone(), *port),
-            None => (hostname.clone(), 443),
-        };
-        let connect = TcpStream::connect((connect_host.as_str(), connect_port))
-            .await
-            .map_err(|error| MitmProxyError::Upstream(error.to_string()))?;
+        let dynamic_overrides =
+            upstream_override_for(self.upstream_override_file.as_deref(), &hostname);
+        let connect_targets = choose_upstream_targets(
+            original_destination,
+            self.upstream_override.as_ref(),
+            &dynamic_overrides,
+            &hostname,
+        );
         let server_name = rustls::pki_types::ServerName::try_from(hostname.clone())
             .map_err(|_| MitmProxyError::Upstream("invalid upstream hostname".into()))?;
-        let upstream_tls = self
-            .upstream_connector
-            .connect(server_name, connect)
-            .await
-            .map_err(|error| MitmProxyError::Upstream(error.to_string()))?;
+        let mut last_error = None;
+        let mut upstream_tls = None;
+        for (connect_host, connect_port) in connect_targets {
+            let result = async {
+                let connect = TcpStream::connect((connect_host.as_str(), connect_port)).await?;
+                self.upstream_connector
+                    .connect(server_name.clone(), connect)
+                    .await
+            }
+            .await;
+            match result {
+                Ok(stream) => {
+                    upstream_tls = Some(stream);
+                    break;
+                }
+                Err(error) => last_error = Some(error.to_string()),
+            }
+        }
+        let upstream_tls = upstream_tls.ok_or_else(|| {
+            MitmProxyError::Upstream(last_error.unwrap_or_else(|| "no upstream target".into()))
+        })?;
 
         // The real Apple /clls/wloc endpoint serves HTTP/1.1; an h2 upstream
         // fails with "frame with invalid size". Forward over HTTP/1.1 and
         // decode Content-Length / chunked bodies.
         let upstream_request = sanitized_forward_request(parts, &hostname)?;
-        let (_, _, body) =
+        let (status, headers, body) =
             crate::mitm::http1::forward_http1(upstream_tls, &upstream_request, &request_body)
                 .await?;
 
         let patched = maybe_patch_body(&body, is_wloc, patch);
+        let rewritten = patched != body;
         eprintln!(
             "wloc proxy: response body {} -> {} bytes (is_wloc={is_wloc}, patch={})",
             body.len(),
             patched.len(),
             patch.is_some()
         );
-        Ok((body.len(), patched))
+        Ok((status, headers, body.len(), patched, rewritten))
     }
 
     /// Append one rewrite event per patched WLOC response.
-    fn append_rewrite_event(&self, patch: Option<&PatchTarget>, before: usize, after: usize) {
+    fn append_rewrite_event(
+        &self,
+        patch: Option<&PatchTarget>,
+        before: usize,
+        after: usize,
+        rewritten: bool,
+    ) {
         let Some(events_file) = &self.events_file else {
             return;
         };
-        if before == after {
+        if !rewritten {
             return;
         }
         let event = serde_json::json!({
@@ -279,20 +291,61 @@ impl MitmProxy {
             "bytes_before": before,
             "bytes_after": after,
         });
-        use std::io::Write as _;
-        let mut line = serde_json::to_string(&event).unwrap_or_default();
-        line.push('\n');
-        if let Some(parent) = events_file.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(events_file)
-        {
-            let _ = file.write_all(line.as_bytes());
-        }
+        crate::service::append_event_line(events_file, &event);
     }
+}
+
+fn is_usable_original_destination(address: &SocketAddr) -> bool {
+    address.port() == 443
+        && match address.ip() {
+            std::net::IpAddr::V4(ip) => {
+                !ip.is_unspecified() && !ip.is_loopback() && !ip.is_private() && !ip.is_link_local()
+            }
+            std::net::IpAddr::V6(ip) => !ip.is_unspecified() && !ip.is_loopback(),
+        }
+}
+
+/// A stable local DNS ingress has no usable Apple destination to reuse, so
+/// resolve the requested hostname instead of reusing another host's CDN IP.
+fn choose_upstream_targets(
+    original_destination: Option<SocketAddr>,
+    explicit_override: Option<&(String, u16)>,
+    dynamic_overrides: &[(String, u16)],
+    hostname: &str,
+) -> Vec<(String, u16)> {
+    if let Some((host, port)) = explicit_override {
+        return vec![(host.clone(), *port)];
+    }
+    if let Some(address) = original_destination.filter(is_usable_original_destination) {
+        return vec![(address.ip().to_string(), address.port())];
+    }
+    if !dynamic_overrides.is_empty() {
+        return dynamic_overrides.to_vec();
+    }
+    vec![(hostname.to_owned(), 443)]
+}
+
+fn upstream_override_for(path: Option<&std::path::Path>, hostname: &str) -> Vec<(String, u16)> {
+    let Some(path) = path else {
+        return Vec::new();
+    };
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    // DNS may return several CDN addresses; retry only this hostname's first
+    // four answers, always with strict TLS verification.
+    contents
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let configured_host = fields.next()?;
+            let address = fields.next()?.parse::<std::net::IpAddr>().ok()?;
+            configured_host
+                .eq_ignore_ascii_case(hostname)
+                .then_some((address.to_string(), 443))
+        })
+        .take(4)
+        .collect()
 }
 
 /// Reject requests whose authority is not one of the approved hosts.
@@ -309,12 +362,11 @@ fn approved_host<B>(request: &Request<B>) -> Result<String, MitmProxyError> {
         .next()
         .ok_or(MitmProxyError::Upstream("invalid authority".into()))?;
     let hostname = hostname.trim_end_matches('.');
-    if !crate::APPROVED_WLOC_HOSTS.contains(&hostname) {
-        return Err(MitmProxyError::Upstream(format!(
-            "host not approved: {hostname}"
-        )));
-    }
-    Ok(hostname.to_owned())
+    crate::APPROVED_WLOC_HOSTS
+        .iter()
+        .find(|approved| approved.eq_ignore_ascii_case(hostname))
+        .map(|approved| (*approved).to_owned())
+        .ok_or_else(|| MitmProxyError::Upstream(format!("host not approved: {hostname}")))
 }
 
 /// Strip hop-by-hop and authority headers from the forwarded request so the
@@ -371,3 +423,70 @@ impl std::fmt::Display for MitmProxyError {
 }
 
 impl std::error::Error for MitmProxyError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_original_destination_wins_over_hostname_fallback() {
+        let original = Some("203.0.113.10:443".parse().unwrap());
+        let dynamic = vec![("203.0.113.20".to_owned(), 443)];
+        assert_eq!(
+            choose_upstream_targets(original, None, &dynamic, "gs-loc.apple.com"),
+            vec![("203.0.113.10".to_owned(), 443)]
+        );
+    }
+
+    #[test]
+    fn local_dns_ingress_uses_the_requested_hostname() {
+        let original = Some("192.168.31.1:443".parse().unwrap());
+        let dynamic = vec![
+            ("140.205.31.96".to_owned(), 443),
+            ("140.205.31.97".to_owned(), 443),
+        ];
+        assert_eq!(
+            choose_upstream_targets(original, None, &dynamic, "gs-loc-cn.apple.com"),
+            dynamic
+        );
+    }
+
+    #[test]
+    fn host_specific_override_never_reuses_another_hosts_address() {
+        let path = std::env::temp_dir().join(format!(
+            "wloc-upstream-map-{}-{}.txt",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(
+            &path,
+            "gs-loc.apple.com 17.252.196.22\ngs-loc-cn.apple.com 140.205.31.96\ngs-loc-cn.apple.com 140.205.31.97\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            upstream_override_for(Some(path.as_path()), "gs-loc-cn.apple.com"),
+            vec![
+                ("140.205.31.96".to_owned(), 443),
+                ("140.205.31.97".to_owned(), 443),
+            ]
+        );
+        assert_eq!(
+            upstream_override_for(Some(path.as_path()), "gsp-ssl.ls.apple.com"),
+            Vec::<(String, u16)>::new()
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn approved_host_normalizes_dns_case_and_root_dot() {
+        let request = Request::builder()
+            .uri("https://GS-LOC.APPLE.COM.:443/clls/wloc")
+            .body(())
+            .unwrap();
+        assert_eq!(approved_host(&request).unwrap(), "gs-loc.apple.com");
+    }
+}

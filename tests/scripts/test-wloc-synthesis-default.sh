@@ -4,10 +4,11 @@ set -eu
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 init="$repo_root/openwrt/files/etc/init.d/wloc-service"
 
-grep -F 'WLOC_SYNTH_RESPONSE=1' "$init" >/dev/null || {
-	echo 'FAIL: AX6S WLOC service does not enable the existing local synthesis path' >&2
+if grep -F 'WLOC_SYNTH_RESPONSE=' "$init" >/dev/null ||
+	grep -F 'synthesize_wloc_response' "$repo_root/src/mitm/proxy.rs" >/dev/null; then
+	echo 'FAIL: production WLOC must forward the Apple response for minimal rewriting' >&2
 	exit 1
-}
+fi
 
 if grep -F 'WLOC_DUMP_DIR=' "$init" >/dev/null; then
 	echo 'FAIL: production WLOC service must not dump raw request/response bodies' >&2
@@ -29,4 +30,4 @@ if grep -F 'wire_preview' "$repo_root/src/mitm/http1.rs" >/dev/null; then
 	exit 1
 fi
 
-echo 'WLOC local synthesis default passed'
+echo 'WLOC Apple minimal-rewrite default passed'

@@ -15,7 +15,14 @@ def assert_hard_security_semantics(testcase, threat_model, fail_open, contract):
         contract["scope"],
         {
             "assigned_devices": 1,
-            "hostnames": ["gs-loc.apple.com", "gs-loc-cn.apple.com"],
+            "hostnames": [
+                "gs-loc.apple.com",
+                "gs-loc-cn.apple.com",
+                "gsp-ssl.ls.apple.com",
+                "bluedot.is.autonavi.com",
+                "bluedot.is.autonavi.com.gds.alibabadns.com",
+                "gspe19-cn-ssl-ls-apple-com.v.aaplimg.com",
+            ],
             "transport": "TCP 443",
             "dedicated_table": "wificalling_location",
             "protected_table": "wificalling_gateway",
@@ -67,7 +74,14 @@ class SecurityInvariantDocumentationTests(unittest.TestCase):
         self.assertEqual(scope["assigned_devices"], 1)
         self.assertEqual(
             scope["hostnames"],
-            ["gs-loc.apple.com", "gs-loc-cn.apple.com"],
+            [
+                "gs-loc.apple.com",
+                "gs-loc-cn.apple.com",
+                "gsp-ssl.ls.apple.com",
+                "bluedot.is.autonavi.com",
+                "bluedot.is.autonavi.com.gds.alibabadns.com",
+                "gspe19-cn-ssl-ls-apple-com.v.aaplimg.com",
+            ],
         )
         self.assertEqual(scope["transport"], "TCP 443")
         self.assertEqual(scope["forbidden_udp_ports"], [500, 4500])
@@ -89,6 +103,10 @@ class SecurityInvariantDocumentationTests(unittest.TestCase):
             "one assigned test device",
             "gs-loc.apple.com",
             "gs-loc-cn.apple.com",
+            "gsp-ssl.ls.apple.com",
+            "bluedot.is.autonavi.com",
+            "bluedot.is.autonavi.com.gds.alibabadns.com",
+            "gspe19-cn-ssl-ls-apple-com.v.aaplimg.com",
             "TCP 443",
             "UDP 500/4500",
             "wificalling_location",

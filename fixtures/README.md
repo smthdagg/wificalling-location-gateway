@@ -26,7 +26,7 @@ Every candidate uses `fixtures/schema/manifest.schema.json` and records:
 
 - provenance and authorization status/record;
 - iOS version (or `not-applicable-synthetic` for synthetic data);
-- exactly `gs-loc.apple.com` or `gs-loc-cn.apple.com`;
+- exactly one of the six approved WLOC hostnames;
 - ALPN `h2`, classification, and redactions;
 - relative payload path, byte length, and lowercase SHA-256.
 
