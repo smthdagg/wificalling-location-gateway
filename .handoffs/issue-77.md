@@ -55,7 +55,7 @@ bounded direct ICMP endpoint checks so it never launches a second sing-box.
 - Built all six Standard/Lite assets for AX6S AArch64, OpenWrt 24.10
   x86_64 (IPK) and OpenWrt 25.12 x86_64 (native APK).
 
-## Validation
+## Verification
 
 - `./scripts/ci/verify.sh` full gate: Rust tests + 78.14% line coverage,
   69 Python tests, JS regression, packaging/version tests, secret scan,
@@ -68,26 +68,55 @@ bounded direct ICMP endpoint checks so it never launches a second sing-box.
   and after; single shared sing-box; `GOMAXPROCS=1 GOGC=50
   GOMEMLIMIT=48MiB`; `MemAvailable` above the 32 MiB gate; WLOC
   `intercepting`; proxy-health snapshot fresh; node-status JSON generated.
-- The GitHub v1.3.0-r8 release assets are unchanged; the feed repository
-  gh-pages index was regenerated and re-signed with the long-lived key.
+- Feed repository gh-pages index regenerated and re-signed with the
+  long-lived key; AX6S `opkg update` printed `Signature check passed` for
+  the wloc feed and listed the r9 packages.
 
-## Files changed
+## Failed attempts
 
-- `src/`: proxy stream/upstream handling, minimal WLOC patch, daemon health
-  classification and startup reset, state/control scope gating.
-- `openwrt/`: init scripts (memory preflight, DNS ingress via dnsmasq
-  nftset + host-specific upstream map, IPv6 reject-to-IPv4 fallback,
-  fail-open ordering), ICMP node health round-robin, LuCI views.
-- `scripts/`: release packaging, lite runtime packing, Docker matrix
-  environment, cross-build image probe.
-- Tests, fixtures, security invariants, README/changelog/docs, TDD evidence
-  (`docs/testing/V1.3.0_R9_WLOC_RELIABILITY.tdd.md`).
+- Docker install matrix initially failed on the OpenWrt 25.12 APK case
+  (minimal rootfs has no `/etc/config/network`; `uci` calls aborted the
+  matrix script under `set -e`, and `wloc-redirect-sync prepare` refused to
+  start without a LAN IPv4). Fixed by provisioning a minimal LAN section
+  file in the smoke container only.
+- A first LAN-config fix using `uci set`/`uci commit` itself aborted the
+  matrix (the `network` package does not exist in that rootfs); replaced
+  with a direct `/etc/config/network` file write.
+- The PR `openwrt-cross-build` check failed because the workflow pulls the
+  pinned Rust image by digest without aliasing the tag, while the build
+  scripts probe the tag. Fixed by tagging after the pull and by accepting
+  either tag or digest in both scripts.
+- The PR `pull-request-contract` check failed twice: the handoff capsule
+  was missing, then its headings did not match the contract. Both fixed in
+  this branch.
 
-## Next steps for the maintainer
+## Next executable steps
 
-- Merge the release PR after CI is green.
+- Merge this release PR after CI is green.
 - Tag `v1.3.0-r9` at the merged commit and upload the six packages,
   `SHA256SUMS`, signed `Packages`/`Packages.gz` (+ `.sig`) and bilingual
   release notes.
-- Confirm the feed upgrade on AX6S (`opkg update` prints `Signature check
-  passed` with key `f7050198aa77cf15`).
+- Confirm the feed upgrade path on AX6S (already validated: `opkg update`
+  signature passes with key `f7050198aa77cf15`; installed version now
+  `1.3.0-r9`).
+- Close issue #77 once the release is published.
+
+## Capabilities required for the next Agent
+
+- GitHub CLI (`gh`) with write access to `smthdagg/wificalling-location-gateway`
+  and `smthdagg/wificalling-location-gateway-feed`.
+- Docker for feed signing (`ghcr.io/openwrt/rootfs:x86_64-24.10.8` pinned
+  image) and for the install matrix.
+- SSH access to the AX6S test router (`192.168.31.1`, root) for upgrade
+  validation.
+
+## Security and privacy notes
+
+- No credentials are included in this capsule or in the repository.
+- The feed signing private key lives only at `~/.zcode/keys/wloc-signing.key`
+  (mode 0600) on the release machine and is never committed.
+- No raw WLOC request/response bodies, device IPs, or location coordinates
+  were recorded; logs and health files contain only counts and status
+  fields.
+- The raw-WLOC dump paths (`WLOC_DUMP_DIR`, `/tmp/wloc-forward.dump`) were
+  removed in earlier releases; the r9 audit confirmed no such paths remain.
