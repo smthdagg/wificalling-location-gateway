@@ -355,9 +355,7 @@ fn https_get(host: &str, path: &str) -> Result<Vec<u8>, GeocodeError> {
     );
     tls.write_all(request.as_bytes())
         .map_err(|_| GeocodeError::Unreachable)?;
-    let mut raw = Vec::new();
-    tls.read_to_end(&mut raw)
-        .map_err(|_| GeocodeError::Unreachable)?;
+    let raw = read_bounded(&mut tls)?;
     let header_end = raw
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
@@ -365,7 +363,16 @@ fn https_get(host: &str, path: &str) -> Result<Vec<u8>, GeocodeError> {
     Ok(raw[header_end + 4..].to_vec())
 }
 
-fn read_body(mut stream: TcpStream) -> Result<Vec<u8>, GeocodeError> {
+fn read_body(stream: TcpStream) -> Result<Vec<u8>, GeocodeError> {
+    let raw = read_bounded(stream)?;
+    let header_end = raw
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .ok_or(GeocodeError::InvalidData)?;
+    Ok(raw[header_end + 4..].to_vec())
+}
+
+fn read_bounded<R: Read>(mut stream: R) -> Result<Vec<u8>, GeocodeError> {
     let mut raw = Vec::new();
     let mut buffer = [0_u8; 4096];
     loop {
@@ -380,11 +387,7 @@ fn read_body(mut stream: TcpStream) -> Result<Vec<u8>, GeocodeError> {
             Err(_) => return Err(GeocodeError::Unreachable),
         }
     }
-    let header_end = raw
-        .windows(4)
-        .position(|window| window == b"\r\n\r\n")
-        .ok_or(GeocodeError::InvalidData)?;
-    Ok(raw[header_end + 4..].to_vec())
+    Ok(raw)
 }
 
 #[cfg(test)]

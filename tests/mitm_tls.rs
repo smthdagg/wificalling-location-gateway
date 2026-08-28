@@ -72,9 +72,16 @@ async fn approved_host_completes_handshake_with_h2_alpn() {
 }
 
 #[tokio::test]
-async fn both_approved_hosts_complete_handshake() {
+async fn all_approved_hosts_complete_handshake() {
     let ca = CaBundle::generate().unwrap();
-    for hostname in ["gs-loc.apple.com", "gs-loc-cn.apple.com"] {
+    for hostname in [
+        "gs-loc.apple.com",
+        "gs-loc-cn.apple.com",
+        "gs-loc-corpa.apple.com",
+        "gs-loc.apple.com.cn",
+        "bluedot.is.autonavi.com",
+        "bluedot.is.autonavi.com.gds.alibabadns.com",
+    ] {
         let (success, _) = handshake(server_config(&ca), client_config(&ca), hostname)
             .await
             .unwrap();

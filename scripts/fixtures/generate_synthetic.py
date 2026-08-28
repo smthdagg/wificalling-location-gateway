@@ -13,7 +13,14 @@ from pathlib import Path
 
 
 GENERATOR_VERSION = "1"
-HOSTNAMES = ("gs-loc.apple.com", "gs-loc-cn.apple.com")
+HOSTNAMES = (
+    "gs-loc.apple.com",
+    "gs-loc-cn.apple.com",
+    "gs-loc-corpa.apple.com",
+    "gs-loc.apple.com.cn",
+    "bluedot.is.autonavi.com",
+    "bluedot.is.autonavi.com.gds.alibabadns.com",
+)
 SYNTHETIC_PREFIX = b"WLG-SYNTHETIC-GOVERNANCE-V1\x00"
 
 

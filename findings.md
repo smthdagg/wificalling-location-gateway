@@ -100,7 +100,7 @@
 - 修正后 Rust spike 的 locked native release 为 951,504 bytes。曾有离线 OpenWrt AArch64 stripped 产物 1,118,872 bytes 的记录，但当前工作树未保留复现脚本、日志或产物；该数值只能作为待复验线索，不能作为主审计正式放行证据。
 - `cargo-audit 0.22.2` 未发现 RustSec 漏洞；`cargo-deny 0.20.2` 的 advisories/bans/licenses/sources 全部通过，且项目本身保持尚未授权状态。
 - `cargo tree -e features --locked` 显示 `ring 0.17.14` 通过 build-dependency `cc 1.4.2` 编译 native 代码；这比纯 Rust 依赖更依赖 OpenWrt SDK 的 C toolchain，可接受但必须作为 ARM64 spike 的显式风险项。
-- 本仓库当前权威 host 范围来自 `DEVELOPMENT_TEST_PLAN.md` 与 `docs/security/WLOC_THREAT_MODEL.md`：`gs-loc.apple.com` 和 `gs-loc-cn.apple.com`。早前历史摘要中的其他 hostname 不作为本轮实现依据。
+- 本仓库当前权威 host 范围来自 `DEVELOPMENT_TEST_PLAN.md` 与 `docs/security/WLOC_THREAT_MODEL.md`：六个精确 WLOC hostname，包括两个 Apple 主名、两个兼容名和两个 bluedot CNAME 目标；禁止通配符。
 
 ## Rust 路线审计
 

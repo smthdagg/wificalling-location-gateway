@@ -53,4 +53,7 @@ ips=$(collect | grep -v "^$ROUTER_IP$" | sort -u | tr '
 
 nft flush set inet "$TABLE" "$SET" 2>/dev/null || nft add set inet "$TABLE" "$SET" '{ type ipv4_addr; }'
 nft add element inet "$TABLE" "$SET" "{ $ips }"
+mkdir -p /var/run/wloc-service
+printf '%s\n' "${ips%%,*}" > /var/run/wloc-service/upstream-ip.tmp
+mv /var/run/wloc-service/upstream-ip.tmp /var/run/wloc-service/upstream-ip
 echo "wloc-refresh-set: updated $SET = { $ips }"

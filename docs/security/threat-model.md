@@ -8,7 +8,7 @@ This model covers one explicitly authorized test device and LAN, the isolated WL
 
 <!-- SECURITY_INVARIANT id="SCOPE-01" -->
 
-Interception is allowed only when all three predicates match: one assigned test device, one of the two exact hostnames `gs-loc.apple.com` or `gs-loc-cn.apple.com`, and TCP 443. Matching only an IP address, a hostname suffix, a wildcard, a port, or a device subnet is insufficient. A second exact hostname check is required at TLS ingress because DNS addresses can be shared or poisoned.
+Interception is allowed only when all three predicates match: one assigned test device, one of the six exact WLOC hostnames (`gs-loc.apple.com`, `gs-loc-cn.apple.com`, `gs-loc-corpa.apple.com`, `gs-loc.apple.com.cn`, `bluedot.is.autonavi.com`, or `bluedot.is.autonavi.com.gds.alibabadns.com`), and TCP 443. Matching only an IP address, a hostname suffix, a wildcard, a port, or a device subnet is insufficient. A second exact hostname check is required at TLS ingress because DNS addresses can be shared or poisoned.
 
 <!-- SECURITY_INVARIANT id="GATEWAY-01" -->
 
@@ -57,7 +57,7 @@ Each row names the mandatory control and the future executable or operational ev
 |---|---|---|---|
 | S-01 | Critical: forged Apple upstream or invalid certificate is accepted | Verify the full upstream certificate chain, validity, SNI, and exact hostname with the system or reviewed trust store; never retry with verification disabled | TLS integration: invalid chain, expiry, unknown CA, and hostname mismatch |
 | S-02 | High: a spoofed or drifted source enters the redirect | Bind exactly one assigned device to validated address/lease identity and disable interception on binding drift | Network integration: other device, spoofed source, and DHCP drift |
-| S-03 | High: poisoned DNS or a shared CDN IP captures another origin | Populate sets from only the two exact names, then require an exact ingress hostname before leaf issuance or proxying | DNS/TLS integration: rotation, shared IP, absent/wrong SNI, ordinary HTTPS |
+| S-03 | High: poisoned DNS or a shared CDN IP captures another origin | Populate sets from only the six exact names, then require an exact ingress hostname before leaf issuance or proxying | DNS/TLS integration: rotation, shared IP, absent/wrong SNI, ordinary HTTPS |
 | T-01 | Critical: WLOC changes the stable Gateway data plane | Operate only fully named `wificalling_location` objects; keep Gateway and sing-box state read-only | OpenWrt integration: before/after semantic diff and zero UDP 500/4500 hits |
 | T-02 | High: unknown or malformed protocol is patched or damaged | Patch only an authorized, frozen structure; preserve unknown fields and original bytes otherwise | Protocol: fixture round-trip, malformed, unknown version, order, and fuzz |
 | T-03 | High: poisoned, stale, conflicting, or wrong-exit Geo creates a location | Validate schema/ranges/timezone, bind cache to node plus exit IP, enforce expiry, and mark conflicts uncertain | Geo: bad schema, range, conflict, expiry, clock rollback, and exit change |
@@ -87,7 +87,7 @@ HTTP/2 limits cover SETTINGS, HTTP/2 concurrent streams, header-list bytes, fram
 
 <!-- SECURITY_INVARIANT id="IPV6-01" -->
 
-Before any real-device test, a reviewed deployment ADR must choose either a complete dual-stack implementation (IPv4 and IPv6 device/destination sets and redirect with one lifecycle) or scoped AAAA suppression for only the assigned device and two WLOC names. The service must not globally disable IPv6. If neither complete dual-stack nor scoped AAAA suppression is configured and verified, redirect remains absent. Tests must cover dual-stack, IPv6-only connectivity, TTL-driven add/delete, dnsmasq reload, address rotation, device-address drift, ordinary IPv6, and other devices.
+Before any real-device test, a reviewed deployment ADR must choose either a complete dual-stack implementation (IPv4 and IPv6 device/destination sets and redirect with one lifecycle) or scoped AAAA suppression for only the assigned device and six WLOC names. The service must not globally disable IPv6. If neither complete dual-stack nor scoped AAAA suppression is configured and verified, redirect remains absent. Tests must cover dual-stack, IPv6-only connectivity, TTL-driven add/delete, dnsmasq reload, address rotation, device-address drift, ordinary IPv6, and other devices.
 
 ## Kernel expiry lease for watchdog loss
 

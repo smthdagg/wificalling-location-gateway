@@ -75,7 +75,14 @@ class FixtureGovernanceTests(unittest.TestCase):
         self.assertEqual(schema["additionalProperties"], False)
         self.assertEqual(
             schema["properties"]["hostname"]["enum"],
-            ["gs-loc.apple.com", "gs-loc-cn.apple.com"],
+            [
+                "gs-loc.apple.com",
+                "gs-loc-cn.apple.com",
+                "gs-loc-corpa.apple.com",
+                "gs-loc.apple.com.cn",
+                "bluedot.is.autonavi.com",
+                "bluedot.is.autonavi.com.gds.alibabadns.com",
+            ],
         )
         fixture_required = set(schema["properties"]["fixture"]["required"])
         self.assertTrue({"path", "byte_length", "sha256"}.issubset(fixture_required))

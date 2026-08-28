@@ -313,7 +313,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             "latitude": target.map(|t| t.latitude),
             "longitude": target.map(|t| t.longitude),
         });
-        append_line(events_file, &event);
+        crate::service::append_event_line(events_file, &event);
     }
 
     /// Write the root-local status JSON (includes GPS for the admin UI).
@@ -665,6 +665,13 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
         if self.state.phase() != ServicePhase::Disabled {
             return Err(DispatchError::InvalidConfig);
         }
+        // A daemon restart starts with an in-memory Disabled state while a
+        // previous process may have left a redirect behind. Always withdraw
+        // that stale state before rejecting an unsafe IPv6/scope configuration.
+        if !self.scope_valid || !self.ipv6_ready {
+            control_disable(&mut self.runtime).map_err(map_control_error)?;
+            return Err(DispatchError::InvalidConfig);
+        }
         // Prime the device -> exit IP -> Geo association before the runtime
         // installs interception. Otherwise the first WLOC request after a
         // restart can pass through with an empty target while the first
@@ -678,9 +685,6 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
     }
 
     fn disable(&mut self) -> Result<(), DispatchError> {
-        if self.state.phase() == ServicePhase::Disabled {
-            return Ok(());
-        }
         control_disable(&mut self.runtime).map_err(map_control_error)?;
         for event in [ServiceEvent::BeginDisable, ServiceEvent::EngineStopped] {
             match reduce(&self.state, event) {
@@ -735,24 +739,6 @@ fn probe_needed(
     last_fingerprint: Option<u64>,
 ) -> bool {
     !fresh || current_fingerprint != last_fingerprint
-}
-
-/// Append one JSON line to an append-only log file (bounded to avoid
-/// unbounded growth).
-fn append_line(path: &std::path::Path, value: &serde_json::Value) {
-    use std::io::Write as _;
-    let mut line = serde_json::to_string(value).unwrap_or_default();
-    line.push('\n');
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-    {
-        let _ = file.write_all(line.as_bytes());
-    }
 }
 
 #[cfg(test)]

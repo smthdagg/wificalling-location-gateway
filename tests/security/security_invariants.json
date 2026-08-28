@@ -4,7 +4,11 @@
     "assigned_devices": 1,
     "hostnames": [
       "gs-loc.apple.com",
-      "gs-loc-cn.apple.com"
+      "gs-loc-cn.apple.com",
+      "gs-loc-corpa.apple.com",
+      "gs-loc.apple.com.cn",
+      "bluedot.is.autonavi.com",
+      "bluedot.is.autonavi.com.gds.alibabadns.com"
     ],
     "transport": "TCP 443",
     "dedicated_table": "wificalling_location",
@@ -62,7 +66,7 @@
     {"id": "D-02", "control": "bound TLS and H2 connections, streams, queues and timeouts", "evidence": "slow-client, stream-flood, RST and GOAWAY tests"},
     {"id": "D-03", "control": "gate redirect matches on a kernel-expiring lease renewed only while engine, scope and IPv6 are healthy", "evidence": "AX6S kill, OOM and supervisor-loss tests measure kernel lease expiry and maximum blackhole time"},
     {"id": "D-04", "control": "require an approved IPv6 mode before redirect", "evidence": "dual-stack, IPv6-only, AAAA-rotation and ordinary-IPv6 isolation tests"},
-    {"id": "E-01", "control": "issue leaf SANs for only the two exact hostnames", "evidence": "wildcard, extra-SAN, IP-SAN and wrong-host tests"},
+    {"id": "E-01", "control": "issue leaf SANs for only the six exact hostnames", "evidence": "wildcard, extra-SAN, IP-SAN and wrong-host tests"},
     {"id": "E-02", "control": "strictly validate control inputs without shell concatenation", "evidence": "injection, traversal, newline and overlength tests"}
   ]
 }

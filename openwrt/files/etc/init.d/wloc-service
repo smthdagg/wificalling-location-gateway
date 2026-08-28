@@ -6,7 +6,9 @@
 # 0600 (set by the daemon). No TCP listener is ever opened.
 
 USE_PROCD=1
-START=95
+# Start after the Gateway's sing-box (START=99); WLOC auto mode probes the
+# already-running node path during daemon startup.
+START=100
 STOP=10
 
 SOCKET_DIR=/var/run/wloc-service
@@ -30,8 +32,11 @@ start_service() {
 
 	# Keep the nftables redirect in sync with the gateway device policies.
 	/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
+	# Populate the initial public Apple target; later cron refreshes replace it.
+	/usr/sbin/wloc-refresh-set.sh >/dev/null 2>&1 || true
 }
 
 stop_service() {
+	/usr/sbin/wloc-redirect-sync.sh stop >/dev/null 2>&1 || true
 	rm -f "$SOCKET"
 }

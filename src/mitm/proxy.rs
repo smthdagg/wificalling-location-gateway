@@ -24,6 +24,9 @@ pub const WLOC_PATH: &str = "/clls/wloc";
 const MAX_FORWARD_BODY_BYTES: usize = 512 * 1024;
 /// Concurrent upstream streams per client connection.
 const MAX_STREAMS: usize = 8;
+/// Bound the per-client replay cache on the small router.
+const MAX_SYNTHESIS_CACHE_ENTRIES: usize = 4;
+const MAX_SYNTHESIS_CACHE_BYTES: usize = 128 * 1024;
 
 /// HTTP/2 MITM proxy bound to one approved hostname's traffic.
 #[derive(Clone)]
@@ -33,6 +36,9 @@ pub struct MitmProxy {
     /// Test hook: override the TCP connect target while keeping the approved
     /// hostname for SNI and the Host header. Production uses hostname:443.
     upstream_override: Option<(String, u16)>,
+    /// Production refresh hook: the OpenWrt DNS-set updater writes the current
+    /// public Apple address here so CDN rotation does not leave a stale target.
+    upstream_override_file: Option<std::path::PathBuf>,
     /// Append-only rewrite log (one JSON line per patched response).
     events_file: Option<std::path::PathBuf>,
     /// Per-client cache of the last synthesized BlockBSSIDApple payload
@@ -72,6 +78,7 @@ impl MitmProxy {
             tls_config: Arc::new(server),
             upstream_connector: TlsConnector::from(Arc::new(client)),
             upstream_override: None,
+            upstream_override_file: None,
             events_file: None,
             synthesized_payloads: Arc::new(Mutex::new(HashMap::new())),
         })
@@ -87,6 +94,12 @@ impl MitmProxy {
     /// approved hostname on 443. Test-only; SNI and Host stay approved.
     pub fn with_upstream_override(mut self, host: impl Into<String>, port: u16) -> Self {
         self.upstream_override = Some((host.into(), port));
+        self
+    }
+
+    /// Read a refreshed public upstream address before each request.
+    pub fn with_upstream_override_file(mut self, path: std::path::PathBuf) -> Self {
+        self.upstream_override_file = Some(path);
         self
     }
 
@@ -129,10 +142,27 @@ impl MitmProxy {
                 .forward_upstream(request, patch.as_ref(), &client_addr)
                 .await
             {
-                Ok((original_len, patched_body)) => {
+                Ok((status, headers, original_len, patched_body)) => {
                     self.append_rewrite_event(patch.as_ref(), original_len, patched_body.len());
+                    let mut response = Response::new(());
+                    *response.status_mut() = status;
+                    for (name, value) in headers {
+                        if let Some(name) = name {
+                            if !matches!(
+                                name.as_str(),
+                                "connection"
+                                    | "content-length"
+                                    | "keep-alive"
+                                    | "proxy-connection"
+                                    | "transfer-encoding"
+                                    | "upgrade"
+                            ) {
+                                response.headers_mut().append(name, value);
+                            }
+                        }
+                    }
                     let mut send = respond
-                        .send_response(Response::new(()), patched_body.is_empty())
+                        .send_response(response, patched_body.is_empty())
                         .map_err(|error| MitmProxyError::H2(error.to_string()))?;
                     if !patched_body.is_empty() {
                         let _ = send.send_data(Bytes::from(patched_body), true);
@@ -156,7 +186,7 @@ impl MitmProxy {
         request: Request<h2::RecvStream>,
         patch: Option<&PatchTarget>,
         client_addr: &str,
-    ) -> Result<(usize, Vec<u8>), MitmProxyError> {
+    ) -> Result<(http::StatusCode, http::HeaderMap, usize, Vec<u8>), MitmProxyError> {
         let hostname = approved_host(&request)?;
         let is_wloc =
             request.uri().path() == WLOC_PATH || request.uri().path().ends_with("/clls/wloc");
@@ -208,17 +238,32 @@ impl MitmProxy {
                                     "wloc proxy: synthesized kind={kind} from cache -> {} bytes",
                                     out.len()
                                 );
-                                return Ok((request_body.len(), out));
+                                return Ok((
+                                    http::StatusCode::OK,
+                                    http::HeaderMap::new(),
+                                    request_body.len(),
+                                    out,
+                                ));
                             }
                         } else if let Ok(mut cache) = self.synthesized_payloads.lock() {
-                            cache.insert(client_addr.to_string(), payload.to_vec());
+                            if payload.len() <= MAX_SYNTHESIS_CACHE_BYTES {
+                                if cache.len() >= MAX_SYNTHESIS_CACHE_ENTRIES {
+                                    cache.clear();
+                                }
+                                cache.insert(client_addr.to_string(), payload.to_vec());
+                            }
                         }
                         eprintln!(
                             "wloc proxy: synthesized {} -> {} bytes (is_wloc={is_wloc})",
                             request_body.len(),
                             patched.len()
                         );
-                        return Ok((request_body.len(), patched));
+                        return Ok((
+                            http::StatusCode::OK,
+                            http::HeaderMap::new(),
+                            request_body.len(),
+                            patched,
+                        ));
                     }
                     // Fail open: any synthesis error falls through to the
                     // upstream forwarding path below.
@@ -227,8 +272,18 @@ impl MitmProxy {
             }
         }
 
-        let (connect_host, connect_port) = match &self.upstream_override {
-            Some((host, port)) => (host.clone(), *port),
+        let dynamic_override = self
+            .upstream_override_file
+            .as_ref()
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .and_then(|text| text.trim().parse::<std::net::IpAddr>().ok())
+            .map(|ip| (ip.to_string(), 443));
+        let (connect_host, connect_port) = match dynamic_override.or_else(|| {
+            self.upstream_override
+                .as_ref()
+                .map(|(host, port)| (host.clone(), *port))
+        }) {
+            Some((host, port)) => (host, port),
             None => (hostname.clone(), 443),
         };
         let connect = TcpStream::connect((connect_host.as_str(), connect_port))
@@ -246,7 +301,7 @@ impl MitmProxy {
         // fails with "frame with invalid size". Forward over HTTP/1.1 and
         // decode Content-Length / chunked bodies.
         let upstream_request = sanitized_forward_request(parts, &hostname)?;
-        let (_, _, body) =
+        let (status, headers, body) =
             crate::mitm::http1::forward_http1(upstream_tls, &upstream_request, &request_body)
                 .await?;
 
@@ -257,7 +312,7 @@ impl MitmProxy {
             patched.len(),
             patch.is_some()
         );
-        Ok((body.len(), patched))
+        Ok((status, headers, body.len(), patched))
     }
 
     /// Append one rewrite event per patched WLOC response.
@@ -279,19 +334,7 @@ impl MitmProxy {
             "bytes_before": before,
             "bytes_after": after,
         });
-        use std::io::Write as _;
-        let mut line = serde_json::to_string(&event).unwrap_or_default();
-        line.push('\n');
-        if let Some(parent) = events_file.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(events_file)
-        {
-            let _ = file.write_all(line.as_bytes());
-        }
+        crate::service::append_event_line(events_file, &event);
     }
 }
 

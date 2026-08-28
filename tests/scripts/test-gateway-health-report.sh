@@ -32,4 +32,9 @@ grep -F '"$RUNDIR/nodes" "/www/wloc-node-status.json"' "$init" >/dev/null ||
 grep -F "grep -q 'node_proxy_test' /usr/libexec/wificalling-gateway/node-health.sh && patch_health=1" "$health" >/dev/null ||
 	fail 'Gateway health must recognize the maintained single-process node health check'
 
+grep -F '\|proxy_reachable' "$health" >/dev/null ||
+	fail 'Gateway health must count proxy_reachable node results as healthy'
+grep -F '\|proxy_failed' "$health" >/dev/null ||
+	fail 'Gateway health must count proxy_failed node results as down'
+
 printf 'gateway health report checks passed\n'

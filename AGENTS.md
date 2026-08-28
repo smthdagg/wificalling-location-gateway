@@ -91,7 +91,7 @@ or a release is accepted:
 - Never commit CA private keys, node credentials, captured device identifiers, raw production traffic, tokens, or precise user location. Local pre-push scanning and CI reduce accidental leaks but cannot stop an authorized writer who bypasses the workflow.
 - All parser and network inputs require size, time, concurrency, and schema limits.
 - Unknown protocol, invalid Geo data, or engine failure must not produce a default fake coordinate.
-- WLOC interception must remain limited to the assigned test device, two exact Apple hostnames, and TCP 443.
+- WLOC interception must remain limited to the assigned test device, six exact WLOC hostnames, and TCP 443.
 - Never intercept UDP 500/4500 or modify the integrated WCG nftables table.
 - Changes under `internal/ca/`, `internal/proxy/`, `openwrt/`, or `.github/workflows/` require security review.
 

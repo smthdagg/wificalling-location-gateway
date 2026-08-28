@@ -1,9 +1,8 @@
 //! Run the WLOC service control daemon over a root-owned Unix socket.
 //!
-//! The daemon serves the frozen control API on a local Unix socket. Runtime
-//! adapters are stubs until the OpenWrt sing-box/nftables/Geo adapters land;
-//! their behavior is configurable through the `WLOC_STUB_*` environment
-//! variables so the control plane can be exercised end to end on any host.
+//! The daemon serves the frozen control API on a local Unix socket. The
+//! control plane owns the named WLOC nftables lifecycle while the proxy and
+//! control API stay in one process.
 //!
 //! Socket path: `WLOC_SOCKET` (default `/var/run/wloc-service/control.sock`).
 
@@ -19,7 +18,7 @@ use wificalling_location_gateway::exitprobe::{NodeRef, ProbeLimits};
 use wificalling_location_gateway::georesolver::http::GeoHttpClient;
 use wificalling_location_gateway::georesolver::runtime::{GeoProviderRuntime, ProviderFailure};
 use wificalling_location_gateway::georesolver::ProviderRef;
-use wificalling_location_gateway::mitm::proxy::MitmProxy;
+use wificalling_location_gateway::mitm::proxy::{MitmProxy, MitmProxyError};
 use wificalling_location_gateway::mitm::CaBundle;
 use wificalling_location_gateway::service::api::RequestParams;
 use wificalling_location_gateway::service::control::{RuntimeControl, RuntimeFailure};
@@ -45,11 +44,11 @@ fn now_unix() -> u64 {
         .unwrap_or(0)
 }
 
-/// No-op runtime control: every adapter step succeeds and the engine is
-/// healthy. Replaced by the nftables/procd adapter on OpenWrt.
-struct StubRuntime;
+/// Runtime control for the single OpenWrt daemon. The daemon owns the proxy;
+/// the helper owns only the named WLOC nftables table.
+struct OpenWrtRuntime;
 
-impl RuntimeControl for StubRuntime {
+impl RuntimeControl for OpenWrtRuntime {
     fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
     }
@@ -60,13 +59,17 @@ impl RuntimeControl for StubRuntime {
         Ok(())
     }
     fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure> {
-        Ok(())
+        run_redirect_helper(None)
     }
     fn remove_redirect(&mut self) -> Result<(), RuntimeFailure> {
-        Ok(())
+        run_redirect_helper(Some("stop"))
     }
     fn redirect_present(&mut self) -> Result<bool, RuntimeFailure> {
-        Ok(false)
+        Ok(std::process::Command::new("nft")
+            .args(["list", "table", "inet", "wloc_service"])
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false))
     }
     fn disarm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
@@ -77,6 +80,28 @@ impl RuntimeControl for StubRuntime {
     fn stop_engine(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
     }
+}
+
+fn run_redirect_helper(action: Option<&str>) -> Result<(), RuntimeFailure> {
+    let mut command = std::process::Command::new("/usr/sbin/wloc-redirect-sync.sh");
+    if let Some(action) = action {
+        command.arg(action);
+    }
+    command
+        .status()
+        .map_err(|_| RuntimeFailure)
+        .and_then(|status| status.success().then_some(()).ok_or(RuntimeFailure))
+}
+
+/// The current firewall implementation is IPv4-only. Refuse to advertise a
+/// ready WLOC path when the router has a global IPv6 route, avoiding a false
+/// green state that would let AAAA traffic bypass the MITM.
+fn ipv6_interception_ready() -> bool {
+    std::process::Command::new("ip")
+        .args(["-6", "route", "show", "scope", "global"])
+        .output()
+        .map(|output| output.status.success() && output.stdout.is_empty())
+        .unwrap_or(false)
 }
 
 /// Stub exit probe: reports the configured exit and WAN addresses.
@@ -203,6 +228,9 @@ fn bind_tproxy_listener(port: u16) -> std::io::Result<tokio::net::TcpListener> {
     tokio::net::TcpListener::from_std(std_listener)
 }
 
+const MAX_PROXY_CONNECTIONS: usize = 8;
+const PROXY_CONNECTION_TIMEOUT: Duration = Duration::from_secs(60);
+
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let socket_path = std::env::var("WLOC_SOCKET")
         .unwrap_or_else(|_| "/var/run/wloc-service/control.sock".into());
@@ -254,7 +282,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     };
 
     let service = WlocService::new(
-        StubRuntime,
+        OpenWrtRuntime,
         build_probe(&assigned_device, uci.probe_port),
         geo,
         WlocServiceConfig {
@@ -265,7 +293,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 max_observation_age: Duration::from_secs(uci.probe_interval_secs),
             },
             scope_valid: true,
-            ipv6_ready: true,
+            ipv6_ready: ipv6_interception_ready(),
             assigned_device_configured: !assigned_device.is_empty(),
             assigned_device: if assigned_device.is_empty() {
                 None
@@ -349,11 +377,13 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let mut upstream_roots = rustls::RootCertStore::empty();
     upstream_roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let proxy =
-        MitmProxy::new(&mitm_ca, upstream_roots)?.with_events_file(std::path::PathBuf::from(
-            std::env::var("WLOC_EVENTS_FILE")
-                .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into()),
-        ));
+    let events_file = std::env::var("WLOC_EVENTS_FILE")
+        .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into());
+    let upstream_file = std::env::var("WLOC_UPSTREAM_IP_FILE")
+        .unwrap_or_else(|_| "/var/run/wloc-service/upstream-ip".into());
+    let proxy = MitmProxy::new(&mitm_ca, upstream_roots)?
+        .with_events_file(std::path::PathBuf::from(events_file))
+        .with_upstream_override_file(std::path::PathBuf::from(upstream_file));
     // The upstream connection must use the real Apple IP (the DNS hijack
     // would otherwise point it back at this router). Prefer the first
     // nft-set address; fall back to DNS-only resolution when the set is
@@ -381,6 +411,14 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into()),
             ),
         );
+
+    // Bind the proxy before enabling the redirect. This makes the runtime
+    // health check meaningful: no packet can be sent to :8443 before a
+    // listener exists.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    let proxy_listener = runtime.block_on(async { bind_tproxy_listener(proxy_port) })?;
 
     // Apply the persisted configuration to the control plane before serving:
     // manual location preset first (so a manual target is already fresh), then
@@ -413,9 +451,6 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
     let _ = std::fs::remove_file(&socket_path);
 
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()?;
     let listener = runtime.block_on(async { tokio::net::UnixListener::bind(&socket_path) })?;
     #[cfg(unix)]
     {
@@ -429,39 +464,56 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let proxy_health = std::sync::Arc::new(std::sync::Mutex::new(ProxyHealth::default()));
     let health_path = std::env::var("WLOC_HEALTH_FILE")
         .unwrap_or_else(|_| "/var/run/wloc-service/proxy-health.json".into());
+    let proxy_slots = std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_PROXY_CONNECTIONS));
 
     // TPROXY listener: IP_TRANSPARENT lets the kernel deliver connections
     // whose original destination is a remote host (the Apple WLOC IP), so
     // iOS sees a perfectly normal connection to the Apple server - unlike
     // REDIRECT, which rewrites the destination to this router and newer iOS
     // versions answer with RST.
-    let proxy_listener = runtime.block_on(async { bind_tproxy_listener(proxy_port) })?;
     runtime.spawn(async move {
         loop {
-            if let Ok((stream, _)) = proxy_listener.accept().await {
-                let proxy = proxy.clone();
-                let patch_state = std::sync::Arc::clone(&patch_state);
-                let proxy_health = std::sync::Arc::clone(&proxy_health);
-                let health_path = health_path.clone();
-                tokio::spawn(async move {
-                    match proxy.handle_connection(stream, patch_state).await {
-                        Ok(()) => {
-                            record_proxy_health(
-                                &proxy_health,
-                                std::path::Path::new(&health_path),
-                                true,
-                            );
+            match proxy_listener.accept().await {
+                Ok((stream, _)) => {
+                    let Ok(slot) = proxy_slots.clone().try_acquire_owned() else {
+                        continue;
+                    };
+                    let proxy = proxy.clone();
+                    let patch_state = std::sync::Arc::clone(&patch_state);
+                    let proxy_health = std::sync::Arc::clone(&proxy_health);
+                    let health_path = health_path.clone();
+                    tokio::spawn(async move {
+                        let result = tokio::time::timeout(
+                            PROXY_CONNECTION_TIMEOUT,
+                            proxy.handle_connection(stream, patch_state),
+                        )
+                        .await
+                        .map_err(|_| MitmProxyError::Upstream("client timeout".into()))
+                        .and_then(|result| result);
+                        match result {
+                            Ok(()) => {
+                                record_proxy_health(
+                                    &proxy_health,
+                                    std::path::Path::new(&health_path),
+                                    true,
+                                );
+                            }
+                            Err(error) => {
+                                eprintln!("wloc proxy: connection error: {error}");
+                                record_proxy_health(
+                                    &proxy_health,
+                                    std::path::Path::new(&health_path),
+                                    false,
+                                );
+                            }
                         }
-                        Err(error) => {
-                            eprintln!("wloc proxy: connection error: {error}");
-                            record_proxy_health(
-                                &proxy_health,
-                                std::path::Path::new(&health_path),
-                                false,
-                            );
-                        }
-                    }
-                });
+                        drop(slot);
+                    });
+                }
+                Err(error) => {
+                    eprintln!("wloc proxy: accept error: {error}");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
             }
         }
     });

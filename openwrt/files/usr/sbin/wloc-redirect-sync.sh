@@ -17,6 +17,25 @@ PROXY_PORT="${WLOC_PROXY_PORT:-8443}"
 FWMARK=1
 ROUTE_TABLE=100
 
+valid_ipv4() {
+    case "$1" in ''|*[!0-9.]*|*..*|.*|*.) return 1;; esac
+    awk -F. 'NF == 4 { for (i = 1; i <= 4; i++) if ($i !~ /^[0-9]+$/ || $i > 255) exit 1; exit 0 } { exit 1 }' <<EOF
+$1
+EOF
+}
+
+if [ "${1:-start}" = stop ]; then
+    HOSTS_MARKER='# wloc-service DNS hijack (do not edit)'
+    for hosts_file in /etc/hosts /tmp/hosts/wloc-hosts; do
+        sed -i "/$HOSTS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
+    done
+    ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
+    ip route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+    nft delete table inet "$TABLE" 2>/dev/null || true
+    rm -f /var/run/wloc-service/upstream-ip.tmp /var/run/wloc-service/upstream-ip
+    exit 0
+fi
+
 # Collect the LAN IPs of every device in the gateway device policy.
 ips=$(uci -q show wificalling-gateway \
     | sed -n "s/.*\.source_ip=['\"]*\([0-9][0-9.]*\)['\"]*/\1/p" \
@@ -26,6 +45,9 @@ ips=$(uci -q show wificalling-gateway \
     echo "wloc-redirect-sync: no devices in the gateway device policy" >&2
     exit 1
 }
+for ip in $ips; do
+    valid_ipv4 "$ip" || { echo "wloc-redirect-sync: invalid device IPv4: $ip" >&2; exit 1; }
+done
 
 # The router's own LAN IPv4, used for the DNS hijack and the matching
 # TPROXY rule. UCI is authoritative; fall back to the LAN bridge address.
@@ -40,12 +62,19 @@ lan_ip() {
 }
 
 ROUTER_IP=$(lan_ip)
-[ -n "$ROUTER_IP" ] || {
+[ -n "$ROUTER_IP" ] && valid_ipv4 "$ROUTER_IP" || {
     echo "wloc-redirect-sync: cannot determine the router LAN IP" >&2
     exit 1
 }
+case "$PROXY_PORT" in
+    ''|*[!0-9]*) echo "wloc-redirect-sync: invalid proxy port" >&2; exit 1;;
+esac
+[ "$PROXY_PORT" -ge 1 ] && [ "$PROXY_PORT" -le 65535 ] || {
+    echo "wloc-redirect-sync: proxy port out of range" >&2
+    exit 1
+}
 
-# DNS hijack: force the Apple WLOC hostnames to this router so the
+# DNS hijack: force the six exact WLOC hostnames to this router so the
 # devices always connect to an address our rules match, regardless of
 # CDN IP rotation (the Apple names resolve to different aliyun/akamai
 # ranges per client, so a fixed-IP set alone keeps missing them).

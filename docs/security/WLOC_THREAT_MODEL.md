@@ -3,7 +3,7 @@
 - Status: Accepted for offline scaffolding only; parser, CA, MITM, and real-device access remain prohibited.  
 状态：**已接受为离线骨架安全边界；未批准 parser、CA、MITM 或真机接入**  
 评审记录：[Phase 0 review](../reviews/PHASE0_OFFLINE_SCAFFOLD_REVIEW.md)  
-适用范围：单台明确授权的测试 iPhone、Redmi AX6S/OpenWrt、独立 `wificalling_location` 数据面，以及两个精确目标 `gs-loc.apple.com` 和 `gs-loc-cn.apple.com`。  
+适用范围：单台明确授权的测试 iPhone、Redmi AX6S/OpenWrt、独立 `wificalling_location` 数据面，以及六个精确 WLOC 目标。
 不适用范围：生产部署、多设备、全局 HTTPS 代理、运营商激活判断、GPS 替代、紧急呼叫位置保证。
 
 本文只定义安全边界、失效行为和验证证据。它不描述、猜测或批准任何 Apple 私有协议字段；parser/patch 的语义只能来自已授权、脱敏且经评审的 fixture 与协议笔记。
@@ -14,7 +14,7 @@ PoC 的首要目标不是“始终返回修改后的位置”，而是把一次�
 
 必须始终成立：
 
-- 只有一台已授权测试设备访问两个精确 allowlist hostname 的 TCP 443 流量可进入 MITM。
+- 只有一台已授权测试设备访问六个精确 allowlist hostname 的 TCP 443 流量可进入 MITM。
 - 普通 HTTPS、其他 LAN 设备、路由器管理面、sing-box 管理/健康检查以及 UDP 500/4500 不进入 WLOC 路径。
 - Apple 上游身份验证失败时不得关闭证书验证、接受未知 CA 或生成位置。
 - Geo 数据不可靠、协议未知或 parser/patch 失败时不得产生默认假坐标；能安全返回未经修改的已验证上游响应时才透传。
@@ -40,7 +40,7 @@ PoC 的首要目标不是“始终返回修改后的位置”，而是把一次�
 
 ```mermaid
 flowchart LR
-    P["已授权测试 iPhone"] -->|"A/AAAA；仅两个 hostname 的 TCP 443"| N["独立 dnsmasq/nftables 边界"]
+    P["已授权测试 iPhone"] -->|"A/AAAA；仅六个 hostname 的 TCP 443"| N["独立 dnsmasq/nftables 边界"]
     N --> M["wloc-mitm：TLS/ALPN/H2 与受限 parser"]
     M -->|"系统信任库验证 Apple 身份"| A["Apple WLOC 上游"]
     G["Gateway 1.7 设备→节点策略"] --> E["隔离 Exit Probe"]
@@ -92,7 +92,7 @@ flowchart LR
 |---|---|---|---|
 | S-01 / Spoofing | **Critical**：伪造 Apple 上游，诱使引擎接受攻击者证书或响应 | 使用系统/固定受控信任库验证完整链、有效期和请求 hostname；禁止 `InsecureSkipVerify`、自签回退和证书错误重试降级 | 无效链、过期、hostname 不匹配、未知 CA 测试均受控失败；代码/配置扫描证明无跳过验证 |
 | S-02 / Spoofing | **High**：伪造测试设备源地址进入 redirect | 单设备 lease 绑定固定地址与可用的二层身份；仅在受控测试 LAN 启用；记录 DHCP 变更并默认禁用不一致绑定 | 非测试设备、源地址伪造、DHCP 地址变化测试不进入 MITM；规则快照 |
-| S-03 / Spoofing | **High**：DNS 污染或共享 CDN IP 把非目标域流量导入候选集合 | dnsmasq 只维护两个精确域名的 A/AAAA set；MITM 再以 TLS SNI/目标 hostname 做二次 allowlist；非 allowlist 不签发 leaf、不代理 | DNS 地址变化、共享 IP、无 SNI/错误 SNI、普通 HTTPS 负向测试 |
+| S-03 / Spoofing | **High**：DNS 污染或共享 CDN IP 把非目标域流量导入候选集合 | dnsmasq 只维护六个精确域名的 A/AAAA set；MITM 再以 TLS SNI/目标 hostname 做二次 allowlist；非 allowlist 不签发 leaf、不代理 | DNS 地址变化、共享 IP、无 SNI/错误 SNI、普通 HTTPS 负向测试 |
 | T-01 / Tampering | **Critical**：修改 `wificalling_gateway` table 或 sing-box 运行配置导致现网行为改变 | 使用独立 `wificalling_location` table/chain；Exit Probe 使用隔离临时 outbound；对 Gateway 配置只读；安装/卸载有差异检查 | 启停前后 Gateway nft/config 哈希与规则语义一致；UDP 500/4500 未命中 WLOC 计数器 |
 | T-02 / Tampering | **High**：未知/畸形协议被错误修改，或非目标字段受损 | 只处理已授权 fixture 覆盖并冻结的结构；未知、畸形、截断或不支持版本不 patch；保留未知字段；禁止默认坐标 | fixture 来源审批；round-trip/未知字段/字段顺序/截断/非目标消息测试；fuzz 无崩溃 |
 | T-03 / Tampering | **High**：Geo provider、缓存或时钟污染产生错误位置 | 严格 schema/range/timezone 校验；主备冲突标记 `geo_uncertain`；缓存绑定 `node_id + exit_ip` 并设 TTL；时钟异常不延长可信期 | 坏 JSON、越界、冲突、回拨时钟、过期、exit IP 变化测试均不生成新位置 |
@@ -104,8 +104,8 @@ flowchart LR
 | D-01 / DoS | **High**：大 body、压缩炸弹、畸形 protobuf 或递归/重复字段耗尽内存/CPU | 在读取前后分别限制 wire body、解压后 body、倍率、单次分配、字段/嵌套/循环工作量；超限不解析、不缓存、不记录正文 | oversized、gzip bomb、深度/重复字段、截断 fuzz；峰值 RSS/CPU/耗时证据 |
 | D-02 / DoS | **High**：HTTP/2 多 stream、慢速连接或握手风暴耗尽 AX6S | 限制总连接、单设备连接、H2 concurrent streams、header/body、握手/读取/上游/空闲超时；有界队列；拒绝额外设备 | 并发/slowloris/RST/GOAWAY/超时压力测试；运行内存保持 15–25MB 目标内 |
 | D-03 / DoS | **Critical**：引擎崩溃但 redirect 留存，WLOC 或更广流量长期黑洞 | watchdog 以引擎健康为前置条件安装/保留规则；故障先原子撤销 redirect，再重启；限制 respawn；重启默认清理 PoC 状态 | `kill -9`、OOM、启动失败、反复崩溃、路由器重启测试；在限定恢复时间内规则消失且普通网络恢复 |
-| D-04 / DoS | **High**：IPv6/AAAA 绕过 MITM或形成 v4/v6 分裂、黑洞 | 真机前书面选择完整 v6 路径或仅测试设备+两个域名的 AAAA 精确抑制；不得全局禁 IPv6；A/AAAA TTL 与删除同步 | 双栈、仅 v6、地址轮换、dnsmasq reload、普通 IPv6 和其他设备负向测试 |
-| E-01 / Elevation | **Critical**：任意 hostname 获得路由器 CA 签发的 leaf | 签发 API 不暴露网络接口；仅进程内调用；SAN 必须等于两个精确 hostname 之一；拒绝通配符、IP SAN、额外 SAN | SAN 表驱动测试；任意域名/通配符/IP/大小写与尾点边界测试；leaf cache 审计 |
+| D-04 / DoS | **High**：IPv6/AAAA 绕过 MITM或形成 v4/v6 分裂、黑洞 | 真机前书面选择完整 v6 路径或仅测试设备+六个域名的 AAAA 精确抑制；不得全局禁 IPv6；A/AAAA TTL 与删除同步 | 双栈、仅 v6、地址轮换、dnsmasq reload、普通 IPv6 和其他设备负向测试 |
+| E-01 / Elevation | **Critical**：任意 hostname 获得路由器 CA 签发的 leaf | 签发 API 不暴露网络接口；仅进程内调用；SAN 必须等于六个精确 hostname 之一；拒绝通配符、IP SAN、额外 SAN | SAN 表驱动测试；任意域名/通配符/IP/大小写与尾点边界测试；leaf cache 审计 |
 | E-02 / Elevation | **High**：LuCI/脚本参数注入 shell、nft 或路径 | 所有外部输入使用严格枚举/schema；不拼接 shell；原子写入受限路径；拒绝换行、元字符和超长值 | 参数注入、路径穿越、UCI 畸形值测试；静态审查 |
 | E-03 / Elevation | **High**：wloc-mitm 被利用后继承不必要 root 权限 | root helper 只负责 CA/规则所需操作；可行时引擎降权、只读根文件系统和最小文件权限；网络控制与 parser 隔离 | 进程 UID/capability/可写路径清单；受损 parser 无法改 Gateway table 的集成测试或设计评审 |
 
@@ -116,7 +116,7 @@ CA 状态机必须明确为：`absent → generated → public-cert-exported →
 - **生成**：只在路由器本地、使用可靠随机源生成；首次 PoC 不预置或提交测试私钥。创建过程采用安全 umask，最终 CA/leaf 私钥为 `0600`。
 - **存储**：CA 与 Gateway 节点密钥分开；不得进入普通配置备份。PoC 若置于 `/tmp`，重启后的状态和设备上残留信任必须在 UI/文档中明确。
 - **分发**：LuCI 只提供公钥证书、SHA-256 指纹和人工核对步骤。不得通过同一不可信通道同时提供证书和“可信指纹”。
-- **签发**：leaf SAN 只能是两个精确 hostname；短有效期、唯一序列号、有界 cache；禁止 wildcard、任意 SAN 和 IP 证书。
+- **签发**：leaf SAN 只能是六个精确 hostname；短有效期、唯一序列号、有界 cache；禁止 wildcard、任意 SAN 和 IP 证书。
 - **轮换**：新 CA 生成前先停止 redirect；轮换后清空全部旧 leaf cache；旧 CA 在设备端撤销前视为仍有风险。
 - **停止/卸载**：先删除 redirect，再停止引擎。卸载必须让用户明确选择保留或删除 CA 私钥，并始终给出从 iPhone 撤销信任的步骤。
 - **失陷响应**：CA 私钥疑似泄露即停止 MITM、撤销规则、删除 leaf cache、生成事件记录并要求从设备移除旧 CA；不得用静默轮换代替撤销通知。
@@ -145,14 +145,14 @@ Parser 在授权 fixture 和许可证 ADR 关闭前不得实现。实现后仍�
 
 只允许创建和操作独立 `wificalling_location` table/chain/set。脚本必须按对象全名操作，禁止 flush 全局 ruleset、复用 `wificalling_gateway` chain，或修改 sing-box 的 TPROXY 规则。
 
-redirect 同时要求：测试设备身份/源地址、来自两个精确域名解析结果的目标 set、TCP 443。进入 MITM 后仍须校验请求 hostname；任一条件不匹配即不拦截。UDP 500/4500 必须有显式负向测试和零命中证据。
+redirect 同时要求：测试设备身份/源地址、来自六个精确域名解析结果的目标 set、TCP 443。进入 MITM 后仍须校验请求 hostname；任一条件不匹配即不拦截。UDP 500/4500 必须有显式负向测试和零命中证据。
 
 ### IPv6 硬决策
 
 真机前必须选择并评审其中一种，不能运行时自动猜测：
 
 1. **完整双栈**：实现 `clients6`、v6 destination set 和 IPv6 redirect，确保与 IPv4 同一生命周期和隔离规则；或
-2. **精确 AAAA 抑制**：只对测试设备查询两个 WLOC hostname 时抑制 AAAA，并证明其他域名、其他设备和普通 IPv6 不变。
+2. **精确 AAAA 抑制**：只对测试设备查询六个 WLOC hostname 时抑制 AAAA，并证明其他域名、其他设备和普通 IPv6 不变。
 
 两种方案都必须测试 A/AAAA TTL、地址新增/删除、DNS 失败、dnsmasq reload、设备地址变化和路由器重启。全局屏蔽 IPv6、仅实现 IPv4 后默认继续，均不可接受。
 
@@ -173,7 +173,7 @@ redirect 同时要求：测试设备身份/源地址、来自两个精确域名�
 
 ## 12. 日志、支持包与隐私
 
-日志 schema allowlist 仅包含：事件类型、两个精确 hostname 之一、成功/失败、请求/响应字节数、粗粒度国家/城市、不可逆且可轮换的设备假名、状态代次和粗粒度时间。
+日志 schema allowlist 仅包含：事件类型、六个精确 hostname 之一、成功/失败、请求/响应字节数、粗粒度国家/城市、不可逆且可轮换的设备假名、状态代次和粗粒度时间。
 
 禁止记录：原始请求/响应 body、Wi-Fi/BSSID/cell 数据、设备 MAC/IP 明文、精确经纬度、CA/leaf 私钥、节点凭据、provider token、完整分享链接和命令行秘密。日志总量必须轮转且 ≤1MB。
 
@@ -210,7 +210,7 @@ redirect 同时要求：测试设备身份/源地址、来自两个精确域名�
 - [ ] 许可证 ADR 已关闭，明确 AGPL 复用或 clean-room 路线；没有未授权源码迁移。
 - [ ] fixture 治理已关闭：授权、来源、脱敏、保留期、审阅者和允许协议变体可追溯；仓库无原始生产 capture。
 - [x] 本威胁模型已完成独立安全文档评审；Critical/High 实现控制仍须在对应实现任务分配测试所有者并提供证据。
-- [ ] 两个精确 hostname 和目标 iOS 的 TLS 版本、ALPN/H2 行为由授权证据确认；没有推断私有字段。
+- [ ] 六个精确 hostname 和目标 iOS 的 TLS 版本、ALPN/H2 行为由授权证据确认；没有推断私有字段。
 - [ ] parser 离线 round-trip、未知字段保持、malformed/oversized/压缩炸弹和 fuzz 门禁通过；资源上限有实测。
 - [ ] Apple 上游证书负向测试通过，配置/代码不存在验证绕过。
 - [ ] CA 权限、SAN allowlist、轮换、旧 leaf cache 清理、支持包排除和设备撤销流程通过自动化测试。

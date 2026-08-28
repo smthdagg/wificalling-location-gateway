@@ -70,7 +70,7 @@ and rollback evidence receive an independent review.
   unpublished private workspace crate while enforcing the dependency allowlist.
 - `Cargo.toml` avoids `prost-build`, so the spike does not require runtime or
   target-side protobuf code generation.
-- `src/lib.rs` keeps WLOC host scope to the two hostnames already present in
+- `src/lib.rs` keeps WLOC host scope to the six exact hostnames established by
   `DEVELOPMENT_TEST_PLAN.md` and `docs/security/WLOC_THREAT_MODEL.md`.
 - `src/lib.rs` contains no `unsafe` block and its protobuf message is an opaque
   synthetic byte payload with no inferred private WLOC schema.

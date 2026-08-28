@@ -10,7 +10,14 @@ import ipaddress
 from typing import Dict, Mapping, Tuple
 
 
-APPROVED_HOSTS = ("gs-loc.apple.com", "gs-loc-cn.apple.com")
+APPROVED_HOSTS = (
+    "gs-loc.apple.com",
+    "gs-loc-cn.apple.com",
+    "gs-loc-corpa.apple.com",
+    "gs-loc.apple.com.cn",
+    "bluedot.is.autonavi.com",
+    "bluedot.is.autonavi.com.gds.alibabadns.com",
+)
 
 
 def build_nft_plan(lease_ttl_seconds: int) -> Dict[str, object]:

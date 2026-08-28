@@ -5,6 +5,7 @@
 //! implemented before authorized fixture and license gates are closed.
 
 use std::net::IpAddr;
+use std::path::Path;
 use std::time::Duration;
 
 use crate::APPROVED_WLOC_HOSTS;
@@ -18,6 +19,7 @@ pub mod state;
 pub mod status;
 
 pub const SERVICE_API_VERSION: u16 = 1;
+const MAX_EVENT_LOG_BYTES: u64 = 256 * 1024;
 const MAX_CONNECTIONS: u16 = 32;
 const MAX_FAILURE_GRACE: Duration = Duration::from_secs(30);
 const MAX_GEO_TTL_SECONDS: u64 = 3_600;
@@ -167,6 +169,33 @@ pub enum ResponseMode {
 /// forward an upstream response unchanged.
 pub const fn current_response_mode() -> ResponseMode {
     ResponseMode::ForwardOriginal
+}
+
+/// Append one diagnostic event without allowing the router's writable storage
+/// to grow forever. Events are advisory; dropping the oldest batch is safer
+/// than exhausting the small device's filesystem.
+pub(crate) fn append_event_line(path: &Path, value: &serde_json::Value) {
+    use std::io::Write as _;
+
+    let mut line = serde_json::to_string(value).unwrap_or_default();
+    line.push('\n');
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if path
+        .metadata()
+        .map(|meta| meta.len() >= MAX_EVENT_LOG_BYTES)
+        .unwrap_or(false)
+    {
+        let _ = std::fs::write(path, []);
+    }
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = file.write_all(line.as_bytes());
+    }
 }
 
 pub fn decide_ingress(

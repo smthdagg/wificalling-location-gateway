@@ -316,6 +316,37 @@ fn deleted_followed_node_is_exposed_and_clears_stale_location() {
     let _ = std::fs::remove_file(&status_path);
 }
 
+#[test]
+fn unsafe_enable_cleans_stale_redirect_without_probing() {
+    let removed = Arc::new(Mutex::new(false));
+    let mut service = WlocService::new(
+        CleanupRuntime {
+            removed: Arc::clone(&removed),
+        },
+        SequenceProbe {
+            results: vec![],
+            index: 0,
+        },
+        SequenceGeo {
+            results: vec![],
+            index: 0,
+        },
+        WlocServiceConfig {
+            node_ref: NodeRef::new("node-1").unwrap(),
+            providers: vec![ProviderRef::new("geo-a").unwrap()],
+            probe_limits: limits(),
+            scope_valid: true,
+            ipv6_ready: false,
+            assigned_device_configured: true,
+            assigned_device: Some("192.168.31.176".to_owned()),
+            reverse_geo_lookup: None,
+        },
+    );
+
+    assert_eq!(service.enable(), Err(DispatchError::InvalidConfig));
+    assert!(*removed.lock().unwrap());
+}
+
 fn limits() -> ProbeLimits {
     ProbeLimits {
         max_observation_age: Duration::from_secs(60),
@@ -336,6 +367,41 @@ fn record(now_unix: u64, latitude: f64, longitude: f64) -> GeoRecord {
 struct OkRuntime {
     healthy: bool,
     install_fails: bool,
+}
+
+struct CleanupRuntime {
+    removed: Arc<Mutex<bool>>,
+}
+
+impl RuntimeControl for CleanupRuntime {
+    fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure> {
+        Ok(false)
+    }
+    fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn remove_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        *self.removed.lock().unwrap() = true;
+        Ok(())
+    }
+    fn redirect_present(&mut self) -> Result<bool, RuntimeFailure> {
+        Ok(false)
+    }
+    fn disarm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn drain_engine(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn stop_engine(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
 }
 
 impl RuntimeControl for OkRuntime {

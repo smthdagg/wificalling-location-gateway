@@ -2,7 +2,7 @@
 //!
 //! Generates an in-memory root CA and per-host leaf certificates at runtime on
 //! the router; the private keys are never persisted, exported, or committed.
-//! The rustls resolver serves a leaf only for the two approved Apple hostnames
+//! The rustls resolver serves a leaf only for the six approved WLOC hostnames
 //! (fail-closed), so no other domain can ever be impersonated.
 
 pub mod http1;
@@ -149,7 +149,7 @@ impl CaBundle {
     }
 
     /// Issue a server-auth leaf certificate for `hostname`. **Fail-closed**:
-    /// only the two approved Apple WLOC hostnames can be issued.
+    /// only the six approved WLOC hostnames can be issued.
     pub fn issue_leaf(&self, hostname: &str) -> Result<LeafCertificate, MitmError> {
         if !APPROVED_WLOC_HOSTS.contains(&hostname) {
             return Err(MitmError::HostNotApproved(hostname.to_owned()));
