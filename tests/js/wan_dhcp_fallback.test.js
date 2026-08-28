@@ -38,8 +38,10 @@ function main() {
 			`${relative}: lease-bound devices must keep the bind status`);
 		assert(source.includes("return wlocI18n.t('Device offline');"),
 			`${relative}: offline must remain the last-resort state`);
-		assert(source.includes("fetch('/wloc-node-status.json')"),
+		assert(source.includes("fetch('/wloc-node-status.json?t='"),
 			`${relative}: node status must be read via the static docroot export`);
+		assert(source.includes("cache: 'no-store'"),
+			`${relative}: node status polling must bypass browser cache`);
 	});
 
 	wlocSources.forEach(function(relative) {

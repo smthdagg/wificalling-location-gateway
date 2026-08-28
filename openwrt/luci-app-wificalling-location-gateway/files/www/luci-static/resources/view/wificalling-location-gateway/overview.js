@@ -23,7 +23,7 @@ return view.extend({
 		// read with a plain GET: the /ubus JSON-RPC channel truncates
 		// larger replies on some firmwares, leaving the status blank.
 		return Promise.all([
-			L.resolveDefault(fetch('/wloc-node-status.json').then(function(r) { return r.text(); }), '{}'),
+			L.resolveDefault(fetch('/wloc-node-status.json?t=' + Date.now(), { cache: 'no-store' }).then(function(r) { return r.text(); }), '{}'),
 			uci.load('wificalling-gateway'),
 			L.resolveDefault(fs.read('/tmp/dhcp.leases'), ''),
 			uci.load('dhcp'),
@@ -508,7 +508,7 @@ return view.extend({
 				};
 
 		poll.add(function() {
-			return L.resolveDefault(fetch('/wloc-node-status.json').then(function(r) { return r.text(); }), '{}').then(function(raw) {
+			return L.resolveDefault(fetch('/wloc-node-status.json?t=' + Date.now(), { cache: 'no-store' }).then(function(r) { return r.text(); }), '{}').then(function(raw) {
 				var current; try { current = JSON.parse(raw); } catch (e) { current = { nodes: [] }; }
 				(current.nodes || []).forEach(function(n) {
 					var displayNode = nodeForDisplay(n);
