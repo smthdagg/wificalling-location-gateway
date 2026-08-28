@@ -45,6 +45,7 @@ command -v docker >/dev/null 2>&1 || fail 'docker is required'
 for image in "$OPENWRT_SDK" "$RUST_IMAGE"; do
 	image_tag=${image%@*}
 	docker image inspect "$image_tag" >/dev/null 2>&1 ||
+		docker image inspect "$image" >/dev/null 2>&1 ||
 		fail "pinned image missing; pull explicitly: docker pull --platform linux/amd64 $image"
 done
 
