@@ -21,8 +21,15 @@ manual LuCI `nodeTest` result.
   TCP and WireGuard results in the existing three metric cells.
 - Kept the manual result visible for 60 seconds so an older status export
   cannot immediately overwrite it.
-- Bumped the package release to `1.3.0-r4` and recorded TDD evidence.
-- Built all supported Standard/Lite assets and installed r4 Lite on AX6S.
+- Reused the single running WIFICalling Gateway sing-box for all node quality
+  probes through dedicated loopback HTTP inbounds; no temporary process or
+  duplicate proxy configuration is created.
+- Published monitor results to `/www/wloc-node-status.json` and added browser
+  cache bypassing so background metrics are visible in LuCI.
+- Bumped the package release to `1.3.0-r7` and updated bilingual README,
+  changelog, packaging metadata, tests, and release documentation.
+- Built all six Standard/Lite assets for the three supported platform targets
+  and installed r7 Lite on AX6S.
 
 ## Files changed
 
@@ -35,9 +42,10 @@ manual LuCI `nodeTest` result.
 | Command | Result | Evidence |
 |---|---|---|
 | `node tests/js/wg_handshake_reason.test.js` | Passed | Manual row refresh and 60-second polling overlay guards |
-| `./scripts/ci/verify.sh` | Passed | 69 Python tests, Rust suites, 81.41% line coverage, audits and repository gates |
+| `./scripts/ci/verify.sh` | Passed | 69 Python tests, Rust suites, 81.35% line coverage, audits and repository gates |
 | OpenWrt/iStoreOS matrix | Passed | 8/8 Standard/Lite rows installed, started, socket-ok, status-ok |
-| AX6S r4 Lite installation | Passed | Package version, both services, WLOC socket, and live NodeTest latency verified |
+| AX6S r7 Lite installation | Passed | Five node metrics, one WIFICalling sing-box process, status polling, and 30-second stability verified |
+| Release assets and checksums | Passed | Six r7 packages built and `SHA256SUMS` verified |
 | `git diff --check` and secret scan | Passed | No whitespace errors or sensitive values in the change |
 
 ## Failed attempts
@@ -51,7 +59,7 @@ manual LuCI `nodeTest` result.
 
 ## Next executable steps
 
-1. Push this branch and open a PR closing Issue #72.
+1. Keep PR #74 linked to this capsule and Issue #72.
 2. Wait for all GitHub repository gates and merge after they pass.
 
 ## Capabilities required for the next Agent
