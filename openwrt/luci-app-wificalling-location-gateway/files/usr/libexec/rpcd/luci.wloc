@@ -253,10 +253,8 @@ call)
 		exit 0
 		;;
 	node_test)
-		# Manual connection test for a single node. WireGuard nodes get a
-		# fresh handshake (bypassing the monitor's result cache); other
-		# protocols get a TCP reachability probe. The helper reuses the
-		# monitor's handshake function where applicable.
+		# Manual connection test for a single node. Every protocol uses the
+		# existing Gateway sing-box loopback probe and bypasses the monitor cache.
 		read -r input
 		json_load "$input"
 		json_get_var id id

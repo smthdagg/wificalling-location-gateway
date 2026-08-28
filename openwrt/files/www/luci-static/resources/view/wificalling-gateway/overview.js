@@ -86,10 +86,9 @@ return view.extend({
 			if (reason === 'unreachable') return wlocI18n.t('Server unreachable');
 			return '';
 		}
-		// Manual connection test: asks the router to run a fresh check
-		// right now - a WireGuard handshake (bypassing the monitor's
-		// result cache) or a TCP reachability probe for other protocols -
-		// and reports the exit IP or the failure reason.
+		// Manual connection test: asks the router to run a fresh proxy-path
+		// check through the existing Gateway sing-box, bypassing the monitor's
+		// result cache, and reports latency or the failure reason.
 		// The result banner carries an explicit close button (the stock
 		// LuCI notification's dismiss control is easy to miss under some
 		// themes) and never auto-dismisses.
