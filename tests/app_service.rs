@@ -831,21 +831,15 @@ fn periodic_manual_health_check_does_not_probe_or_touch_auto_evidence() {
 }
 
 #[test]
-fn manual_mode_changes_advance_status_generation_without_ip_probe() {
+fn manual_mode_changes_advance_status_generation_and_auto_switch_refreshes() {
     let now = current_unix();
     let mut service = build(
         OkRuntime {
             healthy: true,
             install_fails: false,
         },
-        SequenceProbe {
-            results: vec![],
-            index: 0,
-        },
-        SequenceGeo {
-            results: vec![],
-            index: 0,
-        },
+        fresh_probe(),
+        fresh_geo(now),
     );
 
     let initial = service.status_inputs_at(now).generation;
@@ -908,6 +902,36 @@ fn switching_from_manual_to_auto_refreshes_the_auto_target() {
 
     let target = sink.lock().unwrap().expect("auto target must be refreshed");
     assert_eq!((target.latitude, target.longitude), (22.32, 114.17));
+}
+
+#[test]
+fn switching_from_manual_to_auto_while_disabled_refreshes_auto_target() {
+    let now = current_unix();
+    let sink = Arc::new(Mutex::new(None));
+    let mut service = build(
+        OkRuntime {
+            healthy: true,
+            install_fails: false,
+        },
+        SequenceProbe {
+            results: vec![Ok(EXIT_A)],
+            index: 0,
+        },
+        fresh_geo(now),
+    )
+    .with_patch_sink(Arc::clone(&sink));
+
+    service
+        .set_manual_location(&RequestParams {
+            query: None,
+            latitude: Some(51.5074),
+            longitude: Some(-0.1278),
+        })
+        .unwrap();
+    service.clear_manual_location().unwrap();
+
+    let target = sink.lock().unwrap().expect("auto target must be refreshed");
+    assert_eq!((target.latitude, target.longitude), (37.77, -122.41));
 }
 
 #[test]
@@ -996,8 +1020,17 @@ fn manual_location_overrides_auto_patch_target() {
             healthy: true,
             install_fails: false,
         },
-        fresh_probe(),
-        fresh_geo(now),
+        SequenceProbe {
+            results: vec![Ok(EXIT_A), Ok(EXIT_A)],
+            index: 0,
+        },
+        SequenceGeo {
+            results: vec![
+                Ok(Some((EXIT_A, record(now, 37.77, -122.41)))),
+                Ok(Some((EXIT_A, record(now, 37.77, -122.41)))),
+            ],
+            index: 0,
+        },
     )
     .with_patch_sink(Arc::clone(&sink));
 
