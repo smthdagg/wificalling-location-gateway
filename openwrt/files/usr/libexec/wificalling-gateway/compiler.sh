@@ -24,6 +24,11 @@ function tls(sni, insecure, alpn, pin, extra) {
   return "{" extra "}"
 }
 $1=="global" { if ($2=="log_level") level=$3; if ($2=="wireguard_style") wg_style=$3; next }
+$1=="probe" {
+  if ($2=="" || $3 !~ /^[0-9]+$/ || $3<1024 || $3>65535) fail("invalid probe port for node: " $2)
+  if (probe_owner[$3] && probe_owner[$3]!=$2) fail("duplicate probe port: " $3)
+  probe_port_by_id[$2]=$3; probe_owner[$3]=$2; next
+}
 $1=="node" {
   id=$2; proto=$3
   if (id=="" || seen_node[id]++) fail("duplicate or empty node id: " id)
@@ -37,6 +42,7 @@ $1=="node" {
     if ($23!="" && $23 !~ /^[0-9]+(,[0-9]+)*$/) fail("wireguard node " id " reserved must be comma-separated numbers: " $23)
     if ($24!="" && $24 !~ /^[0-9]+$/) fail("wireguard node " id " mtu must be a number: " $24)
   }
+  if (!probe_port_by_id[id]) fail("node " id " is missing a probe port")
   node[++nn]=$0; node_id[nn]=id; node_proto[id]=proto
   if (proto=="wireguard") wg_nodes[++nw]=nn
   next
@@ -86,7 +92,13 @@ END {
     print "  ],"
   }
   print "  \"log\":{\"level\":" q(level) ",\"timestamp\":true},"
-  print "  \"inbounds\":[{\"type\":\"tproxy\",\"tag\":\"wfc-tcp\",\"listen\":\"0.0.0.0\",\"listen_port\":11441,\"network\":\"tcp\"},{\"type\":\"tproxy\",\"tag\":\"wfc-udp\",\"listen\":\"0.0.0.0\",\"listen_port\":11442,\"network\":\"udp\"}],"
+  inbounds="  \"inbounds\":[{\"type\":\"tproxy\",\"tag\":\"wfc-tcp\",\"listen\":\"0.0.0.0\",\"listen_port\":11441,\"network\":\"tcp\"},{\"type\":\"tproxy\",\"tag\":\"wfc-udp\",\"listen\":\"0.0.0.0\",\"listen_port\":11442,\"network\":\"udp\"}"
+  for(k=1;k<=nn;k++) {
+    split(node[k],f,"|"); id=f[2]
+    if (!used[id]) continue
+    inbounds=inbounds ",{\"type\":\"http\",\"tag\":" q("probe-" id) ",\"listen\":\"127.0.0.1\",\"listen_port\":" probe_port_by_id[id] "}"
+  }
+  print inbounds "],"
   print "  \"outbounds\":["
   for(k=1;k<=nn;k++) {
     split(node[k],f,"|"); id=f[2]; p=f[3]
@@ -136,6 +148,12 @@ END {
   print "    {\"type\":\"direct\",\"tag\":\"direct\"}"
   print "  ],"
   print "  \"route\":{\"auto_detect_interface\":true,\"final\":\"direct\",\"rules\":["
+  for(k=1;k<=nn;k++) {
+    split(node[k],f,"|"); id=f[2]
+    if (!used[id]) continue
+    out=(node_proto[id]=="wireguard" && wg_style=="endpoint") ? "wg-" id : "node-" id
+    print "    {\"inbound\":[" q("probe-" id) "],\"action\":\"route\",\"outbound\":" q(out) "},"
+  }
   print "    {\"ip_is_private\":true,\"action\":\"route\",\"outbound\":\"direct\"}" (nd?",":"")
   for(k=1;k<=nd;k++) {
     n=split(devips[k],ips,","); list=""

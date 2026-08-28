@@ -37,8 +37,8 @@ Then build the release packages:
 
 ```sh
 ./scripts/openwrt/build-release-packages.sh \
-  --version 1.2.2 \
-  --release 4 \
+  --version 1.3.0 \
+  --release 7 \
   --arch x86_64 \
   --service-bin /absolute/path/wloc-service \
   --ctl-bin /absolute/path/wloc-ctl \
@@ -69,7 +69,7 @@ Run:
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir /absolute/path/dist/wloc-openwrt-release-r4
+  --dist-dir /absolute/path/dist/wloc-openwrt-release-r7
 ```
 
 For each environment the verifier boots `/sbin/init`, waits for ubus, installs

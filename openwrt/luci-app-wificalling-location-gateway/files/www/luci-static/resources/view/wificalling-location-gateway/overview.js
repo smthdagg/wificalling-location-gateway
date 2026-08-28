@@ -23,7 +23,7 @@ return view.extend({
 		// read with a plain GET: the /ubus JSON-RPC channel truncates
 		// larger replies on some firmwares, leaving the status blank.
 		return Promise.all([
-			L.resolveDefault(fetch('/wloc-node-status.json').then(function(r) { return r.text(); }), '{}'),
+			L.resolveDefault(fetch('/wloc-node-status.json?t=' + Date.now(), { cache: 'no-store' }).then(function(r) { return r.text(); }), '{}'),
 			uci.load('wificalling-gateway'),
 			L.resolveDefault(fs.read('/tmp/dhcp.leases'), ''),
 			uci.load('dhcp'),
@@ -68,7 +68,7 @@ return view.extend({
 				var reason = wgFailReason(n.reason);
 				return wlocI18n.t('Handshake failed') + (reason ? ' (' + reason + ')' : '');
 			}
-			if (n.state === 'reachable' || n.state === 'tcp_reachable') return wlocI18n.t('Alive');
+			if (n.state === 'reachable' || n.state === 'tcp_reachable' || n.state === 'proxy_reachable') return wlocI18n.t('Alive');
 			if (n.state === 'unreachable') return wlocI18n.t('Offline');
 			return wlocI18n.t('Unknown');
 		}
@@ -86,10 +86,9 @@ return view.extend({
 			if (reason === 'unreachable') return wlocI18n.t('Server unreachable');
 			return '';
 		}
-		// Manual connection test: asks the router to run a fresh check
-		// right now - a WireGuard handshake (bypassing the monitor's
-		// result cache) or a TCP reachability probe for other protocols -
-		// and reports the exit IP or the failure reason.
+		// Manual connection test: asks the router to run a fresh proxy-path
+		// check through the existing Gateway sing-box, bypassing the monitor's
+		// result cache, and reports latency or the failure reason.
 		// The result banner carries an explicit close button (the stock
 		// LuCI notification's dismiss control is easy to miss under some
 		// themes) and never auto-dismisses.
@@ -149,7 +148,7 @@ return view.extend({
 				else if (r && r.state === 'handshake_failed') {
 					testNotify(wlocI18n.t('Handshake failed') + ' (' + wgFailReason(r.reason) + ')', 'error', wgFailDetail(r.reason));
 				}
-				else if (r && r.state === 'tcp_reachable') {
+				else if (r && (r.state === 'tcp_reachable' || r.state === 'proxy_reachable')) {
 					testNotify(wlocI18n.t('Alive') + (r.ping_ms ? ' — ' + r.ping_ms + ' ms' : ''), 'info');
 				}
 				else if (r && r.state === 'unreachable') {
@@ -508,7 +507,7 @@ return view.extend({
 				};
 
 		poll.add(function() {
-			return L.resolveDefault(fetch('/wloc-node-status.json').then(function(r) { return r.text(); }), '{}').then(function(raw) {
+			return L.resolveDefault(fetch('/wloc-node-status.json?t=' + Date.now(), { cache: 'no-store' }).then(function(r) { return r.text(); }), '{}').then(function(raw) {
 				var current; try { current = JSON.parse(raw); } catch (e) { current = { nodes: [] }; }
 				(current.nodes || []).forEach(function(n) {
 					var displayNode = nodeForDisplay(n);

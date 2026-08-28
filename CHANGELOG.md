@@ -2,6 +2,36 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r7] - 2026-08-28
+
+Node health and AX6S stability release. This release consolidates the r5/r6
+test packages and is the current three-platform release.
+
+- Reuse the one already-running WIFICalling Gateway sing-box for every node
+  quality test through dedicated loopback HTTP inbounds; no temporary
+  sing-box process or duplicate proxy configuration is created.
+- Report proxy-path reachability and total request latency for all protocols;
+  background checks run about every 30 seconds with a 60-second per-node
+  result cache, while `nodeTest` bypasses the cache for an immediate test.
+- Publish the monitor result to the LuCI-readable `/www/wloc-node-status.json`
+  file and bypass browser caching so refreshed LuCI pages show new metrics.
+- Keep AX6S Lite single-worker/moderate-GC operation without an artificial
+  heap ceiling; live AX6S verification confirmed five node metrics, one
+  WIFICalling sing-box process, and no new OOM event during the stability run.
+
+### 中文说明
+
+节点健康与 AX6S 稳定性版本。本版本合并 r5/r6 测试包的验证结果，作为当前三平台正式发布版本。
+
+- 所有节点质量测试统一复用正在运行的 WIFICalling Gateway sing-box，
+  通过专用回环 HTTP 入站探测，不再启动临时 sing-box 或重复代理配置。
+- 所有协议统一报告代理链路可达性与完整请求延迟；后台约每 30 秒检查一次，
+  单节点结果缓存 60 秒；`nodeTest` 会绕过缓存并立即测试。
+- 后台结果统一写入 LuCI 可读取的 `/www/wloc-node-status.json`，并绕过浏览器缓存，
+  页面刷新后可以显示最新指标。
+- AX6S Lite 保持单 worker 与适度 GC，不设置人为堆上限；AX6S 真机验证确认 5 个节点均有指标、
+  WIFICalling 只有 1 个 sing-box 进程，稳定性观察期间没有新的 OOM。
+
 ## [1.3.0-r4] - 2026-08-28
 
 Hotfix for stale node metrics after a manual node test.

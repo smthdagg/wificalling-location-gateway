@@ -4,6 +4,7 @@ set -eu
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 health="$repo_root/openwrt/files/usr/sbin/wloc-health.sh"
 node_health="$repo_root/openwrt/files/usr/libexec/wificalling-gateway/node-health.sh"
+init="$repo_root/openwrt/files/etc/init.d/wificalling-gateway"
 
 fail() {
 	printf 'FAIL: %s\n' "$1" >&2
@@ -22,5 +23,7 @@ fi
 # Gateway status endpoint can read the same result that the monitor generated.
 grep -F 'output=${2:-/www/wloc-node-status.json}' "$node_health" >/dev/null ||
 	fail 'node-health must honor the output path supplied by monitor-loop'
+grep -F '"$RUNDIR/nodes" "/www/wloc-node-status.json"' "$init" >/dev/null ||
+	fail 'monitor-loop must publish node health to the LuCI-readable status file'
 
 printf 'gateway health report checks passed\n'
