@@ -129,6 +129,8 @@ check_lifecycle() {
 		fail "standalone $phase must stop WLOC before package files change"
 	printf '%s\n' "$content" | grep -F '/etc/init.d/wificalling-gateway stop' >/dev/null ||
 		fail "standalone $phase must stop Gateway before package files change"
+	printf '%s\n' "$content" | grep -F 'wait_for_managed_processes' >/dev/null ||
+		fail "standalone $phase must wait for managed processes to exit"
 	if printf '%s\n' "$content" | grep -F 'killall -q sing-box' >/dev/null; then
 		fail "standalone $phase must not kill unrelated sing-box services"
 	fi
@@ -139,6 +141,9 @@ for lifecycle in preinst prerm; do
 	tar -tvzf "$tmp/result/control.tar.gz" | grep -E "^-rwxr-xr-x .* \\./$lifecycle$" >/dev/null ||
 		fail "standalone $lifecycle must be executable in the control archive"
 done
+if printf '%s\n' "$postinst" | grep -F 'killall -q wloc-service' >/dev/null; then
+	fail 'standalone postinst must not kill a process after the preinst lifecycle gate'
+fi
 for member in \
 	'./etc/config/wificalling-gateway' \
 	'./etc/init.d/wificalling-gateway' \

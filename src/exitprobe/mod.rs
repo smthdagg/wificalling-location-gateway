@@ -1,6 +1,6 @@
 //! Validation boundary for exit observations.
 //!
-//! Network execution and sing-box process control are separate adapters. This
+//! Network execution uses the Gateway's existing sing-box probe listeners. This
 //! module accepts only a bounded, non-secret node reference and a fresh public
 //! address that differs from the router WAN address.
 

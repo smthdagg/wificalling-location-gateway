@@ -42,7 +42,7 @@ The core boundary of the project is "**independent, precise, and revertible**": 
 - Statically linked Rust daemon optimized for OpenWrt musl targets and small release size.
 - Auto-follows the country, city, timezone, and coordinates of the node bound to the device; in auto mode periodic health checks re-probe only when the cached exit evidence expires and update Geo only when the exit IP changes. Manual mode is independent of the Gateway IP and never performs IP checks. A one-click "Refresh IP" button re-probes immediately after a node switch.
 - Manual place search, latitude/longitude entry, and saved location presets.
-- The certificate link, DNS hijack, and TPROXY rules are generated from the router's actual LAN IP at runtime — no more hardcoded 192.168.31.x, so any LAN subnet works out of the box.
+- The certificate link and scoped dual-stack TPROXY rules are generated from the router's actual LAN/device state at runtime — no more hardcoded 192.168.31.x, and no global DNS hijack for other LAN devices.
 - Locally generated, persisted WLOC root CA with an iPhone `.mobileconfig` install entry and fingerprint verification.
 - The "Add LAN device" dialog lists connected LAN devices (DHCP leases + ARP cache); picking one fills in the device name and the real IP automatically.
 - Bounded TLS, HTTP/2, and WLOC protocol handling; upstream certificate and hostname verification is never downgraded.

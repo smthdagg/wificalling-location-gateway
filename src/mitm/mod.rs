@@ -227,9 +227,13 @@ impl MitmCertResolver {
 impl ResolvesServerCert for MitmCertResolver {
     fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<RustlsCertifiedKey>> {
         let server_name = client_hello.server_name()?;
-        // rustls gives the SNI without a trailing dot; normalize before lookup.
+        // DNS names are case-insensitive. Trim the optional root dot and
+        // compare without changing the exact allowlist.
         let hostname = server_name.trim_end_matches('.');
-        self.leaves.get(hostname).cloned()
+        self.leaves
+            .iter()
+            .find(|(approved, _)| approved.eq_ignore_ascii_case(hostname))
+            .map(|(_, leaf)| Arc::clone(leaf))
     }
 }
 

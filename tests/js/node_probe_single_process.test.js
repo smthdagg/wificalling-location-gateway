@@ -20,6 +20,10 @@ const patch = fs.readFileSync(
 	path.join(root, 'scripts/openwrt/patch-wireguard-health.sh'),
 	'utf8'
 );
+const wlocProbe = fs.readFileSync(
+	path.join(root, 'src/exitprobe/singbox.rs'),
+	'utf8'
+);
 
 test('compiler gives every node a loopback probe routed to its existing outbound', () => {
 	assert.match(compiler, /127\.0\.0\.1/);
@@ -35,4 +39,6 @@ test('node health and manual tests never launch a second sing-box', () => {
 	assert.match(nodeTest, /127\.0\.0\.1/);
 	assert.doesNotMatch(patch, /temporary sing-box/);
 	assert.doesNotMatch(patch, /sing-box run/);
+	assert.doesNotMatch(wlocProbe, /Command::new\(&self\.singbox_bin\)/);
+	assert.match(wlocProbe, /existing_probe_port/);
 });

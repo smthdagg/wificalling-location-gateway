@@ -61,6 +61,8 @@ for package in wificalling-location-gateway wificalling-location-gateway-lite; d
 	grep -F "Package/$package/prerm" "$builder" >/dev/null ||
 		fail "$package must stop managed services before removal"
 done
+grep -F 'wait_for_managed_processes' "$builder" >/dev/null ||
+	fail 'release package lifecycle must wait for managed processes to exit'
 grep -F "Package: wificalling-location-gateway" "$builder" >/dev/null ||
 	fail 'release builder must accept a hash-pinned stable integrated package as its 1.3.0-r1 base'
 grep -F '1.3.0-r1' "$builder" >/dev/null ||

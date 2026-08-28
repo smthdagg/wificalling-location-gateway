@@ -15,8 +15,8 @@ SET=apple_hosts
 
 HOSTS="gs-loc.apple.com gs-loc-cn.apple.com gs-loc-corpa.apple.com gs-loc.apple.com.cn bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com"
 
-# The router's own LAN IPv4 (the DNS hijack maps the WLOC names to it);
-# answers equal to it must not pollute the set.
+# The router's own LAN IPv4 is excluded from the destination set if it appears
+# in a resolver answer; a local DNS answer is never treated as Apple data.
 lan_ip() {
     ip=$(uci -q get network.lan.ipaddr) || ip=
     case "$ip" in
@@ -33,27 +33,46 @@ ROUTER_IP=$(lan_ip)
     exit 1
 }
 
-collect() {
-    # Query an explicit public resolver so the DNS hijack (which maps the
-    # WLOC names to the router's LAN IP) does not pollute the set.
+collect_v4() {
+    # Query explicit public resolvers.  The client DNS answer is never used
+    # as a trust decision; it only feeds the owned destination set.
     for host in $HOSTS; do
-        nslookup "$host" 223.5.5.5 2>/dev/null \
+        nslookup -type=A "$host" 223.5.5.5 2>/dev/null \
             | sed -n 's/^Address: *\([0-9][0-9.]*\)$/\1/p'
-        nslookup "$host" 119.29.29.29 2>/dev/null \
+        nslookup -type=A "$host" 119.29.29.29 2>/dev/null \
             | sed -n 's/^Address: *\([0-9][0-9.]*\)$/\1/p'
     done
 }
 
-ips=$(collect | grep -v "^$ROUTER_IP$" | sort -u | tr '
-' ',' | sed 's/,\$$//')
-[ -n "$ips" ] || {
-    echo "wloc-refresh-set: no A records resolved (DNS unavailable?)" >&2
+collect_v6() {
+    for host in $HOSTS; do
+        nslookup -type=AAAA "$host" 223.5.5.5 2>/dev/null \
+            | awk '/^Address:[[:space:]]/ { value=$2; if (value !~ /\./ && value ~ /^[0-9A-Fa-f]*:[0-9A-Fa-f:]+$/) print value }'
+        nslookup -type=AAAA "$host" 119.29.29.29 2>/dev/null \
+            | awk '/^Address:[[:space:]]/ { value=$2; if (value !~ /\./ && value ~ /^[0-9A-Fa-f]*:[0-9A-Fa-f:]+$/) print value }'
+    done
+}
+
+csv() {
+    tr '\n' ',' | sed 's/,$//'
+}
+
+ips4=$(collect_v4 | grep -v "^$ROUTER_IP$" | sort -u | csv)
+ips6=$(collect_v6 | awk 'index($0, ":") > 0' | sort -u | csv)
+[ -n "$ips4" ] || [ -n "$ips6" ] || {
+    echo "wloc-refresh-set: no A/AAAA records resolved (DNS unavailable?)" >&2
     exit 1
 }
 
+nft list table inet "$TABLE" >/dev/null 2>&1 || {
+    echo "wloc-refresh-set: owned nft table is absent" >&2
+    exit 1
+}
 nft flush set inet "$TABLE" "$SET" 2>/dev/null || nft add set inet "$TABLE" "$SET" '{ type ipv4_addr; }'
-nft add element inet "$TABLE" "$SET" "{ $ips }"
+nft flush set inet "$TABLE" apple_hosts6 2>/dev/null || nft add set inet "$TABLE" apple_hosts6 '{ type ipv6_addr; }'
+[ -n "$ips4" ] && nft add element inet "$TABLE" "$SET" "{ $ips4 }"
+[ -n "$ips6" ] && nft add element inet "$TABLE" apple_hosts6 "{ $ips6 }"
 mkdir -p /var/run/wloc-service
-printf '%s\n' "${ips%%,*}" > /var/run/wloc-service/upstream-ip.tmp
+printf '%s\n' "${ips4%%,*}" > /var/run/wloc-service/upstream-ip.tmp
 mv /var/run/wloc-service/upstream-ip.tmp /var/run/wloc-service/upstream-ip
-echo "wloc-refresh-set: updated $SET = { $ips }"
+echo "wloc-refresh-set: updated $SET = { $ips4 }; apple_hosts6 = { $ips6 }"

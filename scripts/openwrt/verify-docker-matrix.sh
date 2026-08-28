@@ -94,7 +94,8 @@ run_case() {
 	esac
 	container="wloc-matrix-${name}-$$"
 	containers="$containers $container"
-	docker image inspect "$image" >/dev/null 2>&1 || fail "missing Docker image: $image"
+	image_tag=${image%@*}
+	docker image inspect "$image_tag" >/dev/null 2>&1 || fail "missing Docker image: $image"
 	if [ "$manager" = apk ]; then
 		# Resolve dependencies before OpenWrt's firewall starts. Once init has
 		# applied its default policy, Docker Desktop's translated egress is no

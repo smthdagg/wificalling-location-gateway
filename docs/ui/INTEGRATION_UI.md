@@ -134,7 +134,6 @@ config wloc-service 'main'
     option manual_lat '51.5074'
     option manual_lon '-0.1278'
     option node_ref 'default'
-    option probe_port '18080'
     option ca_path '/etc/wloc-service/ca.pem'
     option ca_key '/etc/wloc-service/ca.key'
 

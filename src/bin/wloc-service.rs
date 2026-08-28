@@ -11,6 +11,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use tokio::net::TcpStream;
 use wificalling_location_gateway::app::{WlocService, WlocServiceConfig};
 use wificalling_location_gateway::config::{LocationMode, WlocUciConfig};
 use wificalling_location_gateway::exitprobe::runtime::{ExitProbeRuntime, ProbeFailure};
@@ -22,7 +23,7 @@ use wificalling_location_gateway::mitm::proxy::{MitmProxy, MitmProxyError};
 use wificalling_location_gateway::mitm::CaBundle;
 use wificalling_location_gateway::service::api::RequestParams;
 use wificalling_location_gateway::service::control::{RuntimeControl, RuntimeFailure};
-use wificalling_location_gateway::service::dispatch::ServiceDispatch;
+use wificalling_location_gateway::service::dispatch::{DispatchError, ServiceDispatch};
 use wificalling_location_gateway::service::server::ControlServer;
 use wificalling_location_gateway::service::GeoRecord;
 use wificalling_location_gateway::wloc::PatchTarget;
@@ -53,7 +54,7 @@ impl RuntimeControl for OpenWrtRuntime {
         Ok(())
     }
     fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure> {
-        Ok(true)
+        Ok(shared_gateway_engine_healthy())
     }
     fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
@@ -93,14 +94,49 @@ fn run_redirect_helper(action: Option<&str>) -> Result<(), RuntimeFailure> {
         .and_then(|status| status.success().then_some(()).ok_or(RuntimeFailure))
 }
 
-/// The current firewall implementation is IPv4-only. Refuse to advertise a
-/// ready WLOC path when the router has a global IPv6 route, avoiding a false
-/// green state that would let AAAA traffic bypass the MITM.
-fn ipv6_interception_ready() -> bool {
-    std::process::Command::new("ip")
-        .args(["-6", "route", "show", "scope", "global"])
-        .output()
-        .map(|output| output.status.success() && output.stdout.is_empty())
+/// Check the Gateway's already-running sing-box without starting another
+/// process. A missing process is a hard health failure: keeping WLOC's
+/// redirect installed would send the device into a dead proxy path.
+fn shared_gateway_engine_healthy() -> bool {
+    std::fs::read_dir("/proc")
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            name.to_str()?.parse::<u32>().ok()
+        })
+        .any(|pid| {
+            std::fs::read(format!("/proc/{pid}/cmdline"))
+                .map(|cmdline| is_shared_singbox_cmdline(&cmdline))
+                .unwrap_or(false)
+        })
+}
+
+fn is_shared_singbox_cmdline(cmdline: &[u8]) -> bool {
+    let mut singbox = false;
+    let mut run = false;
+    for argument in cmdline.split(|byte| *byte == 0) {
+        if argument == b"run" {
+            run = true;
+        }
+        let basename = argument
+            .rsplit(|byte| *byte == b'/')
+            .next()
+            .unwrap_or(argument);
+        if matches!(basename, b"sing-box" | b"sing-box-lite") {
+            singbox = true;
+        }
+    }
+    singbox && run
+}
+
+/// The redirect helper proves that the current assigned-device IPv6 scope is
+/// available before the daemon may enable interception.
+fn ipv6_scope_ready() -> bool {
+    std::fs::read_to_string("/var/run/wloc-service/ipv6-scope-ready")
+        .map(|value| value.trim() == "1")
         .unwrap_or(false)
 }
 
@@ -123,7 +159,7 @@ impl ExitProbeRuntime for StubProbe {
 /// device's bound node), or the deterministic stub when `WLOC_PROBE=stub`.
 /// The probe wiring (assigned device, probe port, node) comes from the UCI
 /// configuration; `WLOC_*` environment variables override it for staging.
-fn build_probe(assigned_device: &str, probe_port: u16) -> Box<dyn ExitProbeRuntime> {
+fn build_probe(assigned_device: &str) -> Box<dyn ExitProbeRuntime> {
     if std::env::var("WLOC_PROBE").as_deref() == Ok("stub") {
         return Box::new(StubProbe {
             exit_ip: env_or("WLOC_STUB_EXIT_IP", IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))),
@@ -138,7 +174,6 @@ fn build_probe(assigned_device: &str, probe_port: u16) -> Box<dyn ExitProbeRunti
             .parse()
             .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
     );
-    let probe_port: u16 = env_or("WLOC_PROBE_PORT", probe_port);
     Box::new(
         wificalling_location_gateway::exitprobe::singbox::SingBoxProbe::new(
             std::path::PathBuf::from(
@@ -146,8 +181,6 @@ fn build_probe(assigned_device: &str, probe_port: u16) -> Box<dyn ExitProbeRunti
                     .unwrap_or_else(|_| "/var/run/wificalling-gateway/sing-box.json".into()),
             ),
             device_ip,
-            probe_port,
-            std::path::PathBuf::from("/tmp/wloc-probe"),
         ),
     )
 }
@@ -212,20 +245,75 @@ fn record_proxy_health(health: &std::sync::Mutex<ProxyHealth>, path: &std::path:
     let _ = std::fs::write(path, serde_json::to_string(&snapshot).unwrap_or_default());
 }
 
-/// Bind the MITM proxy listener with the TPROXY transparent flag (Linux).
-/// On non-Linux platforms (dev/test builds) it falls back to a plain bind.
-fn bind_tproxy_listener(port: u16) -> std::io::Result<tokio::net::TcpListener> {
-    let domain = socket2::Domain::IPV4;
+fn spawn_proxy_connection(
+    stream: TcpStream,
+    proxy: &std::sync::Arc<MitmProxy>,
+    patch_state: &std::sync::Arc<std::sync::Mutex<Option<PatchTarget>>>,
+    proxy_slots: &std::sync::Arc<tokio::sync::Semaphore>,
+    proxy_health: &std::sync::Arc<std::sync::Mutex<ProxyHealth>>,
+    health_path: &str,
+) {
+    let Ok(slot) = proxy_slots.clone().try_acquire_owned() else {
+        return;
+    };
+    let proxy = std::sync::Arc::clone(proxy);
+    let patch_state = std::sync::Arc::clone(patch_state);
+    let proxy_health = std::sync::Arc::clone(proxy_health);
+    let health_path = health_path.to_owned();
+    tokio::spawn(async move {
+        let result = tokio::time::timeout(
+            PROXY_CONNECTION_TIMEOUT,
+            proxy.handle_connection(stream, patch_state),
+        )
+        .await
+        .map_err(|_| MitmProxyError::Upstream("client timeout".into()))
+        .and_then(|result| result);
+        match result {
+            Ok(()) => record_proxy_health(&proxy_health, std::path::Path::new(&health_path), true),
+            Err(error) => {
+                eprintln!("wloc proxy: connection error: {error}");
+                record_proxy_health(&proxy_health, std::path::Path::new(&health_path), false);
+            }
+        }
+        drop(slot);
+    });
+}
+
+/// Bind one transparent TCP listener. Linux needs IP_TRANSPARENT for TPROXY;
+/// dev/test platforms use the same socket shape without that Linux option.
+fn bind_tproxy_listener(
+    domain: socket2::Domain,
+    address: std::net::SocketAddr,
+    only_v6: bool,
+) -> std::io::Result<tokio::net::TcpListener> {
     let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))?;
     socket.set_reuse_address(true)?;
+    if domain == socket2::Domain::IPV6 {
+        socket.set_only_v6(only_v6)?;
+    }
     #[cfg(target_os = "linux")]
-    socket.set_ip_transparent(true)?;
-    let addr: std::net::SocketAddr = ([0, 0, 0, 0], port).into();
-    socket.bind(&addr.into())?;
+    if domain == socket2::Domain::IPV6 {
+        socket.set_ip_transparent_v6(true)?;
+    } else {
+        socket.set_ip_transparent_v4(true)?;
+    }
+    socket.bind(&address.into())?;
     socket.listen(1024)?;
     let std_listener: std::net::TcpListener = socket.into();
     std_listener.set_nonblocking(true)?;
     tokio::net::TcpListener::from_std(std_listener)
+}
+
+fn bind_tproxy_listener_v4(port: u16) -> std::io::Result<tokio::net::TcpListener> {
+    bind_tproxy_listener(socket2::Domain::IPV4, ([0, 0, 0, 0], port).into(), true)
+}
+
+fn bind_tproxy_listener_v6(port: u16) -> std::io::Result<tokio::net::TcpListener> {
+    bind_tproxy_listener(
+        socket2::Domain::IPV6,
+        ([0, 0, 0, 0, 0, 0, 0, 0], port).into(),
+        true,
+    )
 }
 
 const MAX_PROXY_CONNECTIONS: usize = 8;
@@ -283,7 +371,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let service = WlocService::new(
         OpenWrtRuntime,
-        build_probe(&assigned_device, uci.probe_port),
+        build_probe(&assigned_device),
         geo,
         WlocServiceConfig {
             node_ref: NodeRef::new(&uci.node_ref)
@@ -293,7 +381,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 max_observation_age: Duration::from_secs(uci.probe_interval_secs),
             },
             scope_valid: true,
-            ipv6_ready: ipv6_interception_ready(),
+            ipv6_ready: ipv6_scope_ready(),
             assigned_device_configured: !assigned_device.is_empty(),
             assigned_device: if assigned_device.is_empty() {
                 None
@@ -384,17 +472,10 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let proxy = MitmProxy::new(&mitm_ca, upstream_roots)?
         .with_events_file(std::path::PathBuf::from(events_file))
         .with_upstream_override_file(std::path::PathBuf::from(upstream_file));
-    // The upstream connection must use the real Apple IP (the DNS hijack
-    // would otherwise point it back at this router). Prefer the first
-    // nft-set address; fall back to DNS-only resolution when the set is
-    // empty (e.g. rules not yet installed).
-    let proxy = match upstream_apple_ips().into_iter().next() {
-        Some(apple_ip) => {
-            eprintln!("wloc-service: upstream apple ip override {apple_ip}:443");
-            proxy.with_upstream_override(apple_ip, 443)
-        }
-        None => proxy,
-    };
+    // Production traffic must use the original TPROXY destination selected
+    // by the client. The refreshed set-backed address remains a fallback for
+    // non-transparent test environments; never pin all requests to its first
+    // DNS answer because Apple's CDN addresses rotate independently.
     let proxy = std::sync::Arc::new(proxy);
     let proxy_port: u16 = env_or("WLOC_PROXY_PORT", 8443_u16);
 
@@ -418,7 +499,8 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
-    let proxy_listener = runtime.block_on(async { bind_tproxy_listener(proxy_port) })?;
+    let proxy_listener = runtime.block_on(async { bind_tproxy_listener_v4(proxy_port) })?;
+    let proxy_listener_v6 = runtime.block_on(async { bind_tproxy_listener_v6(proxy_port) })?;
 
     // Apply the persisted configuration to the control plane before serving:
     // manual location preset first (so a manual target is already fresh), then
@@ -441,8 +523,28 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
     if uci.enabled {
-        if let Err(error) = service.enable() {
-            eprintln!("wloc-service: enable failed: {error:?}");
+        // procd starts the Gateway before WLOC, but the Gateway's listener is
+        // asynchronous. Retry only the recoverable missing-target case so a
+        // reboot does not leave WLOC permanently disabled just because the
+        // existing sing-box was still binding its probe inbounds.
+        let mut enabled = false;
+        for attempt in 0..10 {
+            match service.enable() {
+                Ok(()) => {
+                    enabled = true;
+                    break;
+                }
+                Err(DispatchError::Unavailable) if attempt < 9 => {
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+                Err(error) => {
+                    eprintln!("wloc-service: enable failed: {error:?}");
+                    break;
+                }
+            }
+        }
+        if !enabled {
+            eprintln!("wloc-service: automatic location target is unavailable");
         }
     }
 
@@ -473,51 +575,23 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // versions answer with RST.
     runtime.spawn(async move {
         loop {
-            match proxy_listener.accept().await {
-                Ok((stream, _)) => {
-                    let Ok(slot) = proxy_slots.clone().try_acquire_owned() else {
-                        continue;
-                    };
-                    let proxy = proxy.clone();
-                    let patch_state = std::sync::Arc::clone(&patch_state);
-                    let proxy_health = std::sync::Arc::clone(&proxy_health);
-                    let health_path = health_path.clone();
-                    tokio::spawn(async move {
-                        let result = tokio::time::timeout(
-                            PROXY_CONNECTION_TIMEOUT,
-                            proxy.handle_connection(stream, patch_state),
-                        )
-                        .await
-                        .map_err(|_| MitmProxyError::Upstream("client timeout".into()))
-                        .and_then(|result| result);
-                        match result {
-                            Ok(()) => {
-                                record_proxy_health(
-                                    &proxy_health,
-                                    std::path::Path::new(&health_path),
-                                    true,
-                                );
-                            }
-                            Err(error) => {
-                                eprintln!("wloc proxy: connection error: {error}");
-                                record_proxy_health(
-                                    &proxy_health,
-                                    std::path::Path::new(&health_path),
-                                    false,
-                                );
-                            }
-                        }
-                        drop(slot);
-                    });
-                }
-                Err(error) => {
-                    eprintln!("wloc proxy: accept error: {error}");
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
+            tokio::select! {
+                accepted = proxy_listener.accept() => match accepted {
+                    Ok((stream, _)) => spawn_proxy_connection(
+                        stream, &proxy, &patch_state, &proxy_slots, &proxy_health, &health_path,
+                    ),
+                    Err(error) => eprintln!("wloc proxy: IPv4 accept error: {error}"),
+                },
+                accepted = proxy_listener_v6.accept() => match accepted {
+                    Ok((stream, _)) => spawn_proxy_connection(
+                        stream, &proxy, &patch_state, &proxy_slots, &proxy_health, &health_path,
+                    ),
+                    Err(error) => eprintln!("wloc proxy: IPv6 accept error: {error}"),
+                },
             }
         }
     });
-    eprintln!("wloc-service MITM proxy listening on 0.0.0.0:{proxy_port}");
+    eprintln!("wloc-service MITM proxy listening on 0.0.0.0/[::]:{proxy_port}");
 
     eprintln!("wloc-service listening on {socket_path}");
     let server = ControlServer::new(service);
@@ -526,39 +600,6 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // configured observation age is reached; manual mode never probes IP.
     runtime.block_on(server.serve(listener, std::time::Duration::from_secs(10)));
     Ok(())
-}
-
-/// Read the real Apple WLOC IPs from the nft apple_hosts set. The DNS
-/// hijack forces the devices to connect locally, but the proxy's own
-/// upstream connection must reach the real Apple server - resolving the
-/// hostname through dnsmasq would loop back to this router.
-fn upstream_apple_ips() -> Vec<String> {
-    let output = std::process::Command::new("nft")
-        .args(["list", "set", "inet", "wloc_service", "apple_hosts"])
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-        .unwrap_or_default();
-    let router_ip = lan_router_ip();
-    parse_apple_ips(&output)
-        .into_iter()
-        .filter(|ip| Some(ip.as_str()) != router_ip.as_deref())
-        .collect()
-}
-
-/// The router's own LAN IPv4 (`uci network.lan.ipaddr`), used to filter the
-/// hijacked address out of the upstream Apple IP set on any subnet.
-fn lan_router_ip() -> Option<String> {
-    let output = std::process::Command::new("uci")
-        .args(["-q", "get", "network.lan.ipaddr"])
-        .output()
-        .ok()?;
-    let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if ip.is_empty() {
-        None
-    } else {
-        Some(ip)
-    }
 }
 
 /// The first source IP of the Gateway device policy - the natural follow
@@ -574,33 +615,6 @@ fn gateway_first_device_ip() -> Option<String> {
     } else {
         Some(ip)
     }
-}
-
-/// Extract IPv4 addresses from the `nft list set` output (elements line).
-fn parse_apple_ips(output: &str) -> Vec<String> {
-    output
-        .lines()
-        .filter_map(|line| {
-            let trimmed = line.trim();
-            if trimmed.starts_with("elements") {
-                Some(trimmed)
-            } else {
-                None
-            }
-        })
-        .flat_map(|line| {
-            line.split(['{', '}', ',', ' '])
-                .map(str::trim)
-                .filter(|token| {
-                    !token.is_empty()
-                        && token.chars().all(|c| c.is_ascii_digit() || c == '.')
-                        && token.matches('.').count() == 3
-                        && *token != "127.0.0.1"
-                })
-                .map(str::to_owned)
-                .collect::<Vec<_>>()
-        })
-        .collect()
 }
 
 /// Read the persisted CA info JSON (fingerprint/issued_at/expires_at).
@@ -638,24 +652,25 @@ fn pem_decode(pem: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wificalling_location_gateway::mitm::CaBundle;
 
     #[test]
-    fn parses_apple_ips_from_nft_output() {
-        let output = "\nelements = { 59.82.17.33, 140.205.31.96 }\n";
-        assert_eq!(
-            parse_apple_ips(output),
-            vec!["59.82.17.33", "140.205.31.96"]
-        );
+    fn recognizes_only_a_running_shared_singbox_command() {
+        assert!(is_shared_singbox_cmdline(
+            b"/tmp/sing-box-lite\0run\0-c\0/config.json\0"
+        ));
+        assert!(is_shared_singbox_cmdline(
+            b"/usr/bin/sing-box\0run\0-c\0/config.json\0"
+        ));
+        assert!(!is_shared_singbox_cmdline(b"/usr/sbin/wloc-service\0"));
+        assert!(!is_shared_singbox_cmdline(b"/tmp/sing-box-lite\0check\0"));
     }
 
     #[test]
-    fn empty_nft_output_yields_no_ips() {
-        assert!(parse_apple_ips("table inet wloc_service {\n}").is_empty());
-    }
-
-    #[test]
-    fn ignores_non_ip_tokens() {
-        let output = "elements = { 59.82.17.33, hostname, 10.0.0.1/8 }\n";
-        assert_eq!(parse_apple_ips(output), vec!["59.82.17.33"]);
+    fn pem_certificate_round_trip_preserves_der() {
+        let ca = CaBundle::generate().expect("test CA must generate");
+        let der = ca.root_cert_der();
+        let pem = pem_encode(&der);
+        assert_eq!(pem_decode(pem.as_bytes()).unwrap(), der.as_ref());
     }
 }

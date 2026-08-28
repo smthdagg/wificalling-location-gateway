@@ -93,6 +93,18 @@ async fn all_approved_hosts_complete_handshake() {
 }
 
 #[tokio::test]
+async fn approved_host_sni_matching_is_case_insensitive() {
+    let ca = CaBundle::generate().unwrap();
+    let (success, _) = handshake(server_config(&ca), client_config(&ca), "GS-LOC.APPLE.COM.")
+        .await
+        .unwrap();
+    assert!(
+        success,
+        "DNS case and a root dot must not break an approved SNI"
+    );
+}
+
+#[tokio::test]
 async fn non_approved_host_is_refused_fail_closed() {
     let ca = CaBundle::generate().unwrap();
     for hostname in [

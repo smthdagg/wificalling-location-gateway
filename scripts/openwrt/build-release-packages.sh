@@ -214,17 +214,59 @@ endef
 define Package/wificalling-location-gateway/preinst
 #!/bin/sh
 [ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+wait_for_managed_processes() {
+  i=0
+  while [ "\$\$i" -lt 15 ]; do
+    running=
+    for cmdline in /proc/[0-9]*/cmdline; do
+      [ -r "\$\$cmdline" ] || continue
+      first=\$\$(tr '\000' '\n' < "\$\$cmdline" 2>/dev/null | sed -n '1p')
+      case "\$\$first" in
+        */wloc-service) running=1; break;;
+        */sing-box|*/sing-box-lite)
+          tr '\000' ' ' < "\$\$cmdline" 2>/dev/null | grep -F '/var/run/wificalling-gateway/sing-box.json' >/dev/null && running=1
+          [ -n "\$\$running" ] && break;;
+      esac
+    done
+    [ -z "\$\$running" ] && return 0
+    sleep 1
+    i=\$\$((i + 1))
+  done
+  logger -t wificalling-location-gateway 'managed process did not exit before package operation'
+  return 1
+}
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
-rm -rf /tmp/wloc-probe
+wait_for_managed_processes || exit 1
 exit 0
 endef
 define Package/wificalling-location-gateway/prerm
 #!/bin/sh
 [ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+wait_for_managed_processes() {
+  i=0
+  while [ "\$\$i" -lt 15 ]; do
+    running=
+    for cmdline in /proc/[0-9]*/cmdline; do
+      [ -r "\$\$cmdline" ] || continue
+      first=\$\$(tr '\000' '\n' < "\$\$cmdline" 2>/dev/null | sed -n '1p')
+      case "\$\$first" in
+        */wloc-service) running=1; break;;
+        */sing-box|*/sing-box-lite)
+          tr '\000' ' ' < "\$\$cmdline" 2>/dev/null | grep -F '/var/run/wificalling-gateway/sing-box.json' >/dev/null && running=1
+          [ -n "\$\$running" ] && break;;
+      esac
+    done
+    [ -z "\$\$running" ] && return 0
+    sleep 1
+    i=\$\$((i + 1))
+  done
+  logger -t wificalling-location-gateway 'managed process did not exit before package operation'
+  return 1
+}
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
-rm -rf /tmp/wloc-probe
+wait_for_managed_processes || exit 1
 exit 0
 endef
 define Package/wificalling-location-gateway/postinst
@@ -284,17 +326,59 @@ endef
 define Package/wificalling-location-gateway-lite/preinst
 #!/bin/sh
 [ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+wait_for_managed_processes() {
+  i=0
+  while [ "\$\$i" -lt 15 ]; do
+    running=
+    for cmdline in /proc/[0-9]*/cmdline; do
+      [ -r "\$\$cmdline" ] || continue
+      first=\$\$(tr '\000' '\n' < "\$\$cmdline" 2>/dev/null | sed -n '1p')
+      case "\$\$first" in
+        */wloc-service) running=1; break;;
+        */sing-box|*/sing-box-lite)
+          tr '\000' ' ' < "\$\$cmdline" 2>/dev/null | grep -F '/var/run/wificalling-gateway/sing-box.json' >/dev/null && running=1
+          [ -n "\$\$running" ] && break;;
+      esac
+    done
+    [ -z "\$\$running" ] && return 0
+    sleep 1
+    i=\$\$((i + 1))
+  done
+  logger -t wificalling-location-gateway 'managed process did not exit before package operation'
+  return 1
+}
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
-rm -rf /tmp/wloc-probe
+wait_for_managed_processes || exit 1
 exit 0
 endef
 define Package/wificalling-location-gateway-lite/prerm
 #!/bin/sh
 [ -n "\$\${IPKG_INSTROOT:-}" ] && exit 0
+wait_for_managed_processes() {
+  i=0
+  while [ "\$\$i" -lt 15 ]; do
+    running=
+    for cmdline in /proc/[0-9]*/cmdline; do
+      [ -r "\$\$cmdline" ] || continue
+      first=\$\$(tr '\000' '\n' < "\$\$cmdline" 2>/dev/null | sed -n '1p')
+      case "\$\$first" in
+        */wloc-service) running=1; break;;
+        */sing-box|*/sing-box-lite)
+          tr '\000' ' ' < "\$\$cmdline" 2>/dev/null | grep -F '/var/run/wificalling-gateway/sing-box.json' >/dev/null && running=1
+          [ -n "\$\$running" ] && break;;
+      esac
+    done
+    [ -z "\$\$running" ] && return 0
+    sleep 1
+    i=\$\$((i + 1))
+  done
+  logger -t wificalling-location-gateway 'managed process did not exit before package operation'
+  return 1
+}
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
-rm -rf /tmp/wloc-probe
+wait_for_managed_processes || exit 1
 exit 0
 endef
 define Package/wificalling-location-gateway-lite/postinst
@@ -330,7 +414,8 @@ build_with_sdk() {
 	out="$stage/output/$label-$variant"
 	mkdir -p "$out"
 	chmod 0777 "$out"
-	docker image inspect "$image" >/dev/null 2>&1 ||
+	image_tag=${image%@*}
+	docker image inspect "$image_tag" >/dev/null 2>&1 ||
 		fail "pinned SDK image missing; pull explicitly: docker pull --platform linux/amd64 $image"
 	docker run --rm --pull never --platform linux/amd64 --network none \
 		-v "$stage/input:/input:ro" -v "$out:/output" \

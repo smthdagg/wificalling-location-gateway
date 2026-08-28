@@ -123,6 +123,12 @@ start_service() {
 }
 
 stop_service() {
+	# rc.common terminates the procd instances immediately after this hook.
+	# Keep nft cleanup in service_stopped so the monitor cannot race Passwall.
+	:
+}
+
+service_stopped() {
 	/usr/libexec/$APP/firewall.sh stop "$RUNDIR/clients"
 	# Also drop the stale snapshot when the gateway is stopped/disabled so
 	# the status page does not keep rendering the last state indefinitely.

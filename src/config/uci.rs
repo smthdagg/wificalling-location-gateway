@@ -11,7 +11,6 @@ use std::path::Path;
 use std::str::FromStr;
 
 pub const DEFAULT_UCI_PATH: &str = "/etc/config/wloc-service";
-pub const DEFAULT_PROBE_PORT: u16 = 18080;
 pub const DEFAULT_PROBE_INTERVAL_SECS: u64 = 300;
 const DEFAULT_NODE_REF: &str = "default";
 
@@ -43,7 +42,6 @@ pub struct WlocUciConfig {
     pub assigned_device: String,
     pub probe_interval_secs: u64,
     pub geo_provider: String,
-    pub probe_port: u16,
     pub presets: Vec<Preset>,
 }
 
@@ -58,7 +56,6 @@ impl Default for WlocUciConfig {
             assigned_device: String::new(),
             probe_interval_secs: DEFAULT_PROBE_INTERVAL_SECS,
             geo_provider: "http".to_owned(),
-            probe_port: DEFAULT_PROBE_PORT,
             presets: Vec::new(),
         }
     }
@@ -260,7 +257,6 @@ fn apply_option(
                     u64::from_str(value).unwrap_or(DEFAULT_PROBE_INTERVAL_SECS)
             }
             "geo_provider" => config.geo_provider = value.to_owned(),
-            "probe_port" => config.probe_port = u16::from_str(value).unwrap_or(DEFAULT_PROBE_PORT),
             _ => {}
         },
         _ => {}
@@ -292,7 +288,6 @@ config wloc-service 'main'
 	option assigned_device '192.168.1.100'
 	option probe_interval '600'
 	option geo_provider 'http'
-	option probe_port '18080'
 "#;
         let config = WlocUciConfig::parse(text).unwrap();
         assert!(config.enabled);
@@ -303,7 +298,6 @@ config wloc-service 'main'
         assert_eq!(config.assigned_device, "192.168.1.100");
         assert_eq!(config.probe_interval_secs, 600);
         assert_eq!(config.geo_provider, "http");
-        assert_eq!(config.probe_port, 18080);
     }
 
     #[test]

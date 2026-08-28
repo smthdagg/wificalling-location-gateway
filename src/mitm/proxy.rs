@@ -8,6 +8,7 @@
 //! unchanged; a malformed WLOC response is never replaced.
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
@@ -111,6 +112,13 @@ impl MitmProxy {
         client_tcp: TcpStream,
         patch_state: Arc<Mutex<Option<PatchTarget>>>,
     ) -> Result<(), MitmProxyError> {
+        // TPROXY preserves the client's original Apple destination as the
+        // accepted socket's local address. Reuse it so a stale first DNS
+        // result can never pin every request to a dead CDN address.
+        let original_destination = client_tcp
+            .local_addr()
+            .ok()
+            .filter(is_usable_original_destination);
         let client_addr = client_tcp
             .peer_addr()
             .ok()
@@ -139,7 +147,7 @@ impl MitmProxy {
             // connection after the exit/IP association has changed.
             let patch = patch_state.lock().ok().and_then(|guard| *guard);
             match self
-                .forward_upstream(request, patch.as_ref(), &client_addr)
+                .forward_upstream(request, patch.as_ref(), &client_addr, original_destination)
                 .await
             {
                 Ok((status, headers, original_len, patched_body)) => {
@@ -186,6 +194,7 @@ impl MitmProxy {
         request: Request<h2::RecvStream>,
         patch: Option<&PatchTarget>,
         client_addr: &str,
+        original_destination: Option<SocketAddr>,
     ) -> Result<(http::StatusCode, http::HeaderMap, usize, Vec<u8>), MitmProxyError> {
         let hostname = approved_host(&request)?;
         let is_wloc =
@@ -278,14 +287,12 @@ impl MitmProxy {
             .and_then(|path| std::fs::read_to_string(path).ok())
             .and_then(|text| text.trim().parse::<std::net::IpAddr>().ok())
             .map(|ip| (ip.to_string(), 443));
-        let (connect_host, connect_port) = match dynamic_override.or_else(|| {
-            self.upstream_override
-                .as_ref()
-                .map(|(host, port)| (host.clone(), *port))
-        }) {
-            Some((host, port)) => (host, port),
-            None => (hostname.clone(), 443),
-        };
+        let (connect_host, connect_port) = choose_upstream_target(
+            original_destination,
+            self.upstream_override.as_ref(),
+            dynamic_override.as_ref(),
+            &hostname,
+        );
         let connect = TcpStream::connect((connect_host.as_str(), connect_port))
             .await
             .map_err(|error| MitmProxyError::Upstream(error.to_string()))?;
@@ -336,6 +343,31 @@ impl MitmProxy {
         });
         crate::service::append_event_line(events_file, &event);
     }
+}
+
+fn is_usable_original_destination(address: &SocketAddr) -> bool {
+    address.port() == 443 && !address.ip().is_unspecified() && !address.ip().is_loopback()
+}
+
+/// Prefer the kernel-preserved TPROXY destination. Explicit test overrides
+/// and the refreshed DNS address remain fallbacks for non-transparent tests
+/// or platforms that do not expose the original destination.
+fn choose_upstream_target(
+    original_destination: Option<SocketAddr>,
+    explicit_override: Option<&(String, u16)>,
+    dynamic_override: Option<&(String, u16)>,
+    hostname: &str,
+) -> (String, u16) {
+    if let Some((host, port)) = explicit_override {
+        return (host.clone(), *port);
+    }
+    if let Some(address) = original_destination.filter(is_usable_original_destination) {
+        return (address.ip().to_string(), address.port());
+    }
+    if let Some((host, port)) = dynamic_override {
+        return (host.clone(), *port);
+    }
+    (hostname.to_owned(), 443)
 }
 
 /// Reject requests whose authority is not one of the approved hosts.
@@ -414,3 +446,29 @@ impl std::fmt::Display for MitmProxyError {
 }
 
 impl std::error::Error for MitmProxyError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn original_tproxy_destination_wins_over_stale_dns_fallback() {
+        let original = Some("203.0.113.10:443".parse().unwrap());
+        let explicit = None;
+        let dynamic = Some(("203.0.113.20".to_owned(), 443));
+        assert_eq!(
+            choose_upstream_target(original, explicit, dynamic.as_ref(), "gs-loc.apple.com"),
+            ("203.0.113.10".to_owned(), 443)
+        );
+    }
+
+    #[test]
+    fn non_transparent_destination_uses_dynamic_fallback() {
+        let original = Some("127.0.0.1:8443".parse().unwrap());
+        let dynamic = Some(("203.0.113.20".to_owned(), 443));
+        assert_eq!(
+            choose_upstream_target(original, None, dynamic.as_ref(), "gs-loc.apple.com"),
+            ("203.0.113.20".to_owned(), 443)
+        );
+    }
+}
