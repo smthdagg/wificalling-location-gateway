@@ -50,7 +50,7 @@
       "type": "string",
       "pattern": "^(not-applicable-synthetic|[0-9]{1,2}\\.[0-9]{1,2}(\\.[0-9]{1,2})?)$"
     },
-    "hostname": { "enum": ["gs-loc.apple.com", "gs-loc-cn.apple.com", "gs-loc-corpa.apple.com", "gs-loc.apple.com.cn", "bluedot.is.autonavi.com", "bluedot.is.autonavi.com.gds.alibabadns.com"] },
+    "hostname": { "enum": ["gs-loc.apple.com", "gs-loc-cn.apple.com", "gsp-ssl.ls.apple.com", "bluedot.is.autonavi.com", "bluedot.is.autonavi.com.gds.alibabadns.com", "gspe19-cn-ssl-ls-apple-com.v.aaplimg.com"] },
     "alpn": { "const": "h2" },
     "classification": { "enum": ["synthetic", "authorized-sanitized-capture"] },
     "redactions": {

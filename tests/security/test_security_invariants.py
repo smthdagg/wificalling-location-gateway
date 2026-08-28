@@ -18,10 +18,10 @@ def assert_hard_security_semantics(testcase, threat_model, fail_open, contract):
             "hostnames": [
                 "gs-loc.apple.com",
                 "gs-loc-cn.apple.com",
-                "gs-loc-corpa.apple.com",
-                "gs-loc.apple.com.cn",
+                "gsp-ssl.ls.apple.com",
                 "bluedot.is.autonavi.com",
                 "bluedot.is.autonavi.com.gds.alibabadns.com",
+                "gspe19-cn-ssl-ls-apple-com.v.aaplimg.com",
             ],
             "transport": "TCP 443",
             "dedicated_table": "wificalling_location",
@@ -77,10 +77,10 @@ class SecurityInvariantDocumentationTests(unittest.TestCase):
             [
                 "gs-loc.apple.com",
                 "gs-loc-cn.apple.com",
-                "gs-loc-corpa.apple.com",
-                "gs-loc.apple.com.cn",
+                "gsp-ssl.ls.apple.com",
                 "bluedot.is.autonavi.com",
                 "bluedot.is.autonavi.com.gds.alibabadns.com",
+                "gspe19-cn-ssl-ls-apple-com.v.aaplimg.com",
             ],
         )
         self.assertEqual(scope["transport"], "TCP 443")
@@ -103,10 +103,10 @@ class SecurityInvariantDocumentationTests(unittest.TestCase):
             "one assigned test device",
             "gs-loc.apple.com",
             "gs-loc-cn.apple.com",
-            "gs-loc-corpa.apple.com",
-            "gs-loc.apple.com.cn",
+            "gsp-ssl.ls.apple.com",
             "bluedot.is.autonavi.com",
             "bluedot.is.autonavi.com.gds.alibabadns.com",
+            "gspe19-cn-ssl-ls-apple-com.v.aaplimg.com",
             "TCP 443",
             "UDP 500/4500",
             "wificalling_location",

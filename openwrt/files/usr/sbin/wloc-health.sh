@@ -100,7 +100,7 @@ patch_psk=0; patch_health=0; patch_compact=0; patch_device_guard=0
 }
 [ -f /usr/libexec/wificalling-gateway/node-health.sh ] && {
 	grep -q 'wg_handshake_test' /usr/libexec/wificalling-gateway/node-health.sh && patch_health=1
-	grep -q 'node_proxy_test' /usr/libexec/wificalling-gateway/node-health.sh && patch_health=1
+	grep -q 'node_icmp_test' /usr/libexec/wificalling-gateway/node-health.sh && patch_health=1
 	grep -q 'compact_status_marker' /usr/libexec/wificalling-gateway/node-health.sh && patch_compact=1
 }
 
@@ -109,8 +109,8 @@ nodes_total=0; nodes_ok=0; nodes_down=0; nodes_unknown=0
 node_status=/www/wloc-node-status.json
 if [ -f "$node_status" ]; then
 	nodes_total=$(grep -o '"id":"' "$node_status" | wc -l)
-	nodes_ok=$(grep -o '"state":"\(reachable\|tcp_reachable\|handshake_ok\|proxy_reachable\)"' "$node_status" | wc -l)
-	nodes_down=$(grep -o '"state":"\(unreachable\|handshake_failed\|proxy_failed\)"' "$node_status" | wc -l)
+	nodes_ok=$(grep -o '"state":"\(reachable\|tcp_reachable\|handshake_ok\)"' "$node_status" | wc -l)
+	nodes_down=$(grep -o '"state":"\(unreachable\|handshake_failed\)"' "$node_status" | wc -l)
 	nodes_unknown=$((nodes_total - nodes_ok - nodes_down))
 	[ "$nodes_unknown" -lt 0 ] && nodes_unknown=0
 fi

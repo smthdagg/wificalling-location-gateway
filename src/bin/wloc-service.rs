@@ -117,9 +117,13 @@ fn shared_gateway_engine_healthy() -> bool {
 fn is_shared_singbox_cmdline(cmdline: &[u8]) -> bool {
     let mut singbox = false;
     let mut run = false;
+    let mut gateway_config = false;
     for argument in cmdline.split(|byte| *byte == 0) {
         if argument == b"run" {
             run = true;
+        }
+        if argument == b"/var/run/wificalling-gateway/sing-box.json" {
+            gateway_config = true;
         }
         let basename = argument
             .rsplit(|byte| *byte == b'/')
@@ -129,15 +133,7 @@ fn is_shared_singbox_cmdline(cmdline: &[u8]) -> bool {
             singbox = true;
         }
     }
-    singbox && run
-}
-
-/// The redirect helper proves that the current assigned-device IPv6 scope is
-/// available before the daemon may enable interception.
-fn ipv6_scope_ready() -> bool {
-    std::fs::read_to_string("/var/run/wloc-service/ipv6-scope-ready")
-        .map(|value| value.trim() == "1")
-        .unwrap_or(false)
+    singbox && run && gateway_config
 }
 
 /// Stub exit probe: reports the configured exit and WAN addresses.
@@ -220,6 +216,24 @@ struct ProxyHealth {
     failures: u64,
 }
 
+fn write_proxy_health(path: &Path, health: &ProxyHealth) -> std::io::Result<()> {
+    let snapshot = serde_json::json!({
+        "last_success": health.last_ok,
+        "last_failure": health.last_failure,
+        "failures": health.failures,
+    });
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, serde_json::to_string(&snapshot).unwrap_or_default())
+}
+
+/// A health file belongs to one daemon lifetime; never inherit a stopped
+/// process's failures into a new, healthy listener.
+fn reset_proxy_health(path: &Path) -> std::io::Result<()> {
+    write_proxy_health(path, &ProxyHealth::default())
+}
+
 /// Record a successful or failed proxy connection and rewrite the health
 /// file so the certificate-trust state is visible without log parsing.
 fn record_proxy_health(health: &std::sync::Mutex<ProxyHealth>, path: &std::path::Path, ok: bool) {
@@ -234,15 +248,13 @@ fn record_proxy_health(health: &std::sync::Mutex<ProxyHealth>, path: &std::path:
         guard.last_failure = Some(now);
         guard.failures = guard.failures.saturating_add(1);
     }
-    let snapshot = serde_json::json!({
-        "last_success": guard.last_ok,
-        "last_failure": guard.last_failure,
-        "failures": guard.failures,
-    });
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let _ = std::fs::write(path, serde_json::to_string(&snapshot).unwrap_or_default());
+    let _ = write_proxy_health(path, &guard);
+}
+
+/// A rejected client certificate/SNI proves the boundary held; it is not a
+/// failure of the running WLOC service.
+fn proxy_error_degrades_health(error: &MitmProxyError) -> bool {
+    !matches!(error, MitmProxyError::ClientTls(_))
 }
 
 fn spawn_proxy_connection(
@@ -272,7 +284,9 @@ fn spawn_proxy_connection(
             Ok(()) => record_proxy_health(&proxy_health, std::path::Path::new(&health_path), true),
             Err(error) => {
                 eprintln!("wloc proxy: connection error: {error}");
-                record_proxy_health(&proxy_health, std::path::Path::new(&health_path), false);
+                if proxy_error_degrades_health(&error) {
+                    record_proxy_health(&proxy_health, std::path::Path::new(&health_path), false);
+                }
             }
         }
         drop(slot);
@@ -306,14 +320,6 @@ fn bind_tproxy_listener(
 
 fn bind_tproxy_listener_v4(port: u16) -> std::io::Result<tokio::net::TcpListener> {
     bind_tproxy_listener(socket2::Domain::IPV4, ([0, 0, 0, 0], port).into(), true)
-}
-
-fn bind_tproxy_listener_v6(port: u16) -> std::io::Result<tokio::net::TcpListener> {
-    bind_tproxy_listener(
-        socket2::Domain::IPV6,
-        ([0, 0, 0, 0, 0, 0, 0, 0], port).into(),
-        true,
-    )
 }
 
 const MAX_PROXY_CONNECTIONS: usize = 8;
@@ -381,7 +387,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 max_observation_age: Duration::from_secs(uci.probe_interval_secs),
             },
             scope_valid: true,
-            ipv6_ready: ipv6_scope_ready(),
+            ipv6_ready: false,
             assigned_device_configured: !assigned_device.is_empty(),
             assigned_device: if assigned_device.is_empty() {
                 None
@@ -468,14 +474,13 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let events_file = std::env::var("WLOC_EVENTS_FILE")
         .unwrap_or_else(|_| "/var/run/wloc-service/events.jsonl".into());
     let upstream_file = std::env::var("WLOC_UPSTREAM_IP_FILE")
-        .unwrap_or_else(|_| "/var/run/wloc-service/upstream-ip".into());
+        .unwrap_or_else(|_| "/var/run/wloc-service/upstream-map".into());
     let proxy = MitmProxy::new(&mitm_ca, upstream_roots)?
         .with_events_file(std::path::PathBuf::from(events_file))
         .with_upstream_override_file(std::path::PathBuf::from(upstream_file));
-    // Production traffic must use the original TPROXY destination selected
-    // by the client. The refreshed set-backed address remains a fallback for
-    // non-transparent test environments; never pin all requests to its first
-    // DNS answer because Apple's CDN addresses rotate independently.
+    // Production traffic uses its original public TPROXY destination. When
+    // local DNS maps an approved name to the router, the proxy resolves that
+    // name through its own host-specific public mapping.
     let proxy = std::sync::Arc::new(proxy);
     let proxy_port: u16 = env_or("WLOC_PROXY_PORT", 8443_u16);
 
@@ -500,7 +505,6 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .enable_all()
         .build()?;
     let proxy_listener = runtime.block_on(async { bind_tproxy_listener_v4(proxy_port) })?;
-    let proxy_listener_v6 = runtime.block_on(async { bind_tproxy_listener_v6(proxy_port) })?;
 
     // Apply the persisted configuration to the control plane before serving:
     // manual location preset first (so a manual target is already fresh), then
@@ -566,6 +570,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let proxy_health = std::sync::Arc::new(std::sync::Mutex::new(ProxyHealth::default()));
     let health_path = std::env::var("WLOC_HEALTH_FILE")
         .unwrap_or_else(|_| "/var/run/wloc-service/proxy-health.json".into());
+    reset_proxy_health(Path::new(&health_path))?;
     let proxy_slots = std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_PROXY_CONNECTIONS));
 
     // TPROXY listener: IP_TRANSPARENT lets the kernel deliver connections
@@ -582,16 +587,10 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     ),
                     Err(error) => eprintln!("wloc proxy: IPv4 accept error: {error}"),
                 },
-                accepted = proxy_listener_v6.accept() => match accepted {
-                    Ok((stream, _)) => spawn_proxy_connection(
-                        stream, &proxy, &patch_state, &proxy_slots, &proxy_health, &health_path,
-                    ),
-                    Err(error) => eprintln!("wloc proxy: IPv6 accept error: {error}"),
-                },
             }
         }
     });
-    eprintln!("wloc-service MITM proxy listening on 0.0.0.0/[::]:{proxy_port}");
+    eprintln!("wloc-service MITM proxy listening on 0.0.0.0:{proxy_port}");
 
     eprintln!("wloc-service listening on {socket_path}");
     let server = ControlServer::new(service);
@@ -657,10 +656,13 @@ mod tests {
     #[test]
     fn recognizes_only_a_running_shared_singbox_command() {
         assert!(is_shared_singbox_cmdline(
-            b"/tmp/sing-box-lite\0run\0-c\0/config.json\0"
+            b"/tmp/sing-box-lite\0run\0-c\0/var/run/wificalling-gateway/sing-box.json\0"
         ));
         assert!(is_shared_singbox_cmdline(
-            b"/usr/bin/sing-box\0run\0-c\0/config.json\0"
+            b"/usr/bin/sing-box\0run\0-c\0/var/run/wificalling-gateway/sing-box.json\0"
+        ));
+        assert!(!is_shared_singbox_cmdline(
+            b"/usr/bin/sing-box\0run\0-c\0/etc/passwall/sing-box.json\0"
         ));
         assert!(!is_shared_singbox_cmdline(b"/usr/sbin/wloc-service\0"));
         assert!(!is_shared_singbox_cmdline(b"/tmp/sing-box-lite\0check\0"));
@@ -672,5 +674,38 @@ mod tests {
         let der = ca.root_cert_der();
         let pem = pem_encode(&der);
         assert_eq!(pem_decode(pem.as_bytes()).unwrap(), der.as_ref());
+    }
+
+    #[test]
+    fn rejected_client_tls_does_not_degrade_proxy_health() {
+        assert!(!proxy_error_degrades_health(&MitmProxyError::ClientTls(
+            "unapproved SNI".into()
+        )));
+        assert!(proxy_error_degrades_health(&MitmProxyError::Upstream(
+            "connection refused".into()
+        )));
+    }
+
+    #[test]
+    fn startup_health_snapshot_drops_prior_process_failures() {
+        let path = std::env::temp_dir().join(format!(
+            "wloc-proxy-health-{}-{}.json",
+            std::process::id(),
+            now_unix()
+        ));
+        std::fs::write(
+            &path,
+            r#"{"last_success":1,"last_failure":2,"failures":43}"#,
+        )
+        .unwrap();
+
+        reset_proxy_health(&path).unwrap();
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(&path).unwrap())
+                .unwrap(),
+            serde_json::json!({"last_success": null, "last_failure": null, "failures": 0})
+        );
+        let _ = std::fs::remove_file(path);
     }
 }

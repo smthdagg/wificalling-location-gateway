@@ -21,10 +21,10 @@ pub mod wloc;
 pub const APPROVED_WLOC_HOSTS: [&str; 6] = [
     "gs-loc.apple.com",
     "gs-loc-cn.apple.com",
-    "gs-loc-corpa.apple.com",
-    "gs-loc.apple.com.cn",
+    "gsp-ssl.ls.apple.com",
     "bluedot.is.autonavi.com",
     "bluedot.is.autonavi.com.gds.alibabadns.com",
+    "gspe19-cn-ssl-ls-apple-com.v.aaplimg.com",
 ];
 pub const MAX_WLOC_BODY_BYTES: u64 = 512 * 1024;
 const MIN_H2_FRAME_SIZE: u32 = 16 * 1024;

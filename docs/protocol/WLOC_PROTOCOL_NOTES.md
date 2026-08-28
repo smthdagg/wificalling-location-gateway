@@ -38,7 +38,7 @@ Root fields of interest:
 |---|---|---|
 | 2 | 2 | WifiDevice message |
 | 22, 24 | 2 | CellResponse message |
-| 3, 4, 33 | any | dropped during patching (root drop fields) |
+| 3, 4, 33 | any | preserved unchanged |
 
 `WifiDevice` contains the Location sub-message at **field 2 (wire 2)**;
 `CellResponse` contains it at **field 5 (wire 2)**.
@@ -52,18 +52,13 @@ value = int64(coord * 1e8)      # truncation toward zero, e.g. -122.00902 -> -12
 # negative values encoded as 64-bit two's complement unsigned varint
 ```
 
-Patched fields (all varints):
+Only existing fields below are patched (all varints):
 
 | field | meaning | default |
 |---|---|---|
 | 1 | latitude × 1e8 | target |
 | 2 | longitude × 1e8 | target |
 | 3 | horizontal accuracy (m) | 39 |
-| 4 | unknown value | 3 |
-| 5 | altitude (m) | 530 |
-| 6 | vertical accuracy (m) | 1000 |
-| 11 | motion activity type | 63 |
-| 12 | motion activity confidence | 467 |
 
 All other Location fields are preserved **byte-for-byte** (raw field bytes
 copied unchanged, including unknown fields and non-minimal varints).
@@ -74,13 +69,12 @@ copied unchanged, including unknown fields and non-minimal varints).
    field number 0, overlong varints, or fields exceeding the buffer.
 2. For each root field:
    - field 2 (wire 2) → recursively patch `WifiDevice`, replacing its
-     Location (field 2); append a fresh Location if absent.
+     Location (field 2) when it exists.
    - field 22/24 (wire 2) → recursively patch `CellResponse`, replacing its
-     Location (field 5); append if absent.
-   - fields 3/4/33 → drop.
+     Location (field 5) when it exists.
    - otherwise → preserve raw bytes.
-3. In a Location, preserve non-replaced fields (raw), then emit the replaced
-   fields (1/2/3/4/5/6/11/12) with the target coordinates and defaults.
+3. In a Location, replace only existing fields 1/2/3 (latitude, longitude,
+   horizontal accuracy); preserve every other field and every root field raw.
 4. Rewrap in the detected envelope shape.
 
 Any parse failure, invalid coordinate, or oversized input must leave the

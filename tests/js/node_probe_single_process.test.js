@@ -16,6 +16,10 @@ const nodeTest = fs.readFileSync(
 	path.join(root, 'openwrt/files/usr/libexec/wificalling-gateway/node-test.sh'),
 	'utf8'
 );
+const monitorLoop = fs.readFileSync(
+	path.join(root, 'openwrt/files/usr/libexec/wificalling-gateway/monitor-loop.sh'),
+	'utf8'
+);
 const patch = fs.readFileSync(
 	path.join(root, 'scripts/openwrt/patch-wireguard-health.sh'),
 	'utf8'
@@ -32,13 +36,21 @@ test('compiler gives every node a loopback probe routed to its existing outbound
 	assert.match(compiler, /probe_port/);
 });
 
-test('node health and manual tests never launch a second sing-box', () => {
-	assert.doesNotMatch(health, /sing-box run/);
-	assert.doesNotMatch(nodeTest, /sing-box run/);
-	assert.match(health, /127\.0\.0\.1/);
-	assert.match(nodeTest, /127\.0\.0\.1/);
+test('node quality checks use ICMP without asking sing-box to proxy traffic', () => {
+	assert.doesNotMatch(health, /curl|127\.0\.0\.1/);
+	assert.doesNotMatch(nodeTest, /curl|127\.0\.0\.1/);
+	assert.match(health, /ping/);
+	assert.match(nodeTest, /ping/);
 	assert.doesNotMatch(patch, /temporary sing-box/);
 	assert.doesNotMatch(patch, /sing-box run/);
 	assert.doesNotMatch(wlocProbe, /Command::new\(&self\.singbox_bin\)/);
 	assert.match(wlocProbe, /existing_probe_port/);
+});
+
+test('background health work never overlaps, bursts, or repeatedly rewrites Passwall rules', () => {
+	assert.match(health, /if kill -0 "\$lock_pid" 2>\/dev\/null; then\n\t\texit 0/);
+	assert.doesNotMatch(monitorLoop, /passwall-bypass\.sh ensure/);
+	assert.match(monitorLoop, /% 2/);
+	assert.match(monitorLoop, /next_node\(\)/);
+	assert.match(monitorLoop, /node-health\.sh "\$nodes" "\$node_output" "\$node"/);
 });

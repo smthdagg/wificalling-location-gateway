@@ -703,8 +703,8 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
         }
         // A daemon restart starts with an in-memory Disabled state while a
         // previous process may have left a redirect behind. Always withdraw
-        // that stale state before rejecting an unsafe IPv6/scope configuration.
-        if !self.scope_valid || !self.ipv6_ready || !self.assigned_device_configured {
+        // that stale state before rejecting an unsafe scope configuration.
+        if !self.scope_valid || !self.assigned_device_configured {
             control_disable(&mut self.runtime).map_err(map_control_error)?;
             return Err(DispatchError::InvalidConfig);
         }

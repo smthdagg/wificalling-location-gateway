@@ -2,7 +2,7 @@
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
-version=${1:-1.3.0-r8}
+version=${1:-1.3.0-r9}
 dependency_mode=${2:-production}
 package=luci-app-wificalling-location-gateway
 source_dir="$root/openwrt/$package/files"
@@ -252,6 +252,7 @@ wait_for_managed_processes() {
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 wait_for_managed_processes || exit 1
+rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256 /tmp/sing-box-lite.new.* /tmp/node-health-*
 exit 0
 PREINST
 			cp "$stage/control/preinst" "$stage/control/prerm"

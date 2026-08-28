@@ -43,7 +43,7 @@ impl SafetyState {
     }
 
     const fn redirect_prerequisites_met(self) -> bool {
-        self.engine_ready && self.watchdog_armed && self.scope_valid && self.ipv6_ready
+        self.engine_ready && self.watchdog_armed && self.scope_valid
     }
 }
 
@@ -113,12 +113,12 @@ pub fn reduce(
             if current.phase != ServicePhase::Disabled {
                 return Err(TransitionError::InvalidTransition);
             }
-            if !scope_valid || !ipv6_ready {
+            if !scope_valid {
                 return Err(TransitionError::InvalidSafetyScope);
             }
             next.phase = ServicePhase::Starting;
             next.safety.scope_valid = true;
-            next.safety.ipv6_ready = true;
+            next.safety.ipv6_ready = ipv6_ready;
         }
         ServiceEvent::EngineReady => {
             if current.phase != ServicePhase::Starting {

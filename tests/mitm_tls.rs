@@ -77,10 +77,10 @@ async fn all_approved_hosts_complete_handshake() {
     for hostname in [
         "gs-loc.apple.com",
         "gs-loc-cn.apple.com",
-        "gs-loc-corpa.apple.com",
-        "gs-loc.apple.com.cn",
+        "gsp-ssl.ls.apple.com",
         "bluedot.is.autonavi.com",
         "bluedot.is.autonavi.com.gds.alibabadns.com",
+        "gspe19-cn-ssl-ls-apple-com.v.aaplimg.com",
     ] {
         let (success, _) = handshake(server_config(&ca), client_config(&ca), hostname)
             .await

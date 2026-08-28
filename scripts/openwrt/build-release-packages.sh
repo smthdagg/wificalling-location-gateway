@@ -6,7 +6,7 @@ OPENWRT_25_SDK='ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 version=1.3.0
-release=8
+release=9
 arch=x86_64
 service_bin=
 ctl_bin=
@@ -29,7 +29,7 @@ Usage: build-release-packages.sh [--plan] [options]
 
 Options:
   --version VERSION          Package version (default: 1.3.0)
-  --release RELEASE          Package release number (default: 8)
+  --release RELEASE          Package release number (default: 9)
   --arch ARCH                OpenWrt runtime architecture (default: x86_64)
   --service-bin PATH         Static wloc-service binary (required)
   --ctl-bin PATH             Static wloc-ctl binary (required)
@@ -238,6 +238,7 @@ wait_for_managed_processes() {
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 wait_for_managed_processes || exit 1
+rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256 /tmp/sing-box-lite.new.* /tmp/node-health-*
 exit 0
 endef
 define Package/wificalling-location-gateway/prerm
@@ -267,6 +268,7 @@ wait_for_managed_processes() {
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 wait_for_managed_processes || exit 1
+rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256 /tmp/sing-box-lite.new.* /tmp/node-health-*
 exit 0
 endef
 define Package/wificalling-location-gateway/postinst
@@ -350,6 +352,7 @@ wait_for_managed_processes() {
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 wait_for_managed_processes || exit 1
+rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256 /tmp/sing-box-lite.new.* /tmp/node-health-*
 exit 0
 endef
 define Package/wificalling-location-gateway-lite/prerm
@@ -379,6 +382,7 @@ wait_for_managed_processes() {
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 wait_for_managed_processes || exit 1
+rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256 /tmp/sing-box-lite.new.* /tmp/node-health-*
 exit 0
 endef
 define Package/wificalling-location-gateway-lite/postinst

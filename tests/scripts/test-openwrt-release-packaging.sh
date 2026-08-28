@@ -82,9 +82,9 @@ plan=$(
 		--ctl-bin "$tmp/wloc-ctl"
 )
 
-printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway_1.3.0-r8_x86_64.ipk' >/dev/null ||
+printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway_1.3.0-r9_x86_64.ipk' >/dev/null ||
 	fail '24.10 must produce one architecture-specific integrated IPK'
-printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway-1.3.0-r8.apk (arch: x86_64)' >/dev/null ||
+printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway-1.3.0-r9.apk (arch: x86_64)' >/dev/null ||
 	fail '25.12 must produce one architecture-specific integrated APK'
 if printf '%s\n' "$plan" | grep -E 'wloc-service[_-]|luci-app-wificalling-location-gateway[_-]' >/dev/null; then
 	fail 'formal 1.3.0 plan must not expose split component packages'

@@ -183,21 +183,21 @@ grep -F 'device_guard_marker' \
 grep -F 'fail("device references unknown node: " $3)' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/compiler.sh" >/dev/null &&
 	fail 'standalone package must not keep the fail-hard unknown-node device path'
-grep -F 'node_proxy_test' \
+grep -F 'node_icmp_test' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
-	fail 'standalone package must use the existing Gateway sing-box for node tests'
-if grep -F 'sing-box run' "$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null; then
-	fail 'standalone package node health must not start a temporary sing-box'
+fail 'standalone package must use ICMP for node tests'
+if grep -Eq '^[[:space:]]*result=.*curl' "$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh"; then
+	fail 'standalone package node health must not proxy node tests'
 fi
-grep -F '127.0.0.1' \
+grep -F 'ping' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
-	fail 'standalone package node health must use a loopback probe'
+fail 'standalone package node health must use ICMP'
 grep -F 'reason_json=' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
 	fail 'standalone package node health must report a failure reason'
-grep -F 'md5sum | cut -c1-4' \
-	"$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null ||
-	fail 'standalone package node health must derive a busybox-safe probe port'
+if grep -F 'md5sum | cut -c1-4' "$tmp/result/data/usr/libexec/wificalling-gateway/node-health.sh" >/dev/null; then
+	fail 'standalone package node health must not derive a Gateway probe port'
+fi
 grep -F 'probe_port_by_id' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/compiler.sh" >/dev/null ||
 	fail 'standalone package compiler must route per-node probe inbounds'
@@ -211,11 +211,11 @@ grep -F '"reason":%s' \
 	fail 'standalone package compact output must include the handshake failure reason'
 # The manual per-node connection test helper must ship and be wired into
 # rpcd so the LuCI "Test connection" button can ask for a fresh check.
-grep -F '127.0.0.1' \
+grep -F 'ping' \
 	"$tmp/result/data/usr/libexec/wificalling-gateway/node-test.sh" >/dev/null ||
-	fail 'standalone package manual node test must use the running Gateway'
-if grep -F 'sing-box run' "$tmp/result/data/usr/libexec/wificalling-gateway/node-test.sh" >/dev/null; then
-	fail 'standalone package manual node test must not start a temporary sing-box'
+fail 'standalone package manual node test must use ICMP'
+if grep -Eq '^[[:space:]]*result=.*curl' "$tmp/result/data/usr/libexec/wificalling-gateway/node-test.sh"; then
+	fail 'standalone package manual node test must not proxy through Gateway'
 fi
 grep -F 'node_test' \
 	"$tmp/result/data/usr/libexec/rpcd/luci.wloc" >/dev/null ||
@@ -281,13 +281,12 @@ cmp "$tmp/sing-box-lite" "$tmp/lite-result/sing-box-lite.unpacked" >/dev/null ||
 	fail 'Lite package must persist the exact hash-pinned sing-box runtime in compressed form'
 [ "$(cat "$tmp/lite-result/data/usr/share/wificalling-location-gateway/runtime-variant")" = lite ] ||
 	fail 'Lite package must install its runtime marker'
-if grep -F 'GOMEMLIMIT=' "$tmp/lite-result/data/etc/init.d/wificalling-gateway" >/dev/null; then
-	fail 'Lite package must not apply an artificial sing-box memory ceiling'
-fi
+grep -F 'GOMEMLIMIT=48MiB' "$tmp/lite-result/data/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Lite package must preserve the AX6S runtime memory budget'
 grep -F 'GOMAXPROCS=1' "$tmp/lite-result/data/etc/init.d/wificalling-gateway" >/dev/null ||
 	fail 'Lite package must retain single-worker scheduling'
-grep -F 'GOGC=75' "$tmp/lite-result/data/etc/init.d/wificalling-gateway" >/dev/null ||
-	fail 'Lite package must retain the moderate GC target'
+grep -F 'GOGC=50' "$tmp/lite-result/data/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Lite package must reclaim memory before AX6S reaches OOM pressure'
 
 # The retired standalone 1.7 package must never be accepted as a baseline.
 mkdir -p "$tmp/legacy"

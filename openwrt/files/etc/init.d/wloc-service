@@ -18,17 +18,14 @@ start_service() {
 	mkdir -p "$SOCKET_DIR" /etc/wloc-service
 	chmod 0700 "$SOCKET_DIR"
 
-	# Build the owned redirect state before the daemon reads enabled=1.  The
-	# daemon's startup enable is transactional and must never race nft table
-	# creation, otherwise every reboot can leave the service permanently
-	# disabled until a manual restart.
-	if ! /usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1; then
-		logger -t wloc-service "redirect setup failed; refusing to start"
+	# Validate the IPv6 device scope and prepare destination sets. The daemon
+	# installs TPROXY only after it has verified Gateway and location health.
+	if ! /usr/sbin/wloc-redirect-sync.sh prepare >/dev/null 2>&1; then
+		logger -t wloc-service "scope validation failed; refusing to start"
 		return 1
 	fi
 	if ! /usr/sbin/wloc-refresh-set.sh >/dev/null 2>&1; then
-		logger -t wloc-service "Apple destination refresh failed; removing redirect"
-		/usr/sbin/wloc-redirect-sync.sh stop >/dev/null 2>&1 || true
+		logger -t wloc-service "Apple destination refresh failed; refusing to start"
 		return 1
 	fi
 
@@ -37,8 +34,7 @@ start_service() {
 	procd_set_param env "WLOC_SOCKET=$SOCKET" \
 		"WLOC_CA_CERT=/etc/wloc-service/ca.pem" \
 		"WLOC_CA_KEY=/etc/wloc-service/ca.key" \
-		"WLOC_PROXY_PORT=8443" \
-		"WLOC_SYNTH_RESPONSE=1"
+		"WLOC_PROXY_PORT=8443"
 	procd_set_param respawn
 	procd_set_param stdout 1
 	procd_set_param stderr 1
@@ -50,3 +46,7 @@ stop_service() {
 	/usr/sbin/wloc-redirect-sync.sh stop >/dev/null 2>&1 || true
 	rm -f "$SOCKET"
 }
+
+reload_service() { restart; }
+
+service_triggers() { procd_add_reload_trigger wloc-service wificalling-gateway; }

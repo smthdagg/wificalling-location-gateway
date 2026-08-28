@@ -135,7 +135,7 @@ run_case() {
 			docker exec "$container" /bin/sh -c '
 				printf "Package: sing-box\nVersion: 0-docker-smoke\nArchitecture: all\nStatus: install ok installed\n\n" >> /usr/lib/opkg/status
 				printf "%s\n" /usr/bin/sing-box > /usr/lib/opkg/info/sing-box.list
-				printf "#!/bin/sh\necho sing-box docker-smoke\n" > /usr/bin/sing-box
+				printf "#!/bin/sh\nwhile :; do sleep 60; done\n" > /usr/bin/sing-box
 				chmod 0755 /usr/bin/sing-box
 			'
 		fi
@@ -144,6 +144,27 @@ run_case() {
 			--add-arch "$package_arch:100" install --force-depends \
 			"/packages/${package_path##*/}" >/dev/null
 	fi
+	if [ "$variant" = standard ]; then
+		# Standard deliberately reuses the Gateway's single sing-box process.
+		# The rootfs smoke image has no Gateway daemon, so provide only that
+		# process shape before asserting that WLOC starts.
+		docker exec "$container" /bin/sh -c \
+			'/usr/bin/sing-box run -c /var/run/wificalling-gateway/sing-box.json >/tmp/wlg-sing-box.log 2>&1 &'
+	fi
+	# A production install gets this from LuCI. The minimal rootfs has no
+	# Gateway device policy, so configure one manual-mode test device before
+	# restarting the daemon.
+	docker exec "$container" /bin/sh -c \
+		"uci set wloc-service.main.assigned_device='192.0.2.10'; uci set wloc-service.main.geo_source='manual'; uci commit wloc-service"
+	# The rootfs has no WAN lease, so keep DNS out of this package smoke test.
+	# Production still uses the package's real resolver path.
+	docker exec "$container" /bin/sh -c \
+		"mkdir -p /usr/local/bin; printf '#!/bin/sh\\necho \"Address: 17.253.87.203\"\\n' > /usr/local/bin/nslookup; chmod 0755 /usr/local/bin/nslookup"
+	# The minimal 25.12 rootfs image ships without /etc/config/network;
+	# production firmware always defines a LAN subnet, which the redirect
+	# helper needs to validate the router's IPv4 ingress.
+	docker exec "$container" /bin/sh -c \
+		'[ -s /etc/config/network ] && grep -q "config interface.lan" /etc/config/network || { printf "config interface lan\n\toption device br-lan\n\toption proto static\n\toption ipaddr 192.168.1.1\n\toption netmask 255.255.255.0\n" > /etc/config/network; }'
 
 	if [ "$manager" = opkg ]; then
 		# --add-arch applies only to the install invocation in these minimal

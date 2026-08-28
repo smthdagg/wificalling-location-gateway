@@ -8,7 +8,7 @@ This model covers one explicitly authorized test device and LAN, the isolated WL
 
 <!-- SECURITY_INVARIANT id="SCOPE-01" -->
 
-Interception is allowed only when all three predicates match: one assigned test device, one of the six exact WLOC hostnames (`gs-loc.apple.com`, `gs-loc-cn.apple.com`, `gs-loc-corpa.apple.com`, `gs-loc.apple.com.cn`, `bluedot.is.autonavi.com`, or `bluedot.is.autonavi.com.gds.alibabadns.com`), and TCP 443. Matching only an IP address, a hostname suffix, a wildcard, a port, or a device subnet is insufficient. A second exact hostname check is required at TLS ingress because DNS addresses can be shared or poisoned.
+Interception is allowed only when all three predicates match: one assigned test device, one of the six exact WLOC hostnames (`gs-loc.apple.com`, `gs-loc-cn.apple.com`, `gsp-ssl.ls.apple.com`, `bluedot.is.autonavi.com`, `bluedot.is.autonavi.com.gds.alibabadns.com`, or `gspe19-cn-ssl-ls-apple-com.v.aaplimg.com`), and TCP 443. Matching only an IP address, a hostname suffix, a wildcard, a port, or a device subnet is insufficient. A second exact hostname check is required at TLS ingress because DNS addresses can be shared or poisoned.
 
 <!-- SECURITY_INVARIANT id="GATEWAY-01" -->
 

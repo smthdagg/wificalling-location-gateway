@@ -43,9 +43,9 @@ pub trait RuntimeControl {
 pub fn enable(
     runtime: &mut impl RuntimeControl,
     scope_valid: bool,
-    ipv6_ready: bool,
+    _ipv6_ready: bool,
 ) -> Result<(), ControlError> {
-    if !scope_valid || !ipv6_ready {
+    if !scope_valid {
         return Err(ControlError::InvalidSafetyScope);
     }
 

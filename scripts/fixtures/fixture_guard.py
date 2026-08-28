@@ -24,12 +24,12 @@ MAX_JSON_DEPTH = 12
 ALLOWED_HOSTNAMES = (
     "gs-loc.apple.com",
     "gs-loc-cn.apple.com",
-    "gs-loc-corpa.apple.com",
-    "gs-loc.apple.com.cn",
+    "gsp-ssl.ls.apple.com",
     "bluedot.is.autonavi.com",
     "bluedot.is.autonavi.com.gds.alibabadns.com",
+    "gspe19-cn-ssl-ls-apple-com.v.aaplimg.com",
 )
-TRUSTED_SCHEMA_SHA256 = "b2905e94cf1ee4cb5f19588605de2e2253d7f51d2f3fa3a49d2ff687d46472c3"
+TRUSTED_SCHEMA_SHA256 = "c2d710d48b11304052f4f73638dce2e64f4e7e2bc9eb21d70ba1e9f007216b8a"
 SYNTHETIC_PREFIX = b"WLG-SYNTHETIC-GOVERNANCE-V1\x00"
 SYNTHETIC_PAYLOAD_BYTES = len(SYNTHETIC_PREFIX) + 32
 SYNTHETIC_GENERATOR = "scripts/fixtures/generate_synthetic.py"

@@ -16,6 +16,10 @@ CHAIN=prerouting
 PROXY_PORT="${WLOC_PROXY_PORT:-8443}"
 FWMARK=1
 ROUTE_TABLE=100
+action=${1:-start}
+HOSTS="gs-loc.apple.com gs-loc-cn.apple.com gsp-ssl.ls.apple.com bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com gspe19-cn-ssl-ls-apple-com.v.aaplimg.com"
+DNS_CONF=/etc/dnsmasq.conf
+DNS_MARKER='# wloc-service DNS hijack (do not edit)'
 
 valid_ipv4() {
     case "$1" in ''|*[!0-9.]*|*..*|.*|*.) return 1;; esac
@@ -24,17 +28,46 @@ $1
 EOF
 }
 
-if [ "${1:-start}" = stop ]; then
-    HOSTS_MARKER='# wloc-service DNS hijack (do not edit)'
+restart_passwall_dns() {
+    pid_file=/tmp/etc/passwall/acl/default/dnsmasq.pid
+    conf=/tmp/etc/passwall/acl/default/dnsmasq.conf
+    bin=/tmp/etc/passwall/bin/dnsmasq_default
+    [ -s "$pid_file" ] && [ -x "$bin" ] && [ -f "$conf" ] || return 0
+    pid=$(cat "$pid_file")
+    kill -TERM "$pid" 2>/dev/null || return 0
+    sleep 1
+    rm -f "$pid_file"
+    "$bin" -C "$conf" -x "$pid_file"
+}
+
+if [ "$action" = stop ]; then
+    dns_changed=0
+    grep -F "$DNS_MARKER" "$DNS_CONF" >/dev/null 2>&1 && {
+        sed -i "/$DNS_MARKER/,/^# wloc-service end/d" "$DNS_CONF"
+        dns_changed=1
+    }
     for hosts_file in /etc/hosts /tmp/hosts/wloc-hosts; do
-        sed -i "/$HOSTS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
+        sed -i "/$DNS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
     done
+    router_ip=$(uci -q get network.lan.ipaddr 2>/dev/null || true)
+    dns_changed=0
+    for host in $HOSTS; do
+        entry="/$host/$router_ip"
+        uci -q show dhcp.@dnsmasq[0].address 2>/dev/null | grep -F -- "'$entry'" >/dev/null || continue
+        uci del_list "dhcp.@dnsmasq[0].address=$entry"
+        dns_changed=1
+    done
+    if [ "$dns_changed" -eq 1 ]; then
+        uci commit dhcp
+        /etc/init.d/dnsmasq restart
+        restart_passwall_dns
+    fi
     ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
     ip route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
     ip -6 rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
     ip -6 route del local ::/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
     nft delete table inet "$TABLE" 2>/dev/null || true
-    rm -f /var/run/wloc-service/upstream-ip.tmp /var/run/wloc-service/upstream-ip /var/run/wloc-service/ipv6-scope-ready
+    rm -f /var/run/wloc-service/upstream-map.tmp /var/run/wloc-service/upstream-map /var/run/wloc-service/ipv6-scope-ready
     exit 0
 fi
 
@@ -54,9 +87,8 @@ for ip in $ips; do
     valid_ipv4 "$ip" || { echo "wloc-redirect-sync: invalid device IPv4: $ip" >&2; exit 1; }
 done
 
-# The router's own LAN IPv4 is used to validate the LAN setup. WLOC does not
-# rewrite shared DNS answers: destination sets catch the real A/AAAA records
-# and keep non-target LAN devices untouched.
+# The router's LAN IPv4 is the verified WLOC ingress used by the stable r1
+# path. Firewall scope below limits TPROXY to the selected WLOC device.
 lan_ip() {
     ip=$(uci -q get network.lan.ipaddr) || ip=
     case "$ip" in
@@ -80,33 +112,30 @@ esac
     exit 1
 }
 
-# TPROXY plumbing: marked packets are routed back to the local stack.
-ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
-ip route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
-ip -6 rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
-ip -6 route del local ::/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
-ip rule add fwmark "$FWMARK" lookup "$ROUTE_TABLE"
-ip route add local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"
-ip -6 rule add fwmark "$FWMARK" lookup "$ROUTE_TABLE"
-ip -6 route add local ::/0 dev lo table "$ROUTE_TABLE"
-
-# Table + set + mangle prerouting chain (filter hook, before DNAT).
-nft add table inet "$TABLE" 2>/dev/null || true
-nft add set inet "$TABLE" apple_hosts '{ type ipv4_addr; }' 2>/dev/null || true
-nft add set inet "$TABLE" apple_hosts6 '{ type ipv6_addr; }' 2>/dev/null || true
-# The chain must be a filter/mangle chain for tproxy; drop a leftover
-# nat chain (from the old redirect scheme) first.
-nft flush chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
-nft delete chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
-nft "add chain inet $TABLE $CHAIN { type filter hook prerouting priority mangle; }"
-
-# Rebuild only the rules; the destination sets are maintained by the refresh
-# helper. IPv6 is scoped by the device's current DHCP/neighbor MAC because the
-# Gateway device contract identifies the test device by IPv4.
-nft flush chain inet "$TABLE" "$CHAIN"
-for ip in $ips; do
-    nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr @apple_hosts meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
+dns_changed=0
+for host in $HOSTS; do
+    entry="/$host/$ROUTER_IP"
+    uci -q show dhcp.@dnsmasq[0].address 2>/dev/null | grep -F -- "'$entry'" >/dev/null || continue
+    uci del_list "dhcp.@dnsmasq[0].address=$entry"
+    dns_changed=1
 done
+if ! grep -F "$DNS_MARKER" "$DNS_CONF" >/dev/null 2>&1 ||
+    ! grep -F "address=/gsp-ssl.ls.apple.com/$ROUTER_IP" "$DNS_CONF" >/dev/null 2>&1; then
+    sed -i "/$DNS_MARKER/,/^# wloc-service end/d" "$DNS_CONF"
+    {
+        printf '%s\n' "$DNS_MARKER"
+        for host in $HOSTS; do
+            printf 'address=/%s/%s\n' "$host" "$ROUTER_IP"
+        done
+        printf '%s\n' '# wloc-service end'
+    } >> "$DNS_CONF"
+    dns_changed=1
+fi
+if [ "$dns_changed" -eq 1 ]; then
+    uci commit dhcp
+    /etc/init.d/dnsmasq restart
+    restart_passwall_dns
+fi
 
 valid_mac() {
     awk -F: 'NF == 6 && $0 !~ /[^0-9A-Fa-f:]/ { exit 0 } { exit 1 }' <<EOF
@@ -123,18 +152,33 @@ mac_for_ip() {
     valid_mac "$mac" && printf '%s' "$mac"
 }
 
-ipv6_ready=1
+macs=
+[ "$action" = prepare ] && exit 0
+
 for ip in $ips; do
     mac=$(mac_for_ip "$ip" || true)
-    if valid_mac "$mac"; then
-        nft "add rule inet $TABLE $CHAIN ether saddr $mac tcp dport 443 ip6 daddr @apple_hosts6 meta l4proto tcp meta mark set $FWMARK tproxy ip6 to :$PROXY_PORT"
-    else
-        ipv6_ready=0
-        echo "wloc-redirect-sync: no MAC binding for IPv6 scope $ip" >&2
-    fi
+    [ -n "$mac" ] && macs="$macs $mac"
 done
 
-mkdir -p /var/run/wloc-service
-printf '%s\n' "$ipv6_ready" > /var/run/wloc-service/ipv6-scope-ready
-
-echo "wloc-redirect-sync: dual-stack tproxy $ips -> :$PROXY_PORT (ipv6_scope=$ipv6_ready, mark $FWMARK, table $ROUTE_TABLE)"
+# TPROXY plumbing: marked packets are routed back to the local stack.
+ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
+ip route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+ip -6 rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
+ip -6 route del local ::/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
+ip rule add fwmark "$FWMARK" lookup "$ROUTE_TABLE"
+ip route add local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"
+nft add table inet "$TABLE" 2>/dev/null || true
+nft add set inet "$TABLE" apple_hosts '{ type ipv4_addr; }' 2>/dev/null || true
+nft add set inet "$TABLE" apple_hosts6 '{ type ipv6_addr; }' 2>/dev/null || true
+nft flush chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
+nft delete chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
+nft "add chain inet $TABLE $CHAIN { type filter hook prerouting priority mangle; }"
+nft flush chain inet "$TABLE" "$CHAIN"
+for ip in $ips; do
+    nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr @apple_hosts meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
+    nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr $ROUTER_IP meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
+done
+for mac in $macs; do
+    nft "add rule inet $TABLE $CHAIN ether saddr $mac tcp dport 443 ip6 daddr @apple_hosts6 reject with tcp reset"
+done
+echo "wloc-redirect-sync: IPv4 tproxy $ips -> :$PROXY_PORT (mark $FWMARK, table $ROUTE_TABLE)"

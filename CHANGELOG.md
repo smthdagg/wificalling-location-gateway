@@ -2,6 +2,38 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r9] - 2026-08-29
+
+WLOC reliability release, preserving the proven integrated 1.3.0-r1 Gateway
+baseline.
+
+- Intercept exactly six Apple WLOC hostnames, including
+  `gsp-ssl.ls.apple.com`.
+- Forward Apple's response and minimally replace only existing latitude,
+  longitude, and horizontal-accuracy fields; unknown fields, altitude,
+  vertical accuracy, motion state, and root records are preserved.
+- Handle HTTP/2 streams independently so a slow speculative request cannot
+  block a concurrent location response.
+- Treat rejected unrelated TLS/SNI traffic as a successful isolation boundary,
+  not a WLOC failure, and reset the per-process proxy-health snapshot at
+  startup.
+- Verified the AArch64 static runtime and a live AX6S restart: one shared
+  sing-box, WLOC `intercepting`, fresh proxy health, and more than 32 MiB
+  available memory after cleanup.
+
+### 中文说明
+
+WLOC 稳定性更新，继续以已验证的 1.3.0-r1 整合 Gateway 为基础。
+
+- 精确拦截六个 Apple WLOC 域名，其中包含 `gsp-ssl.ls.apple.com`。
+- 转发 Apple 原始响应，只替换已存在的纬度、经度和水平精度；未知字段、海拔、
+  垂直精度、运动状态与根记录全部保留。
+- HTTP/2 流独立处理，缓慢的预探测请求不会阻塞并发定位响应。
+- 拒绝无关 TLS/SNI 流量表示隔离有效，不再计为 WLOC 故障；服务启动时会重置本进程
+  的代理健康快照。
+- 已验证 AArch64 静态运行时及 AX6S 真机重启：仅一个共享 sing-box、WLOC 为
+  `intercepting`、健康快照全新且清理后可用内存高于 32 MiB。
+
 ## [1.3.0-r8] - 2026-08-28
 
 Standardized automatic WLOC location refresh after manual mode changes.

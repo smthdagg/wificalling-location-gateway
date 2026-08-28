@@ -44,8 +44,8 @@ fn redirect_can_only_be_installed_after_every_safety_prerequisite() {
 }
 
 #[test]
-fn invalid_scope_or_ipv6_policy_never_reaches_a_redirectable_state() {
-    for (scope_valid, ipv6_ready) in [(false, true), (true, false), (false, false)] {
+fn invalid_scope_never_reaches_a_redirectable_state() {
+    for (scope_valid, ipv6_ready) in [(false, true), (false, false)] {
         assert_eq!(
             reduce(
                 &ServiceState::disabled(),
@@ -57,6 +57,19 @@ fn invalid_scope_or_ipv6_policy_never_reaches_a_redirectable_state() {
             Err(TransitionError::InvalidSafetyScope)
         );
     }
+}
+
+#[test]
+fn disabled_ipv6_does_not_block_the_ipv4_state_machine() {
+    let state = reduce(
+        &ServiceState::disabled(),
+        ServiceEvent::BeginEnable {
+            scope_valid: true,
+            ipv6_ready: false,
+        },
+    )
+    .expect("IPv4 interception does not require IPv6");
+    assert!(!state.safety().ipv6_ready());
 }
 
 #[test]
