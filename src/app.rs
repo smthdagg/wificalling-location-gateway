@@ -496,7 +496,6 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
         if !matches!(self.geo_source, GeoSource::Manual { .. }) {
             return Ok(());
         }
-        let refresh_auto_target = self.state.phase() != ServicePhase::Disabled;
         self.geo_source = GeoSource::Auto;
         self.manual_geo = None;
         self.geo_generation += 1;
@@ -504,12 +503,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
         if let Ok(mut slot) = self.manual_geo_pending.lock() {
             *slot = None;
         }
-        if refresh_auto_target {
-            self.force_evidence_refresh();
-        } else {
-            self.publish_patch_target();
-            self.refresh_state_file();
-        }
+        self.force_evidence_refresh();
         Ok(())
     }
 

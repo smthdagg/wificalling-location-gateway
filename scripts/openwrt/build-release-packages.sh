@@ -6,7 +6,7 @@ OPENWRT_25_SDK='ghcr.io/openwrt/sdk:x86_64-25.12.3@sha256:a0ab488698b70d6585dc35
 
 repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 version=1.3.0
-release=7
+release=8
 arch=x86_64
 service_bin=
 ctl_bin=
@@ -29,7 +29,7 @@ Usage: build-release-packages.sh [--plan] [options]
 
 Options:
   --version VERSION          Package version (default: 1.3.0)
-  --release RELEASE          Package release number (default: 1)
+  --release RELEASE          Package release number (default: 8)
   --arch ARCH                OpenWrt runtime architecture (default: x86_64)
   --service-bin PATH         Static wloc-service binary (required)
   --ctl-bin PATH             Static wloc-ctl binary (required)

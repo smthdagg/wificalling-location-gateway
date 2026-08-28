@@ -2,17 +2,17 @@
 
 ## Identity and scope
 
-- Source agent ID: codex-node-status
+- Source agent ID: codex-release-r8
 - Capabilities used: openwrt,test,ci,integration
-- Branch: codex/issue-72-node-status-manual-refresh
-- Checkpoint parent: `7a8781d`
+- Branch: codex/issue-72-r8-auto-location
+- Checkpoint parent: `fc42a81`
 - Updated at (UTC): 2026-08-28
 - Credentials included: no
 
 ## Objective
 
-Refresh a node row's status, Ping/latency, and quality immediately after a
-manual LuCI `nodeTest` result.
+Standardize the WLOC manual-to-automatic location transition and publish the
+validated v1.3.0-r8 three-platform packages.
 
 ## Completed
 
@@ -26,10 +26,12 @@ manual LuCI `nodeTest` result.
   duplicate proxy configuration is created.
 - Published monitor results to `/www/wloc-node-status.json` and added browser
   cache bypassing so background metrics are visible in LuCI.
-- Bumped the package release to `1.3.0-r7` and updated bilingual README,
+- Standardized manual-to-automatic WLOC refresh, including while disabled, and
+  added a regression test for the stale/empty automatic target transition.
+- Bumped the package release to `1.3.0-r8` and updated bilingual README,
   changelog, packaging metadata, tests, and release documentation.
 - Built all six Standard/Lite assets for the three supported platform targets
-  and installed r7 Lite on AX6S.
+  and installed r8 Lite on AX6S.
 
 ## Files changed
 
@@ -42,10 +44,10 @@ manual LuCI `nodeTest` result.
 | Command | Result | Evidence |
 |---|---|---|
 | `node tests/js/wg_handshake_reason.test.js` | Passed | Manual row refresh and 60-second polling overlay guards |
-| `./scripts/ci/verify.sh` | Passed | 69 Python tests, Rust suites, 81.35% line coverage, audits and repository gates |
+| `./scripts/ci/verify.sh` | Passed | 69 Python tests, Rust suites, 81.39% line coverage, audits and repository gates |
 | OpenWrt/iStoreOS matrix | Passed | 8/8 Standard/Lite rows installed, started, socket-ok, status-ok |
-| AX6S r7 Lite installation | Passed | Five node metrics, one WIFICalling sing-box process, status polling, and 30-second stability verified |
-| Release assets and checksums | Passed | Six r7 packages built and `SHA256SUMS` verified |
+| AX6S r8 Lite installation | Passed | Service status healthy, control socket present, one long-lived WIFICalling sing-box process |
+| Release assets and checksums | Passed | Six r8 packages built and `SHA256SUMS` verified |
 | `git diff --check` and secret scan | Passed | No whitespace errors or sensitive values in the change |
 
 ## Failed attempts
@@ -59,7 +61,7 @@ manual LuCI `nodeTest` result.
 
 ## Next executable steps
 
-1. Keep PR #74 linked to this capsule and Issue #72.
+1. Keep the release PR linked to this capsule and Issue #72.
 2. Wait for all GitHub repository gates and merge after they pass.
 
 ## Capabilities required for the next Agent
