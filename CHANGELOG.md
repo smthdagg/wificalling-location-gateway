@@ -2,6 +2,38 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r10] - 2026-08-29
+
+Audit-hardening release on the proven integrated 1.3.0-r1 Gateway baseline;
+closes the P0/P1 findings from the full-code audit at c6492df.
+
+- Every TPROXY install refreshes the upstream map and fails closed when DNS is
+  unavailable; disable/enable and sing-box crash recovery can no longer leave
+  interception silently broken while status shows healthy.
+- Disabled WLOC is genuinely fail-open: the init withdraws the DNS hijack,
+  TPROXY and upstream map when the UCI switch is off, and the stop path
+  restarts dnsmasq after removing the hijack block.
+- A failed startup enable is retried by the periodic tick; the exit probe uses
+  a bounded native HTTP client (no curl dependency on clean OpenWrt) and
+  `probe_interval` is clamped to the probe validator's window.
+- LuCI: nodeTest success renders as alive, the Clear-log button works, the
+  health page survives probe errors (last_error JSON fixed), the FAQ describes
+  the ICMP reality, and /proc/net/arp is granted to the gateway ACL.
+
+### 中文说明
+
+在已验证的 1.3.0-r1 整合 Gateway 基线上的审计加固版本；修复 c6492df 全量审计
+发现的 P0/P1 问题。
+
+- 每次 TPROXY 安装都会刷新上游映射，DNS 不可用时拒绝安装；禁用/启用与
+  sing-box 崩溃恢复不会再出现"状态健康但拦截实际失效"。
+- 禁用的 WLOC 真正 fail-open：init 按 UCI 开关撤除 DNS 劫持、TPROXY 与上游
+  映射；stop 路径删除劫持块后会重启 dnsmasq。
+- 启动期 enable 失败由周期任务自动重试；出口探测改用有界原生 HTTP 客户端
+  （干净 OpenWrt 无需 curl），`probe_interval` 钳制到校验器窗口内。
+- LuCI：nodeTest 成功正常显示、清除日志按钮恢复可用、健康页在探测报错时不再
+  失效（last_error JSON 修复）、FAQ 如实描述 ICMP 探测、/proc/net/arp 已授权。
+
 ## [1.3.0-r9] - 2026-08-29
 
 WLOC reliability release, preserving the proven integrated 1.3.0-r1 Gateway
