@@ -133,6 +133,12 @@ return view.extend({
 				uci.set('wloc-service', 'main', 'enabled', on ? '1' : '0');
 				uci.save('wloc-service');
 				ui.changes.apply(true);
+			}).catch(function(err) {
+				// The daemon rejected (or could not reach) the switch: show it
+				// and flip the checkbox back, or the UI silently disagrees
+				// with the real service state.
+				notify(wlocI18n.t('Switch failed'), String(err && err.message || err));
+				if (ev && ev.target) ev.target.checked = !on;
 			});
 		};
 
@@ -229,6 +235,10 @@ return view.extend({
 					searchResult.appendChild(E('p', {}, wlocI18n.t('Search result: ') + city +
 						wlocI18n.t(' (lat ') + lat + wlocI18n.t(', lon ') + lon + wlocI18n.t(')') +
 						wlocI18n.t(') - click "Apply coordinates" to activate.')));
+				}).catch(function(err) {
+					// Re-enable the button or it stays dead until a page reload.
+					searchBtn.disabled = false;
+					notify(wlocI18n.t('Search failed'), String(err && err.message || err));
 				});
 			}
 		}, wlocI18n.t('Search'));
@@ -255,6 +265,10 @@ return view.extend({
 					uci.save('wloc-service');
 					ui.changes.apply(true);
 					notify(wlocI18n.t('Applied'), wlocI18n.t('Coordinates are now the active location.'));
+				}).catch(function(err) {
+					// Re-enable the button or it stays dead until a page reload.
+					coordBtn.disabled = false;
+					notify(wlocI18n.t('Apply failed'), String(err && err.message || err));
 				});
 			}
 		}, wlocI18n.t('Apply coordinates'));
