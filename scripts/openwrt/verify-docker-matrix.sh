@@ -104,7 +104,7 @@ run_case() {
 			--name "$container" -v "$dist_dir:/packages:ro" \
 			-e "WLG_PACKAGE_BASENAME=${package_path##*/}" \
 			--entrypoint /bin/sh "$image" -c \
-			'apk add --allow-untrusted "/packages/$WLG_PACKAGE_BASENAME" >/tmp/wlg-apk-install.log && exec /sbin/init' >/dev/null
+			'mkdir -p /usr/sbin; [ -e /usr/sbin/ip ] || ln -s /sbin/ip /usr/sbin/ip; apk add --allow-untrusted "/packages/$WLG_PACKAGE_BASENAME" >/tmp/wlg-apk-install.log && exec /sbin/init' >/dev/null
 	else
 		docker run -d --rm --privileged --pull never --platform "$platform" \
 			--name "$container" -v "$dist_dir:/packages:ro" \
