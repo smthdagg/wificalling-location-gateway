@@ -2,6 +2,28 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r12] - 2026-08-29
+
+Adds the requested preset auto-save on the proven integrated 1.3.0-r1
+Gateway baseline.
+
+- Applying a manual location automatically upserts it into the
+  saved-locations table: a search result is stored under its city label,
+  raw coordinates under "lat, lon"; re-applying the same place updates the
+  existing entry instead of duplicating it (dedupe by coordinates first).
+- The table refreshes immediately after apply; bilingual confirmation.
+- No daemon or protocol changes; presets remain plain UCI sections.
+
+### 中文说明
+
+在已验证的 1.3.0-r1 整合 Gateway 基线上增加用户期望的预设自动保存。
+
+- 应用手动定位时自动写入"已保存的位置"表：搜索结果以城市名保存，手输坐标
+  以"纬度, 经度"保存；同一地点重复应用会更新既有条目而不是产生重复
+  （先按坐标去重，再按标签）。
+- 应用后表格立即刷新并给出双语确认；守护进程与协议无变更，预设仍为普通
+  UCI 配置段。
+
 ## [1.3.0-r11] - 2026-08-29
 
 LuCI error-path hardening on the proven integrated 1.3.0-r1 Gateway baseline.
