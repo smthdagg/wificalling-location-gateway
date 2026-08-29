@@ -91,7 +91,7 @@ return view.extend({
 			ui.showModal(wlocI18n.t('Clear activity log?'), [E('p', {}, wlocI18n.t('This permanently removes only the Wi-Fi Calling activity history. Settings and system logs are not affected.')),
 				E('div', { class: 'right' }, [E('button', { class: 'btn', click: ui.hideModal }, wlocI18n.t('Cancel')),
 				E('button', { class: 'btn cbi-button-negative', click: function() {
-					clearLog('wfc').then(function() { renderLog(''); ui.hideModal(); ui.addNotification(null, E('p', {}, wlocI18n.t('Activity log cleared.')), 'info'); }).catch(function(err) { ui.hideModal(); ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to clear log: ') + ' ' + err.message), 'error'); });
+					clearLog('wfc').then(function() { renderLog(''); ui.hideModal(); }).catch(function(err) { ui.hideModal(); ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to clear log: ') + ' ' + err.message), 'error'); });
 				} }, wlocI18n.t('Clear log'))])]);
 		} }, wlocI18n.t('Clear log'));
 
