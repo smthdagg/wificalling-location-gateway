@@ -45,12 +45,40 @@ grep -F 'reload_service() { restart; }' "$service" >/dev/null ||
 	{ echo 'WLOC must restart when its persisted configuration changes' >&2; exit 1; }
 grep -F 'procd_add_reload_trigger wloc-service wificalling-gateway' "$service" >/dev/null ||
 	{ echo 'WLOC must reload when either its scope or Gateway device policy changes' >&2; exit 1; }
-sync_line=$(awk '/^start_service\(\)/,/^}/ { if ($0 ~ /wloc-refresh-set\.sh/) { print NR; exit } }' "$service")
-daemon_line=$(awk '/^start_service\(\)/,/^}/ { if ($0 ~ /procd_set_param command \/usr\/sbin\/wloc-service/) { print NR; exit } }' "$service")
+# Both branches (enabled and disabled) start the daemon; the enabled branch
+# must still populate DNS targets before its procd instance. Compare the LAST
+# occurrence of each so the disabled branch's early daemon start cannot mask
+# the ordering.
+sync_line=$(awk '/wloc-refresh-set\.sh/ { line = NR } END { print line }' "$service")
+daemon_line=$(awk '/procd_set_param command \/usr\/sbin\/wloc-service/ { line = NR } END { print line }' "$service")
 [ -n "$sync_line" ] && [ -n "$daemon_line" ] && [ "$sync_line" -lt "$daemon_line" ] ||
 	{ echo 'WLOC must prepare DNS targets before starting the daemon'; exit 1; }
 grep -F 'wloc-redirect-sync.sh prepare' "$service" >/dev/null ||
 	{ echo 'WLOC init must prepare its IPv4 scope without installing TPROXY'; exit 1; }
+# Disabled WLOC must be genuinely fail-open: the init gates interception-side
+# state on the UCI switch, cleans any leftover on start, and the daemon always
+# runs so the control API (and the enable toggle) stays reachable.
+grep -F 'uci -q get wloc-service.main.enabled' "$service" >/dev/null ||
+	{ echo 'WLOC init must gate interception-side state on the enabled switch' >&2; exit 1; }
+grep -F 'wloc-redirect-sync.sh stop >/dev/null' "$service" >/dev/null ||
+	{ echo 'WLOC init must withdraw leftovers when disabled' >&2; exit 1; }
+# Every TPROXY install must carry a fresh upstream map: without it the MITM
+# resolves the hijacked ingress back to this router and every request fails
+# while status still shows intercepting.
+refresh_line=$(awk '/wloc-refresh-set\.sh/{ print NR; exit }' "$redirect")
+tproxy_line=$(awk '/^# TPROXY plumbing/{ print NR; exit }' "$redirect")
+[ -n "$refresh_line" ] && [ -n "$tproxy_line" ] && [ "$refresh_line" -lt "$tproxy_line" ] ||
+	{ echo 'redirect install must refresh the upstream map before TPROXY rules' >&2; exit 1; }
+grep -F 'upstream refresh failed; not installing tproxy' "$redirect" >/dev/null ||
+	{ echo 'redirect install must fail closed when the upstream map cannot be refreshed' >&2; exit 1; }
+# The stop path must remember that removing the DNS hijack block requires a
+# dnsmasq restart: a second dns_changed=0 reset swallowed exactly that signal
+# and left the running resolver answering with the router IP after disable.
+stop_block=$(sed -n '/\$action" = stop/,/^fi$/p' "$redirect")
+[ "$(printf '%s\n' "$stop_block" | grep -c 'dns_changed=0')" -eq 1 ] ||
+	{ echo 'redirect stop must not reset dns_changed after removing the DNS hijack' >&2; exit 1; }
+printf '%s\n' "$stop_block" | grep -F 'dns_changed=1' >/dev/null ||
+	{ echo 'redirect stop must flag DNS changes for the dnsmasq restart' >&2; exit 1; }
 redirect_start=$(sed -n '/^# WLOC is scoped/,$p' "$redirect")
 if grep -F 'ip -6 rule add fwmark' "$redirect" >/dev/null ||
 	grep -F 'tproxy ip6' "$redirect" >/dev/null; then

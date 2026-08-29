@@ -11,7 +11,10 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
 const MAX_NODE_REF_BYTES: usize = 64;
-const MAX_OBSERVATION_AGE: Duration = Duration::from_secs(300);
+/// Hard ceiling for an observation's accepted age. UCI `probe_interval` must
+/// be clamped to this value: a larger configured interval would make every
+/// observation fail `InvalidLimits` and permanently block auto-mode enable.
+pub const MAX_OBSERVATION_AGE: Duration = Duration::from_secs(300);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NodeRef(String);

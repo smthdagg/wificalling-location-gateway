@@ -12,6 +12,9 @@ use std::str::FromStr;
 
 pub const DEFAULT_UCI_PATH: &str = "/etc/config/wloc-service";
 pub const DEFAULT_PROBE_INTERVAL_SECS: u64 = 300;
+/// Floor for the auto-evidence interval: below this the probe would run on
+/// every 10-second housekeeping tick.
+pub const MIN_PROBE_INTERVAL_SECS: u64 = 30;
 const DEFAULT_NODE_REF: &str = "default";
 
 /// Where the location target comes from: follow the bound node's exit, or
@@ -253,8 +256,16 @@ fn apply_option(
             "node_ref" => config.node_ref = value.to_owned(),
             "assigned_device" => config.assigned_device = value.to_owned(),
             "probe_interval" => {
-                config.probe_interval_secs =
-                    u64::from_str(value).unwrap_or(DEFAULT_PROBE_INTERVAL_SECS)
+                // Clamp to the probe validator's accepted window: anything
+                // above the ceiling fails every observation with
+                // InvalidLimits, zero would fail it immediately, and both
+                // leave auto-mode permanently unable to enable.
+                config.probe_interval_secs = u64::from_str(value)
+                    .unwrap_or(DEFAULT_PROBE_INTERVAL_SECS)
+                    .clamp(
+                        MIN_PROBE_INTERVAL_SECS,
+                        crate::exitprobe::MAX_OBSERVATION_AGE.as_secs(),
+                    );
             }
             "geo_provider" => config.geo_provider = value.to_owned(),
             _ => {}
@@ -296,8 +307,23 @@ config wloc-service 'main'
         assert_eq!(config.manual_longitude, Some(-0.1278));
         assert_eq!(config.node_ref, "uk_anytls_test");
         assert_eq!(config.assigned_device, "192.168.1.100");
-        assert_eq!(config.probe_interval_secs, 600);
+        // Clamped to the probe validator's ceiling (600 would fail every
+        // observation with InvalidLimits and block auto-mode forever).
+        assert_eq!(config.probe_interval_secs, 300);
         assert_eq!(config.geo_provider, "http");
+    }
+
+    #[test]
+    fn probe_interval_is_clamped_into_the_valid_window() {
+        let over = "config wloc-service 'main'\n\toption probe_interval '600'\n";
+        assert_eq!(WlocUciConfig::parse(over).unwrap().probe_interval_secs, 300);
+        let zero = "config wloc-service 'main'\n\toption probe_interval '0'\n";
+        assert_eq!(WlocUciConfig::parse(zero).unwrap().probe_interval_secs, 30);
+        let garbage = "config wloc-service 'main'\n\toption probe_interval 'abc'\n";
+        assert_eq!(
+            WlocUciConfig::parse(garbage).unwrap().probe_interval_secs,
+            DEFAULT_PROBE_INTERVAL_SECS
+        );
     }
 
     #[test]

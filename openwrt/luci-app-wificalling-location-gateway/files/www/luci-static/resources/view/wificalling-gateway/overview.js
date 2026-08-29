@@ -145,7 +145,7 @@ return view.extend({
 				else if (r && r.state === 'handshake_failed') {
 					testNotify(wlocI18n.t('Handshake failed') + ' (' + wgFailReason(r.reason) + ')', 'error', wgFailDetail(r.reason));
 				}
-				else if (r && (r.state === 'tcp_reachable' || r.state === 'proxy_reachable')) {
+				else if (r && (r.state === 'reachable' || r.state === 'tcp_reachable' || r.state === 'proxy_reachable')) {
 					testNotify(wlocI18n.t('Alive') + (r.ping_ms ? ' — ' + r.ping_ms + ' ms' : ''), 'info');
 				}
 				else if (r && r.state === 'unreachable') {

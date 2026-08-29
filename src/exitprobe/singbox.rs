@@ -189,32 +189,80 @@ pub fn existing_probe_port(document: &Value, node_tag: &str) -> Option<u16> {
         .filter(|port| (1024..=65535).contains(port))
 }
 
+/// Upper bound for the probe HTTP response (headers + body).
+const MAX_PROBE_RESPONSE_BYTES: usize = 16 * 1024;
+
 /// Ask an IP echo service through the local HTTP proxy and return the exit IP.
+///
+/// The request uses an absolute-form URI (RFC 9110 §3.2.2) against the
+/// Gateway's loopback probe inbound, with bounded connect/read timeouts and a
+/// response size cap so the control path can never hang or balloon. Pure
+/// std::net keeps the probe free of external command dependencies (a clean
+/// OpenWrt image does not ship curl).
 fn query_exit_ip(probe_port: u16, timeout: Duration) -> Result<IpAddr, ProbeFailure> {
-    let proxy = format!("http://127.0.0.1:{probe_port}");
-    let url = "http://ip-api.com/json?fields=query";
-    let output = Command::new("curl")
-        .args([
-            "-s",
-            "--max-time",
-            &timeout.as_secs().to_string(),
-            "-x",
-            &proxy,
-            url,
-        ])
-        .output()
+    use std::io::{Read, Write};
+    let address = std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, probe_port));
+    let mut stream = std::net::TcpStream::connect_timeout(&address, timeout)
         .map_err(|_| ProbeFailure::Unreachable)?;
-    if !output.status.success() {
-        return Err(ProbeFailure::Unreachable);
+    stream
+        .set_read_timeout(Some(timeout))
+        .and_then(|()| stream.set_write_timeout(Some(timeout)))
+        .map_err(|_| ProbeFailure::Unreachable)?;
+    let request = "GET http://ip-api.com/json?fields=query HTTP/1.1\r\n\
+                   Host: ip-api.com\r\nAccept: application/json\r\nConnection: close\r\n\r\n";
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|_| ProbeFailure::Unreachable)?;
+
+    let mut raw = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => {
+                raw.extend_from_slice(&buffer[..count]);
+                if raw.len() > MAX_PROBE_RESPONSE_BYTES {
+                    return Err(ProbeFailure::InvalidData);
+                }
+            }
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                return Err(ProbeFailure::Timeout);
+            }
+            Err(_) => return Err(ProbeFailure::Unreachable),
+        }
     }
-    let value: Value =
-        serde_json::from_slice(&output.stdout).map_err(|_| ProbeFailure::InvalidData)?;
+
+    let body = probe_http_body(&raw)?;
+    let value: Value = serde_json::from_slice(body).map_err(|_| ProbeFailure::InvalidData)?;
     let ip = value
         .get("query")
         .and_then(Value::as_str)
         .and_then(|value| value.parse::<IpAddr>().ok())
         .ok_or(ProbeFailure::InvalidData)?;
     Ok(ip)
+}
+
+/// Split the probe response into its HTTP body, requiring a 200 status.
+fn probe_http_body(raw: &[u8]) -> Result<&[u8], ProbeFailure> {
+    let header_end = raw
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .ok_or(ProbeFailure::InvalidData)?;
+    let status = raw[..header_end]
+        .split(|byte| *byte == b' ')
+        .nth(1)
+        .and_then(|part| std::str::from_utf8(part).ok())
+        .and_then(|part| part.trim().parse::<u16>().ok())
+        .ok_or(ProbeFailure::InvalidData)?;
+    if status != 200 {
+        return Err(ProbeFailure::InvalidData);
+    }
+    Ok(&raw[header_end + 4..])
 }
 
 /// Parse non-loopback IPv4 addresses from `ip -4 addr show` output.
@@ -502,10 +550,70 @@ mod tests {
 
     #[test]
     fn query_exit_ip_fails_when_the_proxy_is_down() {
-        // No listener on this port; the curl command fails -> Unreachable.
+        // No listener on this port; the connect fails -> Unreachable.
         assert_eq!(
             query_exit_ip(59_999, Duration::from_millis(500)),
             Err(ProbeFailure::Unreachable)
+        );
+    }
+
+    /// One-shot mock HTTP proxy: captures the request line, answers `status`.
+    fn spawn_mock_probe_proxy(
+        status_line: &str,
+        body: &str,
+    ) -> (u16, std::sync::Arc<std::sync::Mutex<String>>) {
+        use std::net::TcpListener;
+        use std::sync::{Arc, Mutex};
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let captured: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+        let captured_in_thread = Arc::clone(&captured);
+        let status_line = status_line.to_owned();
+        let body = body.to_owned();
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                use std::io::{Read, Write};
+                let mut request = String::new();
+                let mut buffer = [0_u8; 4096];
+                if let Ok(count) = stream.read(&mut buffer) {
+                    request.push_str(&String::from_utf8_lossy(&buffer[..count]));
+                }
+                *captured_in_thread.lock().unwrap() = request;
+                let response = format!(
+                    "{status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+        (port, captured)
+    }
+
+    #[test]
+    fn query_exit_ip_parses_the_proxied_exit_over_an_absolute_form_uri() {
+        let (port, captured) =
+            spawn_mock_probe_proxy("HTTP/1.1 200 OK", r#"{"query":"203.0.113.7"}"#);
+        assert_eq!(
+            query_exit_ip(port, Duration::from_secs(5)),
+            Ok(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 7)))
+        );
+        // The probe inbound is an HTTP proxy: the target must be requested in
+        // absolute-form so the Gateway sing-box routes it through the node.
+        let request = captured.lock().unwrap().clone();
+        assert!(
+            request.starts_with("GET http://ip-api.com/json?fields=query HTTP/1.1\r\n"),
+            "probe request must use an absolute-form URI, got: {request:?}"
+        );
+    }
+
+    #[test]
+    fn query_exit_ip_rejects_non_200_probe_answers() {
+        let (port, _captured) =
+            spawn_mock_probe_proxy("HTTP/1.1 502 Bad Gateway", "upstream unavailable");
+        assert_eq!(
+            query_exit_ip(port, Duration::from_secs(5)),
+            Err(ProbeFailure::InvalidData)
         );
     }
 
