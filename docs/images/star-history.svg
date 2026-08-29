@@ -11,25 +11,25 @@
 <text x="40" y="22.0" font-size="11" fill="#1f2328" text-anchor="end">300</text>
 <line x1="48.0" y1="18" x2="48.0" y2="304" stroke="#eaeef2"/>
 <text x="48.0" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-09</text>
-<line x1="161.4" y1="18" x2="161.4" y2="304" stroke="#eaeef2"/>
-<text x="161.4" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-12</text>
-<line x1="274.9" y1="18" x2="274.9" y2="304" stroke="#eaeef2"/>
-<text x="274.9" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-15</text>
-<line x1="388.3" y1="18" x2="388.3" y2="304" stroke="#eaeef2"/>
-<text x="388.3" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-18</text>
-<line x1="501.7" y1="18" x2="501.7" y2="304" stroke="#eaeef2"/>
-<text x="501.7" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-21</text>
-<line x1="615.1" y1="18" x2="615.1" y2="304" stroke="#eaeef2"/>
-<text x="615.1" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-24</text>
-<line x1="728.6" y1="18" x2="728.6" y2="304" stroke="#eaeef2"/>
-<text x="728.6" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-27</text>
-<line x1="842.0" y1="18" x2="842.0" y2="304" stroke="#eaeef2"/>
-<text x="842.0" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-30</text>
+<line x1="156.3" y1="18" x2="156.3" y2="304" stroke="#eaeef2"/>
+<text x="156.3" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-12</text>
+<line x1="264.5" y1="18" x2="264.5" y2="304" stroke="#eaeef2"/>
+<text x="264.5" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-15</text>
+<line x1="372.8" y1="18" x2="372.8" y2="304" stroke="#eaeef2"/>
+<text x="372.8" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-18</text>
+<line x1="481.1" y1="18" x2="481.1" y2="304" stroke="#eaeef2"/>
+<text x="481.1" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-21</text>
+<line x1="589.4" y1="18" x2="589.4" y2="304" stroke="#eaeef2"/>
+<text x="589.4" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-24</text>
+<line x1="697.6" y1="18" x2="697.6" y2="304" stroke="#eaeef2"/>
+<text x="697.6" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-27</text>
+<line x1="805.9" y1="18" x2="805.9" y2="304" stroke="#eaeef2"/>
+<text x="805.9" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-30</text>
 <line x1="48" y1="304" x2="842" y2="304" stroke="#d0d7de"/>
 <line x1="48" y1="18" x2="48" y2="304" stroke="#d0d7de"/>
-<path d="M48 304 L161.4 304.0 L199.2 298.3 L237.0 194.4 L274.9 158.1 L312.7 153.4 L350.5 150.5 L388.3 145.7 L426.1 138.1 L463.9 130.5 L501.7 126.7 L539.5 121.0 L577.3 119.1 L615.1 112.4 L653.0 110.5 L690.8 109.5 L728.6 107.6 L728.6 304 Z" fill="#ddf4ff"/>
-<path d="M161.4 304.0 L199.2 298.3 L237.0 194.4 L274.9 158.1 L312.7 153.4 L350.5 150.5 L388.3 145.7 L426.1 138.1 L463.9 130.5 L501.7 126.7 L539.5 121.0 L577.3 119.1 L615.1 112.4 L653.0 110.5 L690.8 109.5 L728.6 107.6" fill="none" stroke="#0969da" stroke-width="2"/>
-<circle cx="728.6" cy="107.6" r="3.5" fill="#0969da"/>
-<text x="737.6" y="101.6" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">206</text>
-<text x="737.6" y="117.6" font-size="11" fill="#1f2328" text-anchor="start">stars</text>
+<path d="M48 304 L156.3 304.0 L192.4 298.3 L228.5 194.4 L264.5 158.1 L300.6 153.4 L336.7 150.5 L372.8 145.7 L408.9 138.1 L445.0 130.5 L481.1 126.7 L517.2 121.0 L553.3 119.1 L589.4 112.4 L625.5 110.5 L661.5 109.5 L697.6 107.6 L733.7 105.7 L733.7 304 Z" fill="#ddf4ff"/>
+<path d="M156.3 304.0 L192.4 298.3 L228.5 194.4 L264.5 158.1 L300.6 153.4 L336.7 150.5 L372.8 145.7 L408.9 138.1 L445.0 130.5 L481.1 126.7 L517.2 121.0 L553.3 119.1 L589.4 112.4 L625.5 110.5 L661.5 109.5 L697.6 107.6 L733.7 105.7" fill="none" stroke="#0969da" stroke-width="2"/>
+<circle cx="733.7" cy="105.7" r="3.5" fill="#0969da"/>
+<text x="742.7" y="99.7" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">208</text>
+<text x="742.7" y="115.7" font-size="11" fill="#1f2328" text-anchor="start">stars</text>
 </svg>
