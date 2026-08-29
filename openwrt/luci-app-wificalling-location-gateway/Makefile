@@ -5,7 +5,7 @@ LUCI_DESCRIPTION:=Unified admin UI for the Wi-Fi Calling gateway and the WLOC lo
 LUCI_DEPENDS:=+wloc-service +luci-app-wificalling-gateway +luci-base +rpcd-mod-rpcsys
 LUCI_PKGARCH:=all
 PKG_VERSION:=1.3.0
-PKG_RELEASE:=9
+PKG_RELEASE:=10
 
 PKG_MAINTAINER:=wificalling-location-gateway maintainers
 

@@ -50,7 +50,6 @@ if [ "$action" = stop ]; then
         sed -i "/$DNS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
     done
     router_ip=$(uci -q get network.lan.ipaddr 2>/dev/null || true)
-    dns_changed=0
     for host in $HOSTS; do
         entry="/$host/$router_ip"
         uci -q show dhcp.@dnsmasq[0].address 2>/dev/null | grep -F -- "'$entry'" >/dev/null || continue
@@ -162,6 +161,15 @@ for ip in $ips; do
 done
 
 [ "$action" = prepare ] && exit 0
+
+# Every TPROXY install must be paired with a fresh upstream map: the MITM
+# resolves the hijacked local ingress through it, and a missing map makes
+# every intercepted request connect back to this router (fail-closed here so
+# a DNS outage can never leave interception installed but unusable).
+if ! /usr/sbin/wloc-refresh-set.sh >/dev/null 2>&1; then
+    echo "wloc-redirect-sync: upstream refresh failed; not installing tproxy" >&2
+    exit 1
+fi
 
 # TPROXY plumbing: marked packets are routed back to the local stack.
 ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true

@@ -38,6 +38,10 @@ done
 
 if command -v shellcheck >/dev/null 2>&1; then
     find scripts -type f -name '*.sh' -exec shellcheck {} +
+else
+    # The lint gate must never vanish silently: CI installs shellcheck, so a
+    # local green run without it is not equivalent evidence.
+    echo 'WARNING: shellcheck not installed; shell lint gate skipped' >&2
 fi
 
 if [ -f go.mod ]; then

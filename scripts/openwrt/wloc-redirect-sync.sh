@@ -50,7 +50,6 @@ if [ "$action" = stop ]; then
         sed -i "/$DNS_MARKER/,/^# wloc-service end/d" "$hosts_file" 2>/dev/null || true
     done
     router_ip=$(uci -q get network.lan.ipaddr 2>/dev/null || true)
-    dns_changed=0
     for host in $HOSTS; do
         entry="/$host/$router_ip"
         uci -q show dhcp.@dnsmasq[0].address 2>/dev/null | grep -F -- "'$entry'" >/dev/null || continue
@@ -112,6 +111,9 @@ if [ "$PROXY_PORT" -lt 1 ] || [ "$PROXY_PORT" -gt 65535 ]; then
     exit 1
 fi
 
+# Apple rotates CDN addresses independently for each resolver and device.
+# The common config file is loaded by both the system and PassWall dnsmasq;
+# the TPROXY rules below still scope the local answer to one device.
 dns_changed=0
 for host in $HOSTS; do
     entry="/$host/$ROUTER_IP"
@@ -153,12 +155,21 @@ mac_for_ip() {
 }
 
 macs=
-[ "$action" = prepare ] && exit 0
-
 for ip in $ips; do
     mac=$(mac_for_ip "$ip" || true)
     [ -n "$mac" ] && macs="$macs $mac"
 done
+
+[ "$action" = prepare ] && exit 0
+
+# Every TPROXY install must be paired with a fresh upstream map: the MITM
+# resolves the hijacked local ingress through it, and a missing map makes
+# every intercepted request connect back to this router (fail-closed here so
+# a DNS outage can never leave interception installed but unusable).
+if ! /usr/sbin/wloc-refresh-set.sh >/dev/null 2>&1; then
+    echo "wloc-redirect-sync: upstream refresh failed; not installing tproxy" >&2
+    exit 1
+fi
 
 # TPROXY plumbing: marked packets are routed back to the local stack.
 ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
@@ -173,7 +184,6 @@ nft add set inet "$TABLE" apple_hosts6 '{ type ipv6_addr; }' 2>/dev/null || true
 nft flush chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
 nft delete chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
 nft "add chain inet $TABLE $CHAIN { type filter hook prerouting priority mangle; }"
-nft flush chain inet "$TABLE" "$CHAIN"
 for ip in $ips; do
     nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr @apple_hosts meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
     nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr $ROUTER_IP meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"

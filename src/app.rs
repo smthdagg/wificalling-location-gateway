@@ -698,6 +698,10 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
     }
 
     fn enable(&mut self) -> Result<(), DispatchError> {
+        // Record the operator's intent before any fallible step: when the
+        // startup enable races the Gateway boot, the periodic tick must keep
+        // retrying instead of leaving WLOC disabled until a manual toggle.
+        self.desired_state = DesiredState::Enabled;
         if self.state.phase() != ServicePhase::Disabled {
             return Err(DispatchError::InvalidConfig);
         }
@@ -718,7 +722,6 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
         control_enable(&mut self.runtime, self.scope_valid, self.ipv6_ready)
             .map_err(map_control_error)?;
         self.apply_enable_events();
-        self.desired_state = DesiredState::Enabled;
         Ok(())
     }
 
