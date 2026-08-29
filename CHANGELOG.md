@@ -2,6 +2,23 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r11] - 2026-08-29
+
+LuCI error-path hardening on the proven integrated 1.3.0-r1 Gateway baseline.
+
+- Every rpc promise chain in the location settings view now handles rejection:
+  the Enable/Disable switch flips back with a visible error, and the Search and
+  Apply-coordinates buttons re-enable instead of staying dead until a page
+  reload.
+- No daemon or protocol changes; this release only ships the fixed LuCI views.
+
+### 中文说明
+
+在已验证的 1.3.0-r1 整合 Gateway 基线上的 LuCI 报错路径加固版本。
+
+- 定位设置页所有 rpc 调用链现在都会处理失败：启用/禁用开关失败时回弹并显示
+  错误，搜索与坐标应用按钮失败后恢复可用，不再需要刷新页面。
+
 ## [1.3.0-r10] - 2026-08-29
 
 Audit-hardening release on the proven integrated 1.3.0-r1 Gateway baseline;
