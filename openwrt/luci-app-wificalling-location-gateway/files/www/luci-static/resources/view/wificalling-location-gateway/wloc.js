@@ -229,6 +229,7 @@ return view.extend({
 					var city = found.city || q;
 					var lat = String(Number(found.latitude).toFixed(6));
 					var lon = String(Number(found.longitude).toFixed(6));
+					lastSearch = { label: city, lat: lat, lon: lon };
 					document.getElementById('wloc-coord-lat').value = lat;
 					document.getElementById('wloc-coord-lon').value = lon;
 					searchResult.innerHTML = '';
@@ -243,6 +244,10 @@ return view.extend({
 			}
 		}, wlocI18n.t('Search'));
 
+		// The last successful place search: applying its result auto-saves the
+		// city label into the saved-locations table (raw coordinates save as
+		// "lat, lon" instead).
+		var lastSearch = null;
 		var coordLat = E('input', { 'class': 'cbi-input-text', 'id': 'wloc-coord-lat', 'type': 'text', 'placeholder': '51.5074' });
 		var coordLon = E('input', { 'class': 'cbi-input-text', 'id': 'wloc-coord-lon', 'type': 'text', 'placeholder': '-0.1278' });
 		var coordBtn = E('button', {
@@ -262,9 +267,28 @@ return view.extend({
 					uci.set('wloc-service', 'main', 'manual_lat', lat);
 					uci.set('wloc-service', 'main', 'manual_lon', lon);
 					uci.set('wloc-service', 'main', 'geo_source', 'manual');
+					// Auto-save the applied place into the saved-locations table:
+					// a search result keeps its city label, raw coordinates are
+					// stored as "lat, lon"; an existing entry with the same label
+					// is updated in place instead of duplicated.
+					var autoLabel = (lastSearch && lastSearch.lat === lat && lastSearch.lon === lon)
+						? lastSearch.label : (lat + ', ' + lon);
+					var existingSid = null;
+					uci.sections('wloc-service', 'preset').forEach(function(s) {
+						// Prefer an exact coordinate match (re-applying a place
+						// must not duplicate it), then an exact label match.
+						if (String(s.latitude) === lat && String(s.longitude) === lon) existingSid = s['.name'];
+						else if (!existingSid && s.label === autoLabel) existingSid = s['.name'];
+					});
+					var sid = existingSid || uci.add('wloc-service', 'preset');
+					uci.set('wloc-service', sid, 'label', autoLabel);
+					uci.set('wloc-service', sid, 'latitude', lat);
+					uci.set('wloc-service', sid, 'longitude', lon);
+					lastSearch = null;
 					uci.save('wloc-service');
 					ui.changes.apply(true);
-					notify(wlocI18n.t('Applied'), wlocI18n.t('Coordinates are now the active location.'));
+					renderPresets();
+					notify(wlocI18n.t('Applied'), wlocI18n.t('Coordinates are now the active location and were saved to the list below.'));
 				}).catch(function(err) {
 					// Re-enable the button or it stays dead until a page reload.
 					coordBtn.disabled = false;

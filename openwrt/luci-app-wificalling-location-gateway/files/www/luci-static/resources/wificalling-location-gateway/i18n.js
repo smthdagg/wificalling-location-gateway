@@ -134,6 +134,7 @@ var ZH = {
 	'Applied': '已应用',
 	'Search result is now the active location. Verify on the iPhone.': '搜索结果已成为当前生效位置。请在 iPhone 上验证。',
 	'Coordinates are now the active location.': '坐标已成为当前生效位置。',
+	'Coordinates are now the active location and were saved to the list below.': '坐标已成为当前生效位置，并已自动存入下方列表。',
 	'Search failed': '搜索失败',
 	'Place not found': '未找到该地名',
 	'Apply failed': '应用失败',
