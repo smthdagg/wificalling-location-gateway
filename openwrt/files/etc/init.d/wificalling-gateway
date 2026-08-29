@@ -63,19 +63,53 @@ append_node() {
 append_ip() { DEVICE_IPS="${DEVICE_IPS}${DEVICE_IPS:+,}$1"; }
 
 require_start_memory() {
-	local minimum_available_kib=32768 available_kib
-	# Lite must first inflate its compressed executable into tmpfs.  Reserve
-	# that one-time image before asking sing-box to validate or run it.
-	if [ "$(cat /usr/share/wificalling-location-gateway/runtime-variant 2>/dev/null)" = lite ] \
-		&& [ ! -x /tmp/sing-box-lite ]; then
-		minimum_available_kib=65536
+	# Compute the real requirement instead of flat thresholds:
+	# - Lite cold start must inflate the compressed runtime into tmpfs first;
+	#   the exact inflated size is measured by streaming the archive through
+	#   wc -c, plus an 8 MiB working margin. The runtime heap is already
+	#   bounded by GOMEMLIMIT, so warm and standard starts only reserve a
+	#   small emergency margin.
+	# - A refusal schedules a bounded background retry (30 s x 20) so a
+	#   temporarily memory-tight router self-heals instead of staying down
+	#   until a manual restart (procd never re-runs a failed start_service).
+	local reserve_kib=8192 variant gz inflated_kb needed_kb
+	variant=$(cat /usr/share/wificalling-location-gateway/runtime-variant 2>/dev/null)
+	gz=/usr/share/wificalling-location-gateway/sing-box-lite.gz
+	if [ "$variant" = lite ] && [ ! -x /tmp/sing-box-lite ] && [ -s "$gz" ]; then
+		inflated_kb=$(gzip -dc "$gz" 2>/dev/null | wc -c)
+		case "$inflated_kb" in ''|*[!0-9]*) return 0;; esac
+		inflated_kb=$((inflated_kb / 1024))
+		needed_kb=$((inflated_kb + reserve_kib))
+	else
+		needed_kb=$reserve_kib
 	fi
+	local available_kib
 	available_kib=$(awk '/^MemAvailable:/ { print $2; exit }' /proc/meminfo 2>/dev/null || true)
 	case "$available_kib" in ''|*[!0-9]*) return 0;; esac
-	[ "$available_kib" -ge "$minimum_available_kib" ] || {
-		logger -t "$APP" "insufficient available memory (${available_kib} KiB; need ${minimum_available_kib} KiB); refusing to start before the router OOMs"
-		return 1
-	}
+	[ "$available_kib" -ge "$needed_kb" ] && return 0
+	logger -t "$APP" "insufficient available memory (${available_kib} KiB; need ${needed_kb} KiB); retrying in the background"
+	schedule_memory_retry
+	return 1
+}
+
+schedule_memory_retry() {
+	# One background retry loop at a time (mkdir lock); 30 s x 20 = 10 min
+	# window, then give up with a clear log entry.
+	local lock=/tmp/wificalling-gateway-mem-retry
+	mkdir "$lock" 2>/dev/null || return 0
+	(
+		trap 'rmdir "$lock" 2>/dev/null' EXIT HUP INT TERM
+		local attempt=0
+		while [ "$attempt" -lt 20 ]; do
+			sleep 30
+			if /etc/init.d/wificalling-gateway start >/dev/null 2>&1; then
+				logger -t "$APP" "memory retry succeeded; service started"
+				exit 0
+			fi
+			attempt=$((attempt + 1))
+		done
+		logger -t "$APP" "memory retry window exhausted; waiting for manual start"
+	) >/dev/null 2>&1 &
 }
 
 append_device() {

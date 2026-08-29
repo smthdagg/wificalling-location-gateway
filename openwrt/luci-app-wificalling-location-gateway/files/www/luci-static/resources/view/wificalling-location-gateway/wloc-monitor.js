@@ -192,9 +192,11 @@ return view.extend({
 				E('div', { class: 'right' }, [E('button', { class: 'btn', click: ui.hideModal }, wlocI18n.t('Cancel')),
 				E('button', { class: 'btn cbi-button-negative', click: function() {
 					clearLog('wloc').then(function() {
+						// The emptied list and the closed modal are feedback
+						// enough; a second popup after the confirm dialog is
+						// noise.
 						renderLog('');
 						ui.hideModal();
-						ui.addNotification(null, E('p', {}, wlocI18n.t('WLOC usage log cleared.')), 'info');
 					}).catch(function(err) {
 						ui.hideModal();
 						ui.addNotification(null, E('p', {}, wlocI18n.t('Unable to clear log: ') + ' ' + err.message), 'error');

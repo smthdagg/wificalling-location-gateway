@@ -2,6 +2,35 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r13] - 2026-08-29
+
+Replaces the flat 32/64 MiB start-time memory thresholds with a computed
+requirement plus a bounded self-healing retry, on the proven integrated
+1.3.0-r1 Gateway baseline.
+
+- Lite cold start measures the real inflated runtime size (streamed through
+  wc -c) plus an 8 MiB margin instead of a flat 64 MiB; warm and standard
+  starts reserve 8 MiB only (the runtime heap is bounded by GOMEMLIMIT).
+- A refused start schedules a bounded background retry (30 s x 20) so a
+  temporarily memory-tight router self-heals instead of staying down until a
+  manual restart - observed live when an upgrade ipk in /tmp pushed
+  MemAvailable below the old flat gate.
+- Clearing a log closes the confirm modal and empties the list without a
+  second popup; error notifications are kept.
+
+### 中文说明
+
+在已验证的 1.3.0-r1 整合 Gateway 基线上，用"计算实际需求 + 自愈重试"取代
+平面式 32/64 MiB 启动内存阈值。
+
+- Lite 冷启动按流式测得的解压后真实大小 + 8 MiB 余量判定（不再使用固定
+  64 MiB）；热启动与 Standard 仅保留 8 MiB 紧急余量（堆增长已被 GOMEMLIMIT
+  约束）。
+- 预检拒绝后会安排有界后台重试（30 秒 x 20 次），内存缓解后自动拉起，不再
+  一直停摆到人工干预——升级时 /tmp 里的安装包把可用内存压到旧阈值以下的
+  真实场景由此自愈。
+- 清空日志后只关闭确认窗并刷新列表，不再弹第二个提示窗；报错提示保留。
+
 ## [1.3.0-r12] - 2026-08-29
 
 Adds the requested preset auto-save on the proven integrated 1.3.0-r1

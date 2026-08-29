@@ -32,10 +32,10 @@ plan=$(
 )
 
 for expected in \
-	'wificalling-location-gateway_1.3.0-r12_x86_64.ipk' \
-	'wificalling-location-gateway-lite_1.3.0-r12_x86_64.ipk' \
-	'wificalling-location-gateway-1.3.0-r12.apk' \
-	'wificalling-location-gateway-lite-1.3.0-r12.apk'; do
+	'wificalling-location-gateway_1.3.0-r13_x86_64.ipk' \
+	'wificalling-location-gateway-lite_1.3.0-r13_x86_64.ipk' \
+	'wificalling-location-gateway-1.3.0-r13.apk' \
+	'wificalling-location-gateway-lite-1.3.0-r13.apk'; do
 	printf '%s\n' "$plan" | grep -F "$expected" >/dev/null ||
 		fail "dual-variant plan is missing $expected"
 done
@@ -84,10 +84,12 @@ grep -F 'GOMAXPROCS=1' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway"
 	fail 'Lite runtime profile must retain single-worker scheduling'
 grep -F 'GOGC=50' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
 	fail 'Lite runtime profile must reclaim memory before AX6S reaches OOM pressure'
-grep -F 'minimum_available_kib=32768' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
-	fail 'Gateway must reserve enough RAM to avoid an installation-time OOM'
-grep -F 'minimum_available_kib=65536' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
-	fail 'Lite cold start must reserve RAM for its tmpfs runtime image'
+grep -F 'reserve_kib=8192' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Gateway memory preflight must reserve an 8 MiB emergency margin'
+grep -F 'gzip -dc "$gz" 2>/dev/null | wc -c' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Lite cold start must measure the real inflated runtime size instead of a flat threshold'
+grep -F 'schedule_memory_retry' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'A memory-gated start must self-heal via a bounded background retry'
 grep -F 'MemAvailable' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
 	fail 'Gateway memory preflight must use the kernel available-memory metric'
 grep -F 'rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256' "$ax6s_builder" >/dev/null ||
