@@ -14,9 +14,10 @@ was already never committed or shared).
 - Private key: `~/.zcode/keys/wloc-signing.key` on the release machine
   (mode `0600`, never committed to git, never copied elsewhere)
 - Public key: `~/.zcode/keys/wloc-signing.pub`; published as `wloc.pub`
-  in the feed repository (`smthdagg/wificalling-location-gateway-feed`,
-  `gh-pages` branch serves the package source, `main` branch serves the
-  key file for `wget`)
+  in the feed repository (`smthdagg/Smthdagg-Repo-feeds`,
+  `gh-pages` branch serves per-project package directories (the WLOC
+  packages live in `wificalling-location-gateway/`), `main` branch serves
+  the key file for `wget` and the index generator script)
 - The public key is also referenced in the project README installation
   instructions. It must not change between releases.
 
@@ -86,16 +87,22 @@ This is also implemented as `scripts/openwrt/sign-feed.sh`.
    the index generator lives in the feed repository, not here. Standard
    sequence (use the repository's noreply git identity — the feed repo
    rejects pushes from personal-email commits):
-   a. `git clone --branch main https://github.com/smthdagg/wificalling-location-gateway-feed.git /tmp/wloc-feed-main`
-      and `git clone --branch gh-pages https://github.com/smthdagg/wificalling-location-gateway-feed.git /tmp/wloc-feed`.
-   b. In the `gh-pages` checkout: remove the previous release packages and
-      `Packages*`/`SHA256SUMS`, copy the four new IPKs plus this repo's
-      `SHA256SUMS`.
-   c. `/tmp/wloc-feed-main/scripts/gen-feed-index.sh /tmp/wloc-feed`
-      (regenerates `Packages`/`Packages.gz`), then
-      `scripts/openwrt/sign-feed.sh /tmp/wloc-feed` (same long-lived key as
-      always) — signing without regenerating the index is forbidden.
-   d. Commit and push `gh-pages`; the feed `main` branch changes only if
+   a. `git clone --branch main https://github.com/smthdagg/Smthdagg-Repo-feeds.git /tmp/wloc-feed-main`
+      and `git clone --branch gh-pages https://github.com/smthdagg/Smthdagg-Repo-feeds.git /tmp/wloc-feed`.
+   b. In the `gh-pages` checkout: work inside the project subdirectory
+      (`wificalling-location-gateway/` — directory name must equal the
+      project repository name): remove superseded packages, copy the new
+      IPKs.
+   c. `/tmp/wloc-feed-main/scripts/gen-feed-index.sh
+      /tmp/wloc-feed/wificalling-location-gateway` (regenerates that
+      project's `Packages`/`Packages.gz`), then
+      `scripts/openwrt/sign-feed.sh /tmp/wloc-feed/wificalling-location-gateway`
+      (same long-lived key as always) — signing without regenerating the
+      index is forbidden.
+   d. Append a row to `UPDATES.md` (master update log), run
+      `/tmp/wloc-feed-main/scripts/feed-verify.sh /tmp/wloc-feed` (it must
+      pass: index integrity, signatures, checksums, log coverage), then
+      commit and push `gh-pages`. The feed `main` branch changes only if
       `wloc.pub` or its docs change — also align the feed `README.md`
       package table with the current release filenames.
    e. `wloc.pub` does **not** change between releases.

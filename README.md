@@ -158,9 +158,9 @@ Two ways to install:
 ```sh
 # Import the feed signing key (one-time)
 wget -O /etc/opkg/keys/f7050198aa77cf15 \
-  https://raw.githubusercontent.com/smthdagg/wificalling-location-gateway-feed/main/wloc.pub
+  https://raw.githubusercontent.com/smthdagg/Smthdagg-Repo-feeds/main/wloc.pub
 # Add the feed and install
-echo "src/gz wloc https://smthdagg.github.io/wificalling-location-gateway-feed" \
+echo "src/gz wloc https://smthdagg.github.io/Smthdagg-Repo-feeds/wificalling-location-gateway" \
   >> /etc/opkg/customfeeds.conf
 opkg update && opkg install wificalling-location-gateway
 ```
@@ -170,7 +170,7 @@ opkg update && opkg install wificalling-location-gateway
 and verify it against `SHA256SUMS` from the same release directory first.
 
 Full instructions for both methods live in the
-[feed repository](https://github.com/smthdagg/wificalling-location-gateway-feed)
+[feed repository](https://github.com/smthdagg/Smthdagg-Repo-feeds)
 (including the manual `.apk` install commands for OpenWrt 25.x).
 
 ### 2. Redmi AX6S (Lite recommended)
@@ -465,9 +465,9 @@ Lite 后缀只表示运行时所有权与内存策略不同，不是新项目，
 ```sh
 # 导入源签名公钥（一次性）
 wget -O /etc/opkg/keys/f7050198aa77cf15 \
-  https://raw.githubusercontent.com/smthdagg/wificalling-location-gateway-feed/main/wloc.pub
+  https://raw.githubusercontent.com/smthdagg/Smthdagg-Repo-feeds/main/wloc.pub
 # 添加源并安装
-echo "src/gz wloc https://smthdagg.github.io/wificalling-location-gateway-feed" \
+echo "src/gz wloc https://smthdagg.github.io/Smthdagg-Repo-feeds/wificalling-location-gateway" \
   >> /etc/opkg/customfeeds.conf
 opkg update && opkg install wificalling-location-gateway
 ```
@@ -477,7 +477,7 @@ opkg update && opkg install wificalling-location-gateway
 下载对应文件，并先校验同一发布目录中的 `SHA256SUMS`。
 
 两种方式的完整说明见
-[feed 仓库](https://github.com/smthdagg/wificalling-location-gateway-feed)（含
+[feed 仓库](https://github.com/smthdagg/Smthdagg-Repo-feeds)（含
 OpenWrt 25.x 的 `.apk` 手动安装命令）。
 
 ### 2. Redmi AX6S（推荐 Lite）
