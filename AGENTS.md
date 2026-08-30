@@ -49,6 +49,13 @@ Issue-specific ownership overrides this table. Ownership is a time-limited lease
 5. Keep commits focused and use Conventional Commits.
 6. Before pausing, lease expiry, or PR creation, update `.handoffs/issue-<number>.md`, commit it, push the branch, and publish the exact commit.
 7. Open a PR containing `Closes #<number>`, evidence, risks, rollback notes, and the handoff capsule path.
+7a. For every release PR, update the private signed feed (mandatory, before
+   tagging): swap the four IPKs + `SHA256SUMS` in the feed repo `gh-pages`
+   checkout, regenerate the index with the feed repo's
+   `scripts/gen-feed-index.sh`, sign with `scripts/openwrt/sign-feed.sh`,
+   push `gh-pages`, and align the feed `README.md` package table with the
+   current release. Full sequence: `docs/releases/RELEASE_PROCESS.md`
+   step 6. The feed repo requires the account's noreply git identity.
 8. A different role reviews the PR. The author never self-approves a safety-sensitive change.
 
 Use `scripts/agent-takeover.sh <issue> <agent> <slug> <capabilities> [ttl-minutes]` to start or resume work. Use `scripts/agent-handoff.sh <issue> <agent> <capabilities>` to release a resumable checkpoint.
@@ -66,7 +73,12 @@ or a release is accepted:
    maintain an explicit list of files created by the session and remove those
    files after installation/testing, including failed or superseded IPKs. Use
    short, bounded commands or a cleanup trap so SSH command truncation cannot
-   silently skip cleanup.
+   silently skip cleanup. The standard upgrade path is the signed feed
+   (`opkg update && opkg upgrade <package>`), which creates no `/tmp` artifact
+   at all; when a local IPK must be uploaded, the install command chain must
+   delete it in the same session (`opkg install /tmp/x.ipk && rm -f /tmp/x.ipk`),
+   and any ad-hoc debug backup directory (e.g. `wloc-*-backup-*`) must be
+   removed before the session ends.
 3. Never run a blanket `rm -rf /tmp` on a live gateway. Preserve the active
    `/tmp/sing-box-lite`, its checksum marker, `/var/run` sockets/configuration,
    PassWall runtime state, and user files; remove only session-owned temporary
@@ -77,9 +89,13 @@ or a release is accepted:
    any second long-lived sing-box owned by an explicitly enabled service such
    as PassWall must be identified and included in the memory budget.
 5. Repeat `free` and `df -h /tmp /overlay`. The post-test available memory must
-   return to the pre-test baseline within 10 MiB and remain at least 32 MiB;
-   otherwise block the release and investigate. Do not use `drop_caches` to hide
-   leaked files or processes.
+   return to the pre-test baseline within 10 MiB and remain above the computed
+   cold-start requirement of `require_start_memory` (inflated Lite runtime +
+   8 MiB; roughly 38 MiB on the AX6S); otherwise block the release and
+   investigate. Do not use `drop_caches` to hide leaked files or processes;
+   after zero leaked files/processes are confirmed, one final
+   `sync; echo 3 > /proc/sys/vm/drop_caches` is allowed to normalize the
+   measurement before re-reading `MemAvailable`.
 6. If OOM or a service crash occurs, save the relevant `logread`/kernel OOM
    evidence before cleanup, identify the triggering operation, then clean and
    re-measure. A test is not complete while stale packages or temporary
