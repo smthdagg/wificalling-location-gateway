@@ -50,12 +50,15 @@ Issue-specific ownership overrides this table. Ownership is a time-limited lease
 6. Before pausing, lease expiry, or PR creation, update `.handoffs/issue-<number>.md`, commit it, push the branch, and publish the exact commit.
 7. Open a PR containing `Closes #<number>`, evidence, risks, rollback notes, and the handoff capsule path.
 7a. For every release PR, update the private signed feed (mandatory, before
-   tagging): swap the four IPKs + `SHA256SUMS` in the feed repo `gh-pages`
-   checkout, regenerate the index with the feed repo's
-   `scripts/gen-feed-index.sh`, sign with `scripts/openwrt/sign-feed.sh`,
-   push `gh-pages`, and align the feed `README.md` package table with the
-   current release. Full sequence: `docs/releases/RELEASE_PROCESS.md`
-   step 6. The feed repo requires the account's noreply git identity.
+   tagging): work inside the project's own subdirectory of the feed repo
+   `gh-pages` branch (`wificalling-location-gateway/` — directory name must
+   equal the project repository name), regenerate that project's index with
+   the feed repo's `scripts/gen-feed-index.sh`, sign with
+   `scripts/openwrt/sign-feed.sh`, append a row to `UPDATES.md`, run the
+   feed repo's `scripts/feed-verify.sh` (must pass), push `gh-pages`, and
+   align the feed `README.md` package table with the current release. Full
+   sequence: `docs/releases/RELEASE_PROCESS.md` step 6. The feed repo
+   requires the account's noreply git identity.
 8. A different role reviews the PR. The author never self-approves a safety-sensitive change.
 
 Use `scripts/agent-takeover.sh <issue> <agent> <slug> <capabilities> [ttl-minutes]` to start or resume work. Use `scripts/agent-handoff.sh <issue> <agent> <capabilities>` to release a resumable checkpoint.
