@@ -179,7 +179,7 @@ Full instructions for both methods live in the
 opkg install /tmp/wificalling-location-gateway-lite_1.3.0-r13_aarch64_cortex-a53.ipk
 ```
 
-Back up both UCI files first. On storage-constrained AX6S units, stop the services and remove the old integrated and sing-box packages before installing Lite; do not delete the saved UCI files. The r13 Lite package replaces the separate sing-box package and owns its transparent wrapper.
+Back up both UCI files first. On storage-constrained AX6S units, stop the services and remove the old integrated and sing-box packages before installing Lite; do not delete the saved UCI files. The r13 Lite package replaces the separate sing-box package and owns its transparent wrapper. `/tmp` is RAM: prefer the signed-feed upgrade (`opkg update && opkg upgrade wificalling-location-gateway-lite`), and when installing a local IPK, delete it right after installation (`opkg install /tmp/x.ipk && rm -f /tmp/x.ipk`) — leftover files in `/tmp` can push available memory below the cold-start memory gate.
 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
 
@@ -486,7 +486,7 @@ OpenWrt 25.x 的 `.apk` 手动安装命令）。
 opkg install /tmp/wificalling-location-gateway-lite_1.3.0-r13_aarch64_cortex-a53.ipk
 ```
 
-安装前先备份两份 UCI 配置。AX6S 空间不足时，先停止服务并卸载旧整合包和旧 sing-box 包，再安装 Lite；不要删除 UCI 配置。r13 Lite 会替代独立 sing-box 包并拥有透明启动包装器。
+安装前先备份两份 UCI 配置。AX6S 空间不足时，先停止服务并卸载旧整合包和旧 sing-box 包，再安装 Lite；不要删除 UCI 配置。r13 Lite 会替代独立 sing-box 包并拥有透明启动包装器。/tmp 是内存：优先使用签名软件源升级（`opkg update && opkg upgrade wificalling-location-gateway-lite`）；本地上传 IPK 安装后请立即删除（`opkg install /tmp/x.ipk && rm -f /tmp/x.ipk`）——/tmp 残留文件可能把可用内存压到冷启动内存门禁以下。
 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
