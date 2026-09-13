@@ -36,6 +36,16 @@ handling, service route isolation, cleanup, and release packaging.
 - Feed `scripts/feed-verify.sh`: passed.
 - Live AX6S combined WFC/WLOC service and route cleanup verification: passed.
 
+## Failed attempts
+
+- The first WLOC package pass supplied aarch64 binaries through the wrong
+  default path; the build was rerun with explicit architecture-matched inputs.
+- The first Docker matrix pass exposed missing `/usr/sbin/ip` and `/var/lock`
+  assumptions in minimal rootfs fixtures; the former was corrected in the
+  verifier, while the latter remains an image/procd smoke-environment warning.
+- The first PR contract run lacked the required Issue handoff capsule; the
+  capsule and PR reference were then added.
+
 ## Next executable steps
 
 - Review and merge PR #98.
