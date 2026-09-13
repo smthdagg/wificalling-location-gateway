@@ -78,8 +78,47 @@ function main() {
 		const source = fs.readFileSync(path.join(path.resolve(__dirname, '..', '..'), relative), 'utf8');
 		assert(/catch \(err\) \{ ui\.hideModal\(\); testNotify\(/.test(source), relative + ': import errors must close the modal before showing a notice');
 		assert(source.includes("if (msg.parentNode) msg.parentNode.removeChild(msg);"), relative + ': notice close must remove the notice immediately');
+		assert(/'trojan','wireguard','shadowsocks'/.test(source), relative + ': shadowsocks must be selectable as a protocol');
+		assert(/methodOpt\.depends|protocol'\) != 'shadowsocks'/.test(source), relative + ': the shadowsocks cipher field must be protocol-scoped');
 	});
-	console.log('VLESS legacy Reality import tests passed');
+
+	// Shadowsocks: SIP002 (base64 userinfo), legacy (fully encoded authority),
+	// and cleartext userinfo all have to land on the same node.
+	const ssUserinfo = Buffer.from('aes-256-gcm:secret').toString('base64').replace(/=+$/, '');
+	const sip002 = parser.parse('ss://' + ssUserinfo + '@example.test:8388#' + encodeURIComponent('HK 01'));
+	assert.strictEqual(sip002.protocol, 'shadowsocks');
+	assert.strictEqual(sip002.server, 'example.test');
+	assert.strictEqual(sip002.port, '8388');
+	assert.strictEqual(sip002.method, 'aes-256-gcm');
+	assert.strictEqual(sip002.password, 'secret');
+	assert.strictEqual(sip002.label, 'HK 01');
+
+	const legacyPayload = Buffer.from('aes-256-gcm:secret@example.test:8388').toString('base64').replace(/=+$/, '');
+	const legacy = parser.parse('ss://' + legacyPayload + '#legacy');
+	assert.strictEqual(legacy.method, 'aes-256-gcm');
+	assert.strictEqual(legacy.password, 'secret');
+	assert.strictEqual(legacy.server, 'example.test');
+	assert.strictEqual(legacy.port, '8388');
+
+	const cleartext = parser.parse('SS://aes-128-gcm:secret@example.test:8388');
+	assert.strictEqual(cleartext.method, 'aes-128-gcm');
+	assert.strictEqual(cleartext.label, 'SS example.test');
+
+	// A password containing ':' must not be split at the wrong colon.
+	const colonPw = Buffer.from('aes-256-gcm:se:cret').toString('base64').replace(/=+$/, '');
+	assert.strictEqual(parser.parse('ss://' + colonPw + '@example.test:8388').password, 'se:cret');
+
+	// Plugins change the wire format; importing one silently would produce a
+	// node that looks configured and never connects.
+	assert.throws(function() {
+		parser.parse('ss://' + ssUserinfo + '@example.test:8388?plugin=obfs-local%3Bobfs%3Dhttp');
+	}, /plugin/i, 'shadowsocks plugin links must be rejected');
+
+	assert.throws(function() {
+		parser.parse('ss://' + Buffer.from('aes-256-gcm:secret').toString('base64') + '@example.test');
+	}, /Server and port/, 'a shadowsocks link without a port must be rejected');
+
+	console.log('VLESS legacy Reality and Shadowsocks import tests passed');
 }
 
 main();

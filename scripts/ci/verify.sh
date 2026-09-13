@@ -24,6 +24,7 @@ done
 ./tests/scripts/test-standalone-ax6s-package.sh
 ./tests/scripts/test-release-version.sh
 ./tests/scripts/test-monitor-temp-cleanup.sh
+./tests/scripts/test-compiler-shadowsocks.sh
 ./tests/scripts/test-gateway-health-report.sh
 ./tests/scripts/test-wloc-runtime-contract.sh
 ./tests/scripts/test-wloc-synthesis-default.sh

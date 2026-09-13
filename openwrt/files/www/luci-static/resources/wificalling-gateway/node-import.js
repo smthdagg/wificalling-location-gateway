@@ -120,8 +120,45 @@ function parseVmess(uri) {
 	return out;
 }
 
+// ss://<base64url(method:password)>@host:port#label  (SIP002), or the legacy
+// ss://<base64(method:password@host:port)>#label.  Both forms appear in the
+// wild, sometimes with the userinfo left in cleartext.
+function parseShadowsocks(uri) {
+	var body = uri.slice(uri.indexOf('://') + 3).trim();
+	var at = body.indexOf('#');
+	var label = '';
+	if (at >= 0) { label = decodeLabel(body.slice(at + 1)); body = body.slice(0, at); }
+	var query = '';
+	at = body.indexOf('?');
+	if (at >= 0) { query = body.slice(at + 1); body = body.slice(0, at); }
+	body = body.replace(/\/+$/, '');
+	// A plugin changes the wire format entirely; silently dropping it would
+	// produce a node that looks fine and never connects.
+	if (/(^|&)plugin=/.test(query))
+		throw new Error(_('Shadowsocks plugins (obfs, v2ray-plugin) are not supported'));
+	// Legacy links base64 the whole authority, SIP002 only the userinfo.
+	if (body.indexOf('@') < 0) body = decodeBase64(body);
+	at = body.lastIndexOf('@');
+	if (at < 0) throw new Error(_('Server and port are required'));
+	var userinfo = body.slice(0, at), hostport = body.slice(at + 1);
+	if (userinfo.indexOf(':') < 0) userinfo = decodeBase64(userinfo);
+	at = userinfo.indexOf(':');
+	if (at < 0) throw new Error(_('Shadowsocks method and password are required'));
+	var method = userinfo.slice(0, at), password = userinfo.slice(at + 1);
+	at = hostport.lastIndexOf(':');
+	if (at < 0) throw new Error(_('Server and port are required'));
+	var server = hostport.slice(0, at).replace(/^\[|\]$/g, ''), port = hostport.slice(at + 1);
+	if (!server || !/^[0-9]+$/.test(port)) throw new Error(_('Server and port are required'));
+	if (!method || !password) throw new Error(_('Shadowsocks method and password are required'));
+	return {
+		enabled: '1', protocol: 'shadowsocks', server: server, port: port,
+		method: method, password: password, label: label || 'SS ' + server
+	};
+}
+
 function parse(uri) {
 	var value = normalizeLink(uri || ''), scheme = value.split(':', 1)[0].toLowerCase();
+	if (scheme === 'ss') return parseShadowsocks(value);
 	if (scheme === 'vmess') return parseVmess('vmess://' + value.slice(value.indexOf('://') + 3));
 	if (scheme === 'hy2') scheme = 'hysteria2';
 	if (scheme === 'wg' || scheme === 'awg') scheme = 'wireguard';
