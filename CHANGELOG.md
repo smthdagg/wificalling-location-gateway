@@ -2,6 +2,18 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r14] - 2026-09-13
+
+IPv4/IPv6 coexistence fixes for the integrated Wificalling + WLOC gateway.
+
+- Wificalling's IPv4 TPROXY chain now explicitly returns IPv6 traffic to the
+  normal PassWall path.
+- WLOC's IPv6 Apple destination set is populated from AAAA answers, while
+  WLOC remains IPv4-only for TPROXY interception.
+- WLOC runs before the broad Wificalling mangle chain for the assigned
+  device, and stop removes its DHCP helper sections.
+- PassWall bypass setup tolerates firmware versions without `PSW_NAT`.
+
 ## [1.3.0-r13] - 2026-08-29
 
 Replaces the flat 32/64 MiB start-time memory thresholds with a computed

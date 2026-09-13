@@ -125,6 +125,10 @@ run_case() {
 	[ "$ready" -eq 1 ] || fail "$display did not finish booting"
 
 	if [ "$manager" = opkg ]; then
+		# The minimal rootfs may provide ip only in /sbin; production ip-full
+		# exposes the /usr/sbin path expected by the service scripts.
+		docker exec "$container" /bin/sh -c \
+			'mkdir -p /usr/sbin; [ -e /usr/sbin/ip ] || ln -s /sbin/ip /usr/sbin/ip'
 		# The minimal rootfs image intentionally ships without an opkg
 		# architecture stanza. Register the architecture reported by the image;
 		# production firmware already has this in /etc/opkg.conf.

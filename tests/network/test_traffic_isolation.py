@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from tests.network.traffic_isolation_model import (
+from network.traffic_isolation_model import (
     APPROVED_HOSTS,
     Event,
     Flow,
