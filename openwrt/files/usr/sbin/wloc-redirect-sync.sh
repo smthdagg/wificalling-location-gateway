@@ -183,7 +183,7 @@ nft add set inet "$TABLE" apple_hosts '{ type ipv4_addr; }' 2>/dev/null || true
 nft add set inet "$TABLE" apple_hosts6 '{ type ipv6_addr; }' 2>/dev/null || true
 nft flush chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
 nft delete chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
-nft "add chain inet $TABLE $CHAIN { type filter hook prerouting priority mangle; }"
+nft "add chain inet $TABLE $CHAIN { type filter hook prerouting priority -151; }"
 for ip in $ips; do
     nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr @apple_hosts meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"
     nft "add rule inet $TABLE $CHAIN ip saddr $ip tcp dport 443 ip daddr $ROUTER_IP meta l4proto tcp meta mark set $FWMARK tproxy ip to :$PROXY_PORT"

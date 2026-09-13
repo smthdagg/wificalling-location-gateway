@@ -141,7 +141,15 @@ csv() {
     tr '\n' ',' | sed 's/,$//'
 }
 
+collect_v6() {
+    for host in $HOSTS; do
+        nslookup -type=AAAA "$host" 223.5.5.5 2>/dev/null | sed -n 's/^Address: *\([0-9a-fA-F:]*:[0-9a-fA-F:]*\)$/\1/p'
+        nslookup -type=AAAA "$host" 119.29.29.29 2>/dev/null | sed -n 's/^Address: *\([0-9a-fA-F:]*:[0-9a-fA-F:]*\)$/\1/p'
+    done
+}
+
 ips4=$(collect_v4 | grep -v "^$ROUTER_IP$" | sort -u | csv)
+ips6=$(collect_v6 | sort -u | csv || true)
 [ -n "$ips4" ] || {
     echo "wloc-refresh-set: no A records resolved (DNS unavailable?)" >&2
     exit 1
@@ -151,6 +159,7 @@ nft add table inet "$TABLE" 2>/dev/null || true
 nft flush set inet "$TABLE" "$SET" 2>/dev/null || nft add set inet "$TABLE" "$SET" '{ type ipv4_addr; }'
 nft flush set inet "$TABLE" apple_hosts6 2>/dev/null || nft add set inet "$TABLE" apple_hosts6 '{ type ipv6_addr; }'
 nft add element inet "$TABLE" "$SET" "{ $ips4 }"
+[ -z "$ips6" ] || nft add element inet "$TABLE" apple_hosts6 "{ $ips6 }"
 mkdir -p /var/run/wloc-service
 # Local DNS maps each approved name to this router for stable ingress. Keep a
 # separate public answer for each name: an Apple/Autonavi CDN address is not

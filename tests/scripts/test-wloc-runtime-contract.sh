@@ -6,6 +6,7 @@ redirect="$repo_root/openwrt/files/usr/sbin/wloc-redirect-sync.sh"
 refresh="$repo_root/openwrt/files/usr/sbin/wloc-refresh-set.sh"
 service="$repo_root/openwrt/files/etc/init.d/wloc-service"
 gateway_service="$repo_root/openwrt/files/etc/init.d/wificalling-gateway"
+gateway_firewall="$repo_root/openwrt/files/usr/libexec/wificalling-gateway/firewall.sh"
 rust="$repo_root/src/lib.rs"
 daemon="$repo_root/src/bin/wloc-service.rs"
 
@@ -108,10 +109,8 @@ printf '%s\n' "$stopped_block" | grep -F 'firewall.sh stop' >/dev/null ||
 if printf '%s\n' "$stop_block" | grep -F 'firewall.sh stop' >/dev/null; then
 	{ echo 'Gateway stop must not race Passwall nft cleanup before procd termination' >&2; exit 1; }
 fi
-grep -F 'meta nfproto ipv6 return' "$gateway_service" >/dev/null ||
+grep -F 'meta nfproto ipv6 return' "$gateway_firewall" >/dev/null ||
 	{ echo 'Gateway firewall must explicitly exclude IPv6 from its IPv4 TPROXY path' >&2; exit 1; }
-grep -F 'meta nfproto ipv6 return' "$repo_root/openwrt/files/usr/libexec/wificalling-gateway/firewall.sh" >/dev/null ||
-	{ echo 'Gateway firewall payload must explicitly exclude IPv6' >&2; exit 1; }
 grep -F 'if ! nft list chain inet passwall "$chain"' "$repo_root/openwrt/files/usr/libexec/wificalling-gateway/passwall-bypass.sh" >/dev/null ||
 	{ echo 'PassWall bypass must skip chains absent on the target PassWall version' >&2; exit 1; }
 grep -F 'uci -q delete dhcp.wloc_service4' "$service" >/dev/null ||

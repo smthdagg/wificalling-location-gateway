@@ -13,6 +13,7 @@ table $table {
  set clients4 { type ipv4_addr; elements = { $ips } }
  chain prerouting {
   type filter hook prerouting priority mangle; policy accept;
+  meta nfproto ipv6 return
   ip saddr != @clients4 return
   ip daddr { 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4 } return
   meta l4proto tcp counter meta mark set 0x66 tproxy to :11441 accept

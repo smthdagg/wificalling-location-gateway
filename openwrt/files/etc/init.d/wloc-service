@@ -65,6 +65,10 @@ start_service() {
 
 stop_service() {
 	/usr/sbin/wloc-redirect-sync.sh stop >/dev/null 2>&1 || true
+	uci -q delete dhcp.wloc_service4 2>/dev/null || true
+	uci -q delete dhcp.wloc_service6 2>/dev/null || true
+	uci commit dhcp 2>/dev/null || true
+	/etc/init.d/dnsmasq reload 2>/dev/null || true
 	rm -f "$SOCKET"
 }
 
