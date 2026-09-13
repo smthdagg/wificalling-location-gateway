@@ -50,6 +50,11 @@ handling, service route isolation, cleanup, and release packaging.
 
 - Review and merge PR #98.
 
+## Capabilities required for the next Agent
+
+- GitHub CLI with access to the two project repositories and the feed repository.
+- Docker for OpenWrt package and feed verification.
+
 ## Security and privacy notes
 
 - No credentials are included. The feed signing private key remains local and
