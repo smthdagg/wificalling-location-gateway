@@ -25,6 +25,8 @@ handling, service route isolation, cleanup, and release packaging.
 - Prepared `v1.3.0-r14` standard/Lite packages for aarch64, x86_64 IPK and
   x86_64 APK; full CI verification passed.
 - Published signed WLOC feed indexes and the GitHub release.
+- Release: https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.3.0-r14
+- Pull request: https://github.com/smthdagg/wificalling-location-gateway/pull/98
 
 ## Verification
 
