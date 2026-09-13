@@ -37,6 +37,10 @@ grep -F 'dnsmasq --help' "$refresh" >/dev/null ||
 	{ echo 'DNS refresh must fall back safely when dnsmasq lacks nftset support' >&2; exit 1; }
 grep -F 'upstream_map_tmp=' "$refresh" >/dev/null ||
 	{ echo 'DNS refresh must publish host-specific upstream targets' >&2; exit 1; }
+grep -F 'collect_v6()' "$refresh" >/dev/null ||
+	{ echo 'DNS refresh must collect IPv6 CDN answers' >&2; exit 1; }
+grep -F 'nft add element inet "$TABLE" apple_hosts6' "$refresh" >/dev/null ||
+	{ echo 'DNS refresh must populate the owned IPv6 destination set' >&2; exit 1; }
 grep -F '/usr/sbin/wloc-refresh-set.sh' "$service" >/dev/null ||
 	{ echo 'WLOC init start must populate the initial upstream target' >&2; exit 1; }
 grep -F 'START=100' "$service" >/dev/null ||
@@ -86,6 +90,8 @@ if grep -F 'ip -6 rule add fwmark' "$redirect" >/dev/null ||
 fi
 grep -F 'ip6 daddr @apple_hosts6 reject with tcp reset' "$redirect" >/dev/null ||
 	{ echo 'WLOC must reject only approved IPv6 targets so clients fall back to IPv4' >&2; exit 1; }
+grep -F 'priority -151' "$redirect" >/dev/null ||
+	{ echo 'WLOC must run before the broad Wificalling mangle chain' >&2; exit 1; }
 grep -F 'wloc-service.main.assigned_device' "$redirect" >/dev/null ||
 	{ echo 'TPROXY source scope must come from the WLOC assigned device' >&2; exit 1; }
 if grep -F 'uci -q show wificalling-gateway' "$redirect" >/dev/null; then
@@ -102,6 +108,16 @@ printf '%s\n' "$stopped_block" | grep -F 'firewall.sh stop' >/dev/null ||
 if printf '%s\n' "$stop_block" | grep -F 'firewall.sh stop' >/dev/null; then
 	{ echo 'Gateway stop must not race Passwall nft cleanup before procd termination' >&2; exit 1; }
 fi
+grep -F 'meta nfproto ipv6 return' "$gateway_service" >/dev/null ||
+	{ echo 'Gateway firewall must explicitly exclude IPv6 from its IPv4 TPROXY path' >&2; exit 1; }
+grep -F 'meta nfproto ipv6 return' "$repo_root/openwrt/files/usr/libexec/wificalling-gateway/firewall.sh" >/dev/null ||
+	{ echo 'Gateway firewall payload must explicitly exclude IPv6' >&2; exit 1; }
+grep -F 'if ! nft list chain inet passwall "$chain"' "$repo_root/openwrt/files/usr/libexec/wificalling-gateway/passwall-bypass.sh" >/dev/null ||
+	{ echo 'PassWall bypass must skip chains absent on the target PassWall version' >&2; exit 1; }
+grep -F 'uci -q delete dhcp.wloc_service4' "$service" >/dev/null ||
+	{ echo 'WLOC stop must remove its IPv4 dnsmasq helper section' >&2; exit 1; }
+grep -F 'uci -q delete dhcp.wloc_service6' "$service" >/dev/null ||
+	{ echo 'WLOC stop must remove its IPv6 dnsmasq helper section' >&2; exit 1; }
 grep -F 'valid_ipv4 "$ROUTER_IP"' "$redirect" >/dev/null ||
 	{ echo 'redirect sync must validate the router IPv4 before nft writes' >&2; exit 1; }
 grep -F '[ "$PROXY_PORT" -gt 65535 ]' "$redirect" >/dev/null ||
