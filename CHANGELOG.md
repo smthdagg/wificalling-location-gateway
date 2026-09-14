@@ -2,6 +2,20 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r16] - 2026-09-14
+
+Static-route lifecycle hardening.
+
+- Deleting a device or stopping a service now withdraws the installed
+  interception state instead of leaving it behind: both the WLOC helper
+  (`wloc-redirect-sync.sh`, `table 100`) and the Gateway firewall
+  (`firewall.sh`, `table 166`) tear down their rule/route/TPROXY entries when
+  the device scope is empty, so a removed device can never leave a stale
+  static route.
+- An empty scope is fail-open: a sync with no devices calls its own stop
+  path, so the next start after deleting the last bound device starts from a
+  clean routing state.
+
 ## [1.3.0-r15] - 2026-09-14
 
 Shadowsocks proxy node support on the proven integrated 1.3.0-r1 Gateway

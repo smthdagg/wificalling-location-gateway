@@ -7,7 +7,7 @@
 A standalone Rust service handles exit geolocation, WLOC response rewriting, certificate lifecycle, precise traffic isolation, and LuCI management — all integrated into a single installable package.
 
 [![CI](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/smthdagg/wificalling-location-gateway/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v1.3.0--r15-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.3.0-r15)
+[![Release](https://img.shields.io/badge/release-v1.3.0--r16-blue.svg)](https://github.com/smthdagg/wificalling-location-gateway/releases/tag/v1.3.0-r16)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Rust 1.90](https://img.shields.io/badge/Rust-1.90-orange.svg?logo=rust)](Cargo.toml)
 [![OpenWrt](https://img.shields.io/badge/OpenWrt-24.10%20%7C%2025.12-00B5E2.svg?logo=openwrt)](#support-and-validation-status)
@@ -116,7 +116,7 @@ More detail: [WLOC Service API](docs/api/WLOC_SERVICE_API.md), [Threat model](do
 
 | Platform | Arch | Package manager | Current evidence | Status |
 |---|---:|---|---|---|
-| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | r15 service installed; one WIFICalling sing-box remained running, WLOC was `intercepting`, crash-recovery re-interception was observed, and post-test available memory remained above 32 MiB | **Docker + router + iPhone WLOC passed** |
+| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | r16 service installed; one WIFICalling sing-box remained running, WLOC was `intercepting`, crash-recovery re-interception was observed, and post-test available memory remained above 32 MiB | **Docker + router + iPhone WLOC passed** |
 | OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker boot of init/ubus, integrated package install, service start, socket and v1 status checks | **Install matrix passed** |
 | iStoreOS 24.10.5 | x86_64 | opkg / IPK | Same as above | **Install matrix passed** |
 | OpenWrt 25.12.3 | x86_64 | apk / APK v3 | Same, using native APK v3, not a renamed IPK | **Install matrix passed** |
@@ -135,13 +135,18 @@ The runtime packages contain architecture-specific ELF files and **must match th
 
 ### 1. Choose the right package
 
-Release `v1.3.0-r15` provides two installation variants for each of three targets. Both belong to this project and contain the same WCG, WLOC, control tools, LuCI and saved UCI schema:
+Release `v1.3.0-r16` provides two installation variants for each of three targets. Both belong to this project and contain the same WCG, WLOC, control tools, LuCI and saved UCI schema:
 
-- Standard: `wificalling-location-gateway_1.3.0-r15_aarch64_cortex-a53.ipk`, `wificalling-location-gateway_1.3.0-r15_x86_64.ipk`, `wificalling-location-gateway-1.3.0-r15.apk`
-- Lite: `wificalling-location-gateway-lite_1.3.0-r15_aarch64_cortex-a53.ipk`, `wificalling-location-gateway-lite_1.3.0-r15_x86_64.ipk`, `wificalling-location-gateway-lite-1.3.0-r15.apk`
+- Standard: `wificalling-location-gateway_1.3.0-r16_aarch64_cortex-a53.ipk`, `wificalling-location-gateway_1.3.0-r16_x86_64.ipk`, `wificalling-location-gateway-1.3.0-r16.apk`
+- Lite: `wificalling-location-gateway-lite_1.3.0-r16_aarch64_cortex-a53.ipk`, `wificalling-location-gateway-lite_1.3.0-r16_x86_64.ipk`, `wificalling-location-gateway-lite-1.3.0-r16.apk`
 
-### r15 changes
+### r16 changes
 
+- Static-route lifecycle is now fail-open with the device scope: deleting the
+  last device or stopping a service withdraws the WLOC (`table 100`) and
+  Gateway (`table 166`) rule/route/TPROXY state, and an empty device scope
+  cleans up after a previously bound device instead of leaving a stale static
+  route behind.
 - Every TPROXY install refreshes the upstream map; disable/enable and sing-box crash recovery can no longer leave interception silently broken.
 - Disabled WLOC is genuinely fail-open: the boot script withdraws the DNS hijack, TPROXY, and upstream map when the switch is off, and disabling restarts dnsmasq immediately.
 - Auto mode enables on clean OpenWrt: the exit probe is a bounded native HTTP client (no curl dependency) and `probe_interval` is clamped to the validator window.
@@ -176,22 +181,22 @@ Full instructions for both methods live in the
 ### 2. Redmi AX6S (Lite recommended)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway-lite_1.3.0-r15_aarch64_cortex-a53.ipk
+opkg install /tmp/wificalling-location-gateway-lite_1.3.0-r16_aarch64_cortex-a53.ipk
 ```
 
-Back up both UCI files first. On storage-constrained AX6S units, stop the services and remove the old integrated and sing-box packages before installing Lite; do not delete the saved UCI files. The r15 Lite package replaces the separate sing-box package and owns its transparent wrapper. `/tmp` is RAM: prefer the signed-feed upgrade (`opkg update && opkg upgrade wificalling-location-gateway-lite`), and when installing a local IPK, delete it right after installation (`opkg install /tmp/x.ipk && rm -f /tmp/x.ipk`) — leftover files in `/tmp` can push available memory below the cold-start memory gate.
+Back up both UCI files first. On storage-constrained AX6S units, stop the services and remove the old integrated and sing-box packages before installing Lite; do not delete the saved UCI files. The r16 Lite package replaces the separate sing-box package and owns its transparent wrapper. `/tmp` is RAM: prefer the signed-feed upgrade (`opkg update && opkg upgrade wificalling-location-gateway-lite`), and when installing a local IPK, delete it right after installation (`opkg install /tmp/x.ipk && rm -f /tmp/x.ipk`) — leftover files in `/tmp` can push available memory below the cold-start memory gate.
 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.3.0-r15_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.3.0-r16_x86_64.ipk
 # Or use the corresponding Lite asset when a bundled, bounded runtime is preferred.
 ```
 
 ### 4. OpenWrt 25.12 (native APK v3)
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.3.0-r15.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.3.0-r16.apk
 ```
 
 `--allow-untrusted` applies only to locally built packages that are not yet signed in a repository. Formal releases use repository signing; never rename an IPK into an APK.
@@ -267,7 +272,7 @@ This pins the OpenWrt 24.10.8 `mediatek/mt7622` toolchain, Rust version, and SHA
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir "$PWD/dist/wloc-openwrt-release-r15"
+  --dist-dir "$PWD/dist/wloc-openwrt-release-r16"
 ```
 
 Builds use the official OpenWrt SDK pinned by digest; after dependency preparation, product compilation runs locked/offline with read-only sources in a network-disabled container. Full boundaries and results: [OpenWrt packaging and Docker matrix](docs/testing/OPENWRT_PACKAGE_DOCKER_MATRIX.md).
@@ -423,7 +428,7 @@ flowchart TD
 
 | 平台 | 架构 | 包管理器 | 当前证据 | 状态 |
 |---|---:|---|---|---|
-| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | 已安装 r15 服务；只保留一个 WIFICalling sing-box，WLOC 为 `intercepting`，观察到崩溃后自动恢复拦截，测试后可用内存仍高于 32 MiB | **Docker + 路由器 + iPhone WLOC 通过** |
+| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | 已安装 r16 服务；只保留一个 WIFICalling sing-box，WLOC 为 `intercepting`，观察到崩溃后自动恢复拦截，测试后可用内存仍高于 32 MiB | **Docker + 路由器 + iPhone WLOC 通过** |
 | OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker 中启动 init/ubus、安装集成包、启动服务、Socket 与 v1 状态检查 | **安装矩阵通过** |
 | iStoreOS 24.10.5 | x86_64 | opkg / IPK | 同上 | **安装矩阵通过** |
 | OpenWrt 25.12.3 | x86_64 | apk / APK v3 | 同上，使用原生 APK v3，非改名 IPK | **安装矩阵通过** |
@@ -442,12 +447,12 @@ flowchart TD
 
 ### 1. 选择正确的安装包
 
-`v1.3.0-r15` 为三个目标各提供 Standard 与 Lite 两种安装规格。它们属于同一个项目，WCG、WLOC、控制工具、LuCI 与 UCI 数据结构完全一致：
+`v1.3.0-r16` 为三个目标各提供 Standard 与 Lite 两种安装规格。它们属于同一个项目，WCG、WLOC、控制工具、LuCI 与 UCI 数据结构完全一致：
 
-- Standard：`wificalling-location-gateway_1.3.0-r15_aarch64_cortex-a53.ipk`、`wificalling-location-gateway_1.3.0-r15_x86_64.ipk`、`wificalling-location-gateway-1.3.0-r15.apk`
-- Lite：`wificalling-location-gateway-lite_1.3.0-r15_aarch64_cortex-a53.ipk`、`wificalling-location-gateway-lite_1.3.0-r15_x86_64.ipk`、`wificalling-location-gateway-lite-1.3.0-r15.apk`
+- Standard：`wificalling-location-gateway_1.3.0-r16_aarch64_cortex-a53.ipk`、`wificalling-location-gateway_1.3.0-r16_x86_64.ipk`、`wificalling-location-gateway-1.3.0-r16.apk`
+- Lite：`wificalling-location-gateway-lite_1.3.0-r16_aarch64_cortex-a53.ipk`、`wificalling-location-gateway-lite_1.3.0-r16_x86_64.ipk`、`wificalling-location-gateway-lite-1.3.0-r16.apk`
 
-### r15 更新说明
+### r16 更新说明
 
 - 每次 TPROXY 安装都会刷新上游映射；禁用/启用与 sing-box 崩溃恢复不会再让拦截静默失效。
 - 禁用的 WLOC 真正 fail-open：开机脚本按开关撤除 DNS 劫持、TPROXY 与上游映射，停用即重启 dnsmasq。
@@ -483,22 +488,22 @@ OpenWrt 25.x 的 `.apk` 手动安装命令）。
 ### 2. Redmi AX6S（推荐 Lite）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway-lite_1.3.0-r15_aarch64_cortex-a53.ipk
+opkg install /tmp/wificalling-location-gateway-lite_1.3.0-r16_aarch64_cortex-a53.ipk
 ```
 
-安装前先备份两份 UCI 配置。AX6S 空间不足时，先停止服务并卸载旧整合包和旧 sing-box 包，再安装 Lite；不要删除 UCI 配置。r15 Lite 会替代独立 sing-box 包并拥有透明启动包装器。/tmp 是内存：优先使用签名软件源升级（`opkg update && opkg upgrade wificalling-location-gateway-lite`）；本地上传 IPK 安装后请立即删除（`opkg install /tmp/x.ipk && rm -f /tmp/x.ipk`）——/tmp 残留文件可能把可用内存压到冷启动内存门禁以下。
+安装前先备份两份 UCI 配置。AX6S 空间不足时，先停止服务并卸载旧整合包和旧 sing-box 包，再安装 Lite；不要删除 UCI 配置。r16 Lite 会替代独立 sing-box 包并拥有透明启动包装器。/tmp 是内存：优先使用签名软件源升级（`opkg update && opkg upgrade wificalling-location-gateway-lite`）；本地上传 IPK 安装后请立即删除（`opkg install /tmp/x.ipk && rm -f /tmp/x.ipk`）——/tmp 残留文件可能把可用内存压到冷启动内存门禁以下。
 
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.3.0-r15_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.3.0-r16_x86_64.ipk
 # 需要内置、受限运行时时也可选择对应 Lite 文件。
 ```
 
 ### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.3.0-r15.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.3.0-r16.apk
 ```
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。
@@ -574,7 +579,7 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
 
 ```sh
 ./scripts/openwrt/verify-docker-matrix.sh \
-  --dist-dir "$PWD/dist/wloc-openwrt-release-r15"
+  --dist-dir "$PWD/dist/wloc-openwrt-release-r16"
 ```
 
 构建使用固定摘要的官方 OpenWrt SDK；依赖准备之后，产品编译采用 locked/offline、只读源码和禁网容器。完整边界和结果见 [OpenWrt 发布打包与 Docker 矩阵](docs/testing/OPENWRT_PACKAGE_DOCKER_MATRIX.md)。

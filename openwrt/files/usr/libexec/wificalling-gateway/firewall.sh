@@ -6,7 +6,16 @@ bypass_helper="${0%/*}/passwall-bypass.sh"
 [ "$action" = stop ] && { "$bypass_helper" clear "$clients"; nft delete table $table 2>/dev/null || true; ip rule del fwmark 0x66 table 166 2>/dev/null || true; ip route flush table 166 2>/dev/null || true; exit 0; }
 
 ips=$(awk -F '|' 'NF>=2 { printf "%s%s", (n++?", ":""), $2 }' "$clients")
-[ -n "$ips" ] || exit 0
+[ -n "$ips" ] || {
+    # Fail-open on an empty client set: a start with no clients must withdraw
+    # the rule/route/table installed for a previously present device, so
+    # deleting the last device never leaves a stale static route behind.
+    "$bypass_helper" clear "$clients"
+    nft delete table $table 2>/dev/null || true
+    ip rule del fwmark 0x66 table 166 2>/dev/null || true
+    ip route flush table 166 2>/dev/null || true
+    exit 0
+}
 nft delete table $table 2>/dev/null || true
 nft -f - <<EOF
 table $table {
