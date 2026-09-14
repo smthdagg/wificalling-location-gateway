@@ -28,7 +28,7 @@ pub enum ControlError {
     RuntimeFailure(RuntimeStep),
 }
 
-pub trait RuntimeControl {
+pub trait RuntimeControl: Send {
     fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure>;
     fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure>;
     fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure>;

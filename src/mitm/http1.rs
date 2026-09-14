@@ -192,12 +192,23 @@ fn decode_chunked(body: &[u8]) -> Result<Vec<u8>, MitmProxyError> {
         if size == 0 {
             return Ok(output);
         }
-        let end = offset + size;
-        if end + 2 > body.len() || &body[end..end + 2] != b"\r\n" {
+        // A single chunk larger than the whole-response bound can never yield
+        // a bounded body, and unchecked offset arithmetic on a hostile size
+        // (e.g. all-f) must not wrap into a slicing panic.
+        if size > MAX_HTTP1_RESPONSE_BYTES {
+            return Err(MitmProxyError::Upstream("chunk size exceeds bound".into()));
+        }
+        let end = offset
+            .checked_add(size)
+            .ok_or_else(|| MitmProxyError::Upstream("truncated chunk".into()))?;
+        let tail = end
+            .checked_add(2)
+            .ok_or_else(|| MitmProxyError::Upstream("truncated chunk".into()))?;
+        if tail > body.len() || &body[end..tail] != b"\r\n" {
             return Err(MitmProxyError::Upstream("truncated chunk".into()));
         }
         output.extend_from_slice(&body[offset..end]);
-        offset = end + 2;
+        offset = tail;
         if output.len() > MAX_HTTP1_RESPONSE_BYTES {
             return Err(MitmProxyError::Upstream(
                 "chunked body exceeds bound".into(),

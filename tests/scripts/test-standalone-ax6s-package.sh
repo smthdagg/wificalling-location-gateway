@@ -68,6 +68,18 @@ printf '2.0\n' > "$tmp/gateway/debian-binary"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-service"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/wloc-ctl"
 chmod 0755 "$tmp/wloc-service" "$tmp/wloc-ctl"
+# The builders validate input ELF architecture; the stub binaries in this
+# test are shell scripts, so answer the arch probe with AArch64 for every
+# builder invocation in this test (the Lite case below relies on the same
+# mock for its sing-box stub).
+mkdir -p "$tmp/mock-bin"
+cat > "$tmp/mock-bin/file" <<'FILE'
+#!/bin/sh
+printf '%s: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)\n' "$1"
+FILE
+chmod 0755 "$tmp/mock-bin/file"
+PATH="$tmp/mock-bin:$PATH"
+export PATH
 gateway_sha=$(shasum -a 256 "$tmp/gateway.ipk" | awk '{print $1}')
 version="0.1.0-4-standalone-test"
 

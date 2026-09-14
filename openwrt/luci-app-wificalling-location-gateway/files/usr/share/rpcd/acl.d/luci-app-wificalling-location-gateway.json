@@ -34,6 +34,12 @@
         ],
         "/tmp/run/wloc-service/events.jsonl": [
           "read"
+        ],
+        "/var/run/wloc-service/proxy-health.json": [
+          "read"
+        ],
+        "/tmp/run/wloc-service/proxy-health.json": [
+          "read"
         ]
       }
     },

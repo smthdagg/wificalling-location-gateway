@@ -48,7 +48,10 @@ test('node quality checks use ICMP without asking sing-box to proxy traffic', ()
 });
 
 test('background health work never overlaps, bursts, or repeatedly rewrites Passwall rules', () => {
-	assert.match(health, /if kill -0 "\$lock_pid" 2>\/dev\/null; then\n\t\texit 0/);
+	// Lock takeover: a live holder exits early; a missing/garbage pid (crashed
+	// holder) must be taken over, never honored via `kill -0 0` which checks
+	// our own process group.
+	assert.match(health, /if \[ -n "\$lock_pid" \] && \[ "\$lock_pid" != "\$\$" \] && kill -0 "\$lock_pid" 2>\/dev\/null; then\n\t\texit 0/);
 	assert.doesNotMatch(monitorLoop, /passwall-bypass\.sh ensure/);
 	assert.match(monitorLoop, /% 2/);
 	assert.match(monitorLoop, /next_node\(\)/);

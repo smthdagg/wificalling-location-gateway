@@ -235,7 +235,16 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                     );
                     self.geo_resolution =
                         resolve_geo(&mut self.geo, exit_ip, &self.providers, now_unix);
-                    eprintln!("wloc refresh: geo result {:?}", self.geo_resolution);
+                    // Coordinates must never reach syslog: log the evidence
+                    // state and country only.
+                    let geo_summary = match &self.geo_resolution {
+                        GeoResolution::Fresh(record) => {
+                            format!("fresh country={}", record.country_code)
+                        }
+                        GeoResolution::Uncertain => "uncertain".to_owned(),
+                        GeoResolution::Unavailable => "unavailable".to_owned(),
+                    };
+                    eprintln!("wloc refresh: geo {geo_summary}");
                 }
                 self.publish_patch_target();
                 matches!(self.geo_resolution, GeoResolution::Fresh(_))
@@ -393,11 +402,8 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             },
             "assigned_device_configured": inputs.assigned_device_configured,
         });
-        if let Some(parent) = status_file.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
         if let Ok(text) = serde_json::to_string_pretty(&status) {
-            let _ = std::fs::write(status_file, text);
+            let _ = crate::service::write_atomic(status_file, text.as_bytes());
         }
     }
 

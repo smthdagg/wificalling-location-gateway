@@ -5,7 +5,7 @@ fn cargo_manifest_pins_openwrt_compatible_rust_and_minimal_features() {
     let manifest = fs::read_to_string("Cargo.toml").expect("Cargo.toml exists");
     assert!(manifest.contains("rust-version = \"1.90\""));
     assert!(!manifest.contains("license = \"MIT OR Apache-2.0\""));
-    assert!(manifest.contains("rustls = { version = \"=0.23.43\", default-features = false"));
+    assert!(manifest.contains("rustls = { version = \"=0.23.45\", default-features = false"));
     assert!(manifest.contains("features = [\"ring\", \"std\", \"tls12\"]"));
     assert!(manifest.contains("tokio = { version = \"=1.48.0\", default-features = false"));
     assert!(manifest.contains("tokio-rustls = { version = \"=0.26.4\", default-features = false"));

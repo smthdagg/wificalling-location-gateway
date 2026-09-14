@@ -104,6 +104,12 @@ schedule_memory_retry() {
 		local attempt=0
 		while [ "$attempt" -lt 20 ]; do
 			sleep 30
+			# The user may have stopped/disabled the service during the
+			# window; a retry must never resurrect it against intent.
+			[ "$(uci -q get wificalling-gateway.main.enabled 2>/dev/null || echo 0)" = "1" ] || {
+				logger -t "$APP" "memory retry aborted: service disabled while waiting"
+				exit 0
+			}
 			if /etc/init.d/wificalling-gateway start >/dev/null 2>&1; then
 				logger -t "$APP" "memory retry succeeded; service started"
 				exit 0

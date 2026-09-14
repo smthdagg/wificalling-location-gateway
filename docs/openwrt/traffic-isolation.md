@@ -46,11 +46,15 @@ management/health traffic, and every UDP flow—including IPsec ports 500 and
 
 ## Declarative object plan
 
-Issue #6 deliberately freezes semantics rather than executable syntax. The
-machine-readable renderer in `tests/network/traffic_isolation_model.py` emits
-`offline-review-manifest/v1` dictionaries with `executable: false`. Future
-OpenWrt code must be derived in a separate implementation Issue and reviewed
-against these manifests.
+Issue #6 originally shipped a machine-readable renderer
+(`tests/network/traffic_isolation_model.py`) that emitted
+`offline-review-manifest/v1` dictionaries. It was removed in the v1.3.0-r16
+audit: the model encoded the withdrawn v1.3.0-r14 IPv4/IPv6 dual-stack design
+(full IPv6 interception scope, AAAA DNS rotation) that this project
+deliberately did NOT adopt. The shipped contract is the IPv4-first TPROXY
+path described above, with the IPv6 deny-set only, and it is pinned by
+`tests/scripts/test-wloc-runtime-contract.sh` against the real installed
+scripts.
 
 The table has symmetric logical objects:
 

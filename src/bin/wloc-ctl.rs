@@ -10,6 +10,8 @@ use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use wificalling_location_gateway::runtime::uds::MAX_CONTROL_FRAME_BYTES;
+
 fn main() {
     let code = run();
     std::process::exit(code);
@@ -78,6 +80,11 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
             return 1;
         }
     };
+    // A wedged daemon must fail the ctl call with a readable error instead of
+    // hanging the LuCI rpcd request until its own timeout.
+    let ctl_timeout = std::time::Duration::from_secs(15);
+    let _ = stream.set_read_timeout(Some(ctl_timeout));
+    let _ = stream.set_write_timeout(Some(ctl_timeout));
 
     if let Err(error) = stream.write_all(&(body.len() as u32).to_be_bytes()) {
         eprintln!("wloc-ctl: 写入失败: {error}");
@@ -95,6 +102,10 @@ fn run_with_args(args: &[String], socket_path: &str) -> i32 {
         return 1;
     }
     let length = u32::from_be_bytes(header) as usize;
+    if length > MAX_CONTROL_FRAME_BYTES {
+        eprintln!("wloc-ctl: 响应长度越界");
+        return 1;
+    }
     let mut response = vec![0_u8; length];
     if stream.read_exact(&mut response).is_err() {
         eprintln!("wloc-ctl: 响应不完整");

@@ -29,7 +29,7 @@ Usage: build-release-packages.sh [--plan] [options]
 
 Options:
   --version VERSION          Package version (default: 1.3.0)
-  --release RELEASE          Package release number (default: 15)
+  --release RELEASE          Package release number (default: 16)
   --arch ARCH                OpenWrt runtime architecture (default: x86_64)
   --service-bin PATH         Static wloc-service binary (required)
   --ctl-bin PATH             Static wloc-ctl binary (required)
@@ -74,6 +74,21 @@ esac
 [ -x "$service_bin" ] || fail "service binary is not executable: $service_bin"
 [ -x "$ctl_bin" ] || fail "control binary is not executable: $ctl_bin"
 
+# Architecture gate: a wrong-arch ELF (e.g. an aarch64 binary passed for the
+# x86_64 build) otherwise packages cleanly and only fails on the router. The
+# SHA-256 option proves only "file == digest you typed", not the machine
+# architecture.
+expect_elf_arch() {
+	# POSIX sh has no `local`; these unprefixed names are not used elsewhere.
+	expect_actual=$(file -b "$1" 2>/dev/null || true)
+	case "$expect_actual" in
+		*"ELF "*"${2}"*) : ;;
+		*) fail "$3 must be an ELF $2 binary, got: ${expect_actual:-unreadable}" ;;
+	esac
+}
+expect_elf_arch "$service_bin" 'x86-64' 'service binary'
+expect_elf_arch "$ctl_bin" 'x86-64' 'control binary'
+
 case "$variants" in
 	standard|lite|standard,lite) ;;
 	*) fail 'variants must be standard, lite, or standard,lite' ;;
@@ -87,6 +102,7 @@ case ",$variants," in
 		[ "${#singbox_lite_sha256}" -eq 64 ] || fail 'invalid sing-box Lite SHA-256'
 		actual_lite_sha=$(shasum -a 256 "$singbox_lite_bin" | awk '{print $1}')
 		[ "$actual_lite_sha" = "$singbox_lite_sha256" ] || fail 'sing-box Lite SHA-256 mismatch'
+		expect_elf_arch "$singbox_lite_bin" 'x86-64' 'sing-box Lite binary'
 		;;
 esac
 

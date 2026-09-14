@@ -171,11 +171,35 @@ pub const fn current_response_mode() -> ResponseMode {
     ResponseMode::ForwardOriginal
 }
 
+/// Write through a temp sibling + rename so concurrent readers (LuCI status
+/// polls, wloc-health.sh) never observe a torn or empty file mid-rewrite.
+pub fn write_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension(format!("tmp.{}", std::process::id()));
+    std::fs::write(&tmp, contents)?;
+    match std::fs::rename(&tmp, path) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            let _ = std::fs::remove_file(&tmp);
+            Err(error)
+        }
+    }
+}
+
 /// Append one diagnostic event without allowing the router's writable storage
 /// to grow forever. Events are advisory; dropping the oldest batch is safer
-/// than exhausting the small device's filesystem.
+/// than exhausting the small device's filesystem. The proxy task and the
+/// control path share the file, so the size-check/truncate/append sequence is
+/// serialized behind a process-wide lock.
 pub(crate) fn append_event_line(path: &Path, value: &serde_json::Value) {
     use std::io::Write as _;
+
+    static EVENT_APPEND_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = EVENT_APPEND_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
 
     let mut line = serde_json::to_string(value).unwrap_or_default();
     line.push('\n');

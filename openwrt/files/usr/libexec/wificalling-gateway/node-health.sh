@@ -11,8 +11,14 @@ lock=/tmp/node-health.lock
 # ponytail: serialize one status sweep; split by node only if measured fleets
 # need sub-minute probes.
 if ! mkdir "$lock" 2>/dev/null; then
-	lock_pid=$(cat "$lock/pid" 2>/dev/null || echo 0)
-	if kill -0 "$lock_pid" 2>/dev/null; then
+	lock_pid=$(cat "$lock/pid" 2>/dev/null || true)
+	# A missing/garbage pid means the holder crashed between mkdir and the
+	# pid write; kill -0 0 would inspect our own process group and always
+	# "succeed", stalling every future sweep until /tmp is cleared.
+	case "$lock_pid" in
+		''|*[!0-9]*) lock_pid= ;;
+	esac
+	if [ -n "$lock_pid" ] && [ "$lock_pid" != "$$" ] && kill -0 "$lock_pid" 2>/dev/null; then
 		exit 0
 	fi
 	rm -f "$lock/pid"; rmdir "$lock" 2>/dev/null || true

@@ -15,7 +15,10 @@ tmp="${output}.tmp.$$"
 state_tmp="${state}.tmp.$$"
 event_tmp="${events}.tmp.$$"
 trim_tmp="${events}.trim.$$"
-trap 'rm -f "$tmp" "$state_tmp" "$event_tmp" "$trim_tmp"' EXIT HUP INT TERM
+trap 'rm -f "$tmp" "$state_tmp" "$event_tmp" "$trim_tmp"' EXIT
+# procd stop sends TERM: clean up and leave immediately instead of resuming
+# the sweep and lingering until the kill timeout.
+trap 'rm -f "$tmp" "$state_tmp" "$event_tmp" "$trim_tmp"; exit 0' HUP INT TERM
 
 now=${WFC_NOW:-$(date +%s)}
 touch "$state" "$events"

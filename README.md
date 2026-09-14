@@ -152,7 +152,7 @@ Release `v1.3.0-r16` provides two installation variants for each of three target
 - Auto mode enables on clean OpenWrt: the exit probe is a bounded native HTTP client (no curl dependency) and `probe_interval` is clamped to the validator window.
 - LuCI fixes: nodeTest success renders as alive, the Clear-log button works, the health page survives probe errors, and static-IP device detection gets its ARP ACL.
 
-Choose **Standard** when the firmware already supplies a suitable `/usr/bin/sing-box`. Choose **Lite** for constrained gateways such as AX6S: it stores a hash-pinned compressed sing-box in flash, transparently expands one shared copy into `/tmp`, and keeps only the single-worker/moderate-GC runtime profile without an artificial heap ceiling. Standard and Lite conflict intentionally and must not be installed together. Both preserve `/etc/config/wificalling-gateway` and `/etc/config/wloc-service`.
+Choose **Standard** when the firmware already supplies a suitable `/usr/bin/sing-box`. Choose **Lite** for constrained gateways such as AX6S: it stores a hash-pinned compressed sing-box in flash, transparently expands one shared copy into `/tmp`, and keeps the single-worker/moderate-GC runtime profile with the Go heap bounded at 48 MiB via GOMEMLIMIT. Standard and Lite conflict intentionally and must not be installed together. Both preserve `/etc/config/wificalling-gateway` and `/etc/config/wloc-service`.
 
 The variant suffix changes runtime ownership only; it does not create a separate product or restore split component packages.
 
@@ -259,7 +259,7 @@ This pins the OpenWrt 24.10.8 `mediatek/mt7622` toolchain, Rust version, and SHA
 
 ./scripts/openwrt/build-release-packages.sh \
   --version 1.3.0 \
-  --release 9 \
+  --release 16 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
   --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \
@@ -454,12 +454,13 @@ flowchart TD
 
 ### r16 更新说明
 
+- 静态路由生命周期随设备范围 fail-open：删除最后一个设备或停止服务时，WLOC（`table 100`）与网关（`table 166`）的规则/路由/TPROXY 状态随之撤除；任何失败的同步都会先清理旧状态，不再残留过期静态路由。
 - 每次 TPROXY 安装都会刷新上游映射；禁用/启用与 sing-box 崩溃恢复不会再让拦截静默失效。
 - 禁用的 WLOC 真正 fail-open：开机脚本按开关撤除 DNS 劫持、TPROXY 与上游映射，停用即重启 dnsmasq。
 - 干净 OpenWrt 上自动定位可直接启用：出口探测为有界原生 HTTP 客户端（无需 curl），`probe_interval` 钳制到校验窗口。
 - LuCI 修复：nodeTest 成功正常显示、清除日志按钮恢复、健康页在探测报错时保持可用、静态 IP 设备检测补齐 ARP ACL。
 
-固件已有合适 `/usr/bin/sing-box` 时选择 **Standard**；AX6S 等受限设备推荐 **Lite**：flash 只保存带 SHA256 固定的压缩运行时，首次调用透明解压一份到 `/tmp`；WCG 仅保留单 worker 和适度 GC 设置，不再人为设置堆上限。两种规格故意互斥，不能同时安装；两者都保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
+固件已有合适 `/usr/bin/sing-box` 时选择 **Standard**；AX6S 等受限设备推荐 **Lite**：flash 只保存带 SHA256 固定的压缩运行时，首次调用透明解压一份到 `/tmp`；WCG 在 Lite 上以 `GOMEMLIMIT` 把 Go 堆固定在 48 MiB 并保留单 worker 与适度 GC。两种规格故意互斥，不能同时安装；两者都保留 `/etc/config/wificalling-gateway` 与 `/etc/config/wloc-service`。
 
 Lite 后缀只表示运行时所有权与内存策略不同，不是新项目，也不会恢复拆分组件安装。
 
@@ -566,7 +567,7 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
 
 ./scripts/openwrt/build-release-packages.sh \
   --version 1.3.0 \
-  --release 9 \
+  --release 16 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
   --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \

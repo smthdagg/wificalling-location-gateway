@@ -50,7 +50,7 @@ var CONTENT = {
 			'WLOC 使用日志最多显示最近 20 条，可一键清空；日志仅记录替换元数据，不记录原始 WLOC 响应内容。',
 			'配置（开关、模式、手动坐标、预设）保存在 /etc/config/wloc-service，重启后仍然生效。',
 			'「服务状态」页（服务 → 服务状态）集中显示 wloc-service 与 Wi-Fi 通话网关的进程、配置、规则、补丁与节点健康，每 10 秒自动刷新；异常项以红点标出。',
-			'每个代理节点行的「nodeTest」按钮会直接对节点端点执行一次 ICMP 延迟测试；显示的是端点可达性与往返时间，不会调用 Gateway sing-box。'
+			'每个代理节点行的「nodeTest」按钮会向节点服务器发送一次受限的 ICMP 直连探测，显示端点可达性与往返延迟；不会创建第二个进程，也不代表代理链路质量。'
 		]
 	},
 	en: {
@@ -92,7 +92,7 @@ var CONTENT = {
 			'The WLOC usage log keeps the newest 20 entries and can be cleared with one click; it only records replacement metadata, never raw WLOC responses.',
 			'Settings (switch, mode, manual coordinates, presets) are stored in /etc/config/wloc-service and survive reboots.',
 			'"Service Status" (Services > Service Status) shows both services in one place: daemon processes, config validity, nftables rules, build patches and node health, refreshed every 10 seconds; anything unhealthy is marked with a red dot.',
-			'The "nodeTest" button on every proxy node row runs a direct ICMP latency test to that endpoint; it reports endpoint reachability and round-trip time without calling Gateway sing-box.'
+			'The "nodeTest" button on every proxy node row sends one bounded direct ICMP probe to the node server and reports endpoint reachability and round-trip latency; it creates no second process and does not measure proxy-path quality.'
 		]
 	}
 };

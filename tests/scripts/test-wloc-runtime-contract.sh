@@ -15,9 +15,10 @@ grep -F 'if [ "$action" = stop ]; then' "$redirect" >/dev/null ||
 grep -F '/usr/sbin/wloc-redirect-sync.sh stop' "$service" >/dev/null ||
 	{ echo 'WLOC init stop must remove owned firewall state' >&2; exit 1; }
 # Static-route lifecycle: TPROXY interception lives or dies with the device
-# scope. An install adds the rule+route, a stop removes them, and a sync
-# with an empty scope must withdraw the state of a previously bound device
-# (deleting the last device must never leave a stale route behind).
+# scope. An install adds the rule+route, a stop removes them, and ANY nonzero
+# sync exit must withdraw the state of a previously bound device via the
+# fail-open trap (deleting the last device or a failed install must never
+# leave a stale route or a half-installed hijack behind).
 grep -F 'ip rule add fwmark "$FWMARK" lookup "$ROUTE_TABLE"' "$redirect" >/dev/null ||
 	{ echo 'WLOC redirect install must add the fwmark rule for its route table' >&2; exit 1; }
 grep -F 'ip route add local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"' "$redirect" >/dev/null ||
@@ -26,8 +27,13 @@ grep -F 'ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE"' "$redirect" >/dev/n
 	{ echo 'WLOC teardown must delete the fwmark rule' >&2; exit 1; }
 grep -F 'ip route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"' "$redirect" >/dev/null ||
 	{ echo 'WLOC teardown must delete the local return route' >&2; exit 1; }
-[ "$(grep -cF '"$0" stop' "$redirect")" -ge 1 ] ||
-	{ echo 'WLOC redirect must stop (and thus withdraw) itself on an empty device scope' >&2; exit 1; }
+withdraw_line=$(grep -n 'WLOC_WITHDRAW_GUARD=1' "$redirect" | head -n 1 | cut -d: -f1)
+stop_line=$(grep -n 'if \[ "\$action" = stop \]; then' "$redirect" | head -n 1 | cut -d: -f1)
+guard_line=$(grep -n 'if \[ -z "\${WLOC_WITHDRAW_GUARD:-}" \]; then' "$redirect" | head -n 1 | cut -d: -f1)
+[ -n "$withdraw_line" ] && [ -n "$stop_line" ] && [ "$withdraw_line" -lt "$stop_line" ] ||
+	{ echo 'WLOC redirect must arm its fail-open withdrawal before the stop branch' >&2; exit 1; }
+[ -n "$guard_line" ] ||
+	{ echo 'WLOC withdrawal trap must guard against stop re-entry recursion' >&2; exit 1; }
 # Gateway firewall: no clients means no interception; the start action must
 # withdraw the previous rule/route/table instead of leaving them installed.
 [ "$(grep -cF 'ip route flush table 166' "$gateway_firewall")" -ge 2 ] ||

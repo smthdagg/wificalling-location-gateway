@@ -307,6 +307,11 @@ fn is_usable_original_destination(address: &SocketAddr) -> bool {
 
 /// A stable local DNS ingress has no usable Apple destination to reuse, so
 /// resolve the requested hostname instead of reusing another host's CDN IP.
+///
+/// The original TPROXY destination is tried first, but it can go stale
+/// mid-window (Apple rotates CDN addresses independently of the pinned
+/// answer), so the refreshed per-host map candidates are appended as
+/// fallbacks and the connect loop walks them in order.
 fn choose_upstream_targets(
     original_destination: Option<SocketAddr>,
     explicit_override: Option<&(String, u16)>,
@@ -316,13 +321,15 @@ fn choose_upstream_targets(
     if let Some((host, port)) = explicit_override {
         return vec![(host.clone(), *port)];
     }
+    let mut targets = Vec::new();
     if let Some(address) = original_destination.filter(is_usable_original_destination) {
-        return vec![(address.ip().to_string(), address.port())];
+        targets.push((address.ip().to_string(), address.port()));
     }
-    if !dynamic_overrides.is_empty() {
-        return dynamic_overrides.to_vec();
+    targets.extend(dynamic_overrides.iter().cloned());
+    if targets.is_empty() {
+        targets.push((hostname.to_owned(), 443));
     }
-    vec![(hostname.to_owned(), 443)]
+    targets
 }
 
 fn upstream_override_for(path: Option<&std::path::Path>, hostname: &str) -> Vec<(String, u16)> {
@@ -429,12 +436,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn public_original_destination_wins_over_hostname_fallback() {
+    fn public_original_destination_leads_with_map_candidates_as_fallback() {
         let original = Some("203.0.113.10:443".parse().unwrap());
         let dynamic = vec![("203.0.113.20".to_owned(), 443)];
         assert_eq!(
             choose_upstream_targets(original, None, &dynamic, "gs-loc.apple.com"),
-            vec![("203.0.113.10".to_owned(), 443)]
+            vec![
+                ("203.0.113.10".to_owned(), 443),
+                ("203.0.113.20".to_owned(), 443),
+            ]
         );
     }
 

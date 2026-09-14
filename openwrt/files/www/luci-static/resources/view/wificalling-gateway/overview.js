@@ -500,20 +500,31 @@ return view.extend({
 				// renders the widget with cfgvalue (always null), so renderWidget
 				// is overridden to show the same live state in both places.
 				dhcpBinding.rmempty = true;
-				function bindingState(id) {
+				// Render each IP/state pair as its own line through text nodes:
+				// raw HTML interpolation of UCI-sourced values is a needless
+				// injection sink even when the inputs are admin-controlled.
+				function bindingStateLines(id) {
 					if ((uci.get('wificalling-gateway', id, 'route_mode') || 'independent') !== 'independent')
-						return wlocI18n.t('Following gateway');
+						return [ wlocI18n.t('Following gateway') ];
 					var ipList = uci.get('wificalling-gateway', id, 'source_ip') || [];
 					if (!Array.isArray(ipList)) ipList = [ipList];
-					return ipList.map(function(ip) { return ip + ': ' + dhcpState(ip); }).join('<br>');
+					return ipList.map(function(ip) { return ip + ': ' + dhcpState(ip); });
+				}
+				function bindingStateNodes(id) {
+					var lines = bindingStateLines(id);
+					var nodes = [];
+					lines.forEach(function(line, index) {
+						if (index) nodes.push(E('br'));
+						nodes.push(line);
+					});
+					return nodes;
 				}
 				// Grid row renders via textvalue; the edit modal renders the widget
 				// with cfgvalue (always null for a DummyValue), so override
 				// renderWidget to show the same live state in both places.
-				dhcpBinding.rawhtml = true;
-				dhcpBinding.textvalue = function(id) { return bindingState(id); };
+				dhcpBinding.textvalue = function(id) { return bindingStateNodes(id); };
 				dhcpBinding.renderWidget = function(section_id, option_index, cfgvalue) {
-					return E('output', { 'for': this.cbid(section_id) }, bindingState(section_id));
+					return E('output', { 'for': this.cbid(section_id) }, bindingStateNodes(section_id));
 				};
 
 		poll.add(function() {
@@ -545,26 +556,35 @@ return view.extend({
 			// the view prototype during footer creation; on this firmware it
 			// ends up unbound (the button does nothing, while "Save & Apply"
 			// still works via the staged-changes fallback).  Bind the form
-			// save directly once the footer exists.
-			window.setTimeout(function() {
+			// save directly once the footer exists; retry briefly so a slow
+			// device cannot silently miss the footer entirely, and surface
+			// save failures instead of swallowing them.
+			var bindAttempts = 0;
+			var bindSave = function() {
 				var btn = document.querySelector('#view button.cbi-button-save');
-				if (btn && !btn._wfcSaveBound) {
-					btn._wfcSaveBound = true;
-					// The LuCI 24.10 default "Save" handler resolves the Map
-					// through a DOM instance lookup that fails on this
-					// firmware, and Map.save() alone never commits the
-					// session-scoped UCI changeset anyway (only apply does).
-					// Bind save + apply directly so plain "Save" persists
-					// the configuration like "Save & Apply".
-					btn.addEventListener('click', function(ev) {
-						ev.preventDefault();
-						ev.stopPropagation();
-						m.save().then(function() {
-							return ui.changes.apply(true);
-						}).catch(function() {});
-					});
+				if (!btn) {
+					if (++bindAttempts < 10) window.setTimeout(bindSave, 200);
+					return;
 				}
-			}, 200);
+				if (btn._wfcSaveBound) return;
+				btn._wfcSaveBound = true;
+				// The LuCI 24.10 default "Save" handler resolves the Map
+				// through a DOM instance lookup that fails on this
+				// firmware, and Map.save() alone never commits the
+				// session-scoped UCI changeset anyway (only apply does).
+				// Bind save + apply directly so plain "Save" persists
+				// the configuration like "Save & Apply".
+				btn.addEventListener('click', function(ev) {
+					ev.preventDefault();
+					ev.stopPropagation();
+					m.save().then(function() {
+						return ui.changes.apply(true);
+					}).catch(function(err) {
+						notify(wlocI18n.t('Save failed'), String(err && err.message || err));
+					});
+				});
+			};
+			window.setTimeout(bindSave, 200);
 			return nodes;
 		});
 	},

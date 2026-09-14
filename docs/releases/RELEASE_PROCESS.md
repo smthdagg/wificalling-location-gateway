@@ -66,12 +66,16 @@ This is also implemented as `scripts/openwrt/sign-feed.sh`.
    `verify-rust-openwrt.sh` with `OPENWRT_BIN_NAME`, x86_64 via
    `build-x86_64-runtime.sh`); otherwise reuse the existing
    `dist/runtime/` binaries.
-4. **Build packages**: `build-luci-ipk.sh <ver>-1 ax6s-standalone`
-   (aarch64) and `build-release-packages.sh` (x86_64 ipk + apk), then
-   write `SHA256SUMS` in `dist/openwrt-release/`.
+4. **Build packages** (six assets, Standard + Lite):
+   aarch64 via `build-luci-ipk.sh <ver> ax6s-standard` and
+   `build-luci-ipk.sh <ver> ax6s-lite` (the latter needs `SINGBOX_LITE_BIN`
+   / `SINGBOX_LITE_SHA256`); x86_64 via
+   `build-release-packages.sh --variants standard,lite` (ipk + apk per
+   variant; `SHA256SUMS` is written automatically). The builders validate
+   input ELF architecture — a wrong-arch binary must fail the build.
 5. **Install test**: `verify-docker-matrix.sh --dist-dir
-   dist/openwrt-release` (four environments) and a live upgrade on the
-   AX6S test router.
+   dist/openwrt-release` (four environments x standard/lite = 8 cases) and a
+   live upgrade on the AX6S test router.
 5a. **Post-upgrade hygiene (AX6S, mandatory)**: remove every uploaded
    installer package from `/tmp` in the same session that installed it
    (`opkg install /tmp/x.ipk && rm -f /tmp/x.ipk`), delete any ad-hoc debug
@@ -106,8 +110,9 @@ This is also implemented as `scripts/openwrt/sign-feed.sh`.
       `wloc.pub` or its docs change — also align the feed `README.md`
       package table with the current release filenames.
    e. `wloc.pub` does **not** change between releases.
-7. **GitHub**: tag `v<version>`, create the Release with the three
-   packages, `SHA256SUMS`, and the signed `Packages`/`Packages.gz`(+`.sig`)
+7. **GitHub**: tag `v<version>`, create the Release with the six
+   packages (Standard + Lite, aarch64 ipk + x86_64 ipk + x86_64 apk per
+   variant), `SHA256SUMS`, and the signed `Packages`/`Packages.gz`(+`.sig`)
    assets, bilingual notes (English first, Chinese after).
 8. **Verify** the feed signature on the AX6S (`opkg update` must print
    `Signature check passed` with the existing key) and confirm the upgrade.

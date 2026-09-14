@@ -348,6 +348,11 @@ fn extract_envelope(response: &[u8]) -> Option<Envelope<'_>> {
     // Marker fallback: search for the `00 00 00 <kind> 00 00` length prefix
     // anywhere. The kind byte echoes the request type (1 = BSSID query,
     // 3 = coarse coordinate query); iOS wraps every request in it.
+    // Bound the scan: a hostile response can match thousands of candidate
+    // offsets, and each candidate runs a full parse over the remaining
+    // buffer — cap the candidates so worst-case CPU stays bounded.
+    const MAX_MARKER_CANDIDATES: usize = 64;
+    let mut candidates = 0;
     let mut index = 0;
     while index + 10 <= response.len() {
         if response[index] == 0
@@ -356,6 +361,10 @@ fn extract_envelope(response: &[u8]) -> Option<Envelope<'_>> {
             && response[index + 4] == 0
             && response[index + 5] == 0
         {
+            candidates += 1;
+            if candidates > MAX_MARKER_CANDIDATES {
+                break;
+            }
             let kind = response[index + 3];
             let length_offset = index + 6;
             if let Ok(length) = read_u16_be(response, length_offset) {

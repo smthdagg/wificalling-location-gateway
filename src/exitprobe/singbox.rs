@@ -169,8 +169,14 @@ pub fn parse_singbox_config(document: &Value) -> SingBoxConfig {
 
 /// Find the loopback HTTP inbound compiled for an existing node. The Gateway
 /// owns these listeners; WLOC must reuse one instead of starting a probe
-/// sing-box process of its own.
+/// sing-box process of its own. Inbounds whose port collides with the WLOC
+/// MITM TPROXY listener are skipped: a plaintext probe hitting the MITM TLS
+/// listener fails as a bad ClientHello and silently kills auto mode.
 pub fn existing_probe_port(document: &Value, node_tag: &str) -> Option<u16> {
+    let mitm_port: u16 = std::env::var("WLOC_PROXY_PORT")
+        .ok()
+        .and_then(|port| port.parse().ok())
+        .unwrap_or(8443);
     let node_id = node_tag
         .strip_prefix("node-")
         .or_else(|| node_tag.strip_prefix("wg-"))?;
@@ -187,6 +193,7 @@ pub fn existing_probe_port(document: &Value, node_tag: &str) -> Option<u16> {
         .and_then(|inbound| inbound.get("listen_port").and_then(Value::as_u64))
         .and_then(|port| u16::try_from(port).ok())
         .filter(|port| (1024..=65535).contains(port))
+        .filter(|port| *port != mitm_port)
 }
 
 /// Upper bound for the probe HTTP response (headers + body).

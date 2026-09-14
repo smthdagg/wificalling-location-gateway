@@ -55,6 +55,8 @@ list)
 	json_close_object
 	json_add_object restart_gateway
 	json_close_object
+	json_add_object clear_log
+	json_close_object
 	json_add_object verify_fingerprint
 	json_close_object
 	json_add_object health
@@ -75,11 +77,17 @@ call)
 		json_get_var lon lon
 
 		case "$method" in
-		status|disable|reload|geo-clear|refresh)
+		status|reload|geo-clear|refresh)
 			out="$("$CTL" "$method" 2>&1)"
 			;;
+		# enable AND disable both go through the self-healing path: with a
+		# stale control socket the direct ctl call fails with a raw connect
+		# error and the module can no longer be switched off from the UI.
 		enable)
 			ctl_live enable
+			;;
+		disable)
+			ctl_live disable
 			;;
 		mode-set)
 			case "$query" in
@@ -101,19 +109,28 @@ call)
 			esac
 			# Apply the location directly. Re-enabling an already intercepting
 			# daemon returns invalid_config and prevents the mode change.
-			# ctl_live already restarts the daemon if its socket is unavailable.
+			# ctl_live already restarts the daemon if its socket is unavailable
+			# and leaves the ctl output in the shared `out` variable. The
+			# branch's last command must reflect the apply status: the original
+			# `if [ $? ]` swallowed ctl failures and always reported success.
 			if [ "$mode_method" = "geo-set" ]; then
 				ctl_live geo-set --lat "$lat" --lon "$lon"
 			else
 				ctl_live geo-clear
 			fi
-			if [ "$?" -eq 0 ]; then
-				uci -q set "wloc-service.main.geo_source=$query" \
+			mode_rc=$?
+			if [ "$mode_rc" -eq 0 ]; then
+				if uci -q set "wloc-service.main.geo_source=$query" \
 					&& { [ "$query" != "manual" ] \
 						|| { uci -q set "wloc-service.main.manual_lat=$lat" \
 							&& uci -q set "wloc-service.main.manual_lon=$lon"; }; } \
-					&& uci -q commit wloc-service
+					&& uci -q commit wloc-service; then
+					:
+				else
+					mode_rc=1
+				fi
 			fi
+			[ "$mode_rc" -eq 0 ]
 			;;
 		geo-search)
 			if [ -n "$query" ] && [ "$query" != "null" ]; then
@@ -147,10 +164,18 @@ call)
 			exit 1
 		fi
 		# The daemon reply is a framed JSON envelope; pass the result
-		# object through unchanged.
+		# object through unchanged. A non-envelope reply (plain text with
+		# quotes/newlines) must still become valid JSON for the LuCI rpc
+		# layer, so it goes through json_add_string instead of raw
+		# interpolation.
 		result="$(echo "$out" | jsonfilter -qe '@.result')"
-		[ -n "$result" ] || result="$out"
-		echo "{\"result\":$result}"
+		if [ -n "$result" ]; then
+			echo "{\"result\":$result}"
+		else
+			json_init
+			json_add_string result "$out"
+			json_dump
+		fi
 		exit 0
 		;;
 	regen_profile)
@@ -199,11 +224,20 @@ call)
 			exit 1
 		fi
 		gw="$(jsonfilter -i /etc/wloc-service/ca.info.json -e '@.fingerprint')"
-		norm() { echo "$1" | tr -d ':' | tr '[:lower:]' '[:upper:]' | tr -d ' '; }
+		# Strip every whitespace class (a pasted fingerprint can wrap lines)
+		# plus the separators; build the reply with json_add_string so an
+		# unexpected ca.info.json value can never produce invalid JSON.
+		norm() { echo "$1" | tr -d '[:space:]' | tr -d ':' | tr '[:lower:]' '[:upper:]'; }
 		if [ "$(norm "$fingerprint")" = "$(norm "$gw")" ]; then
-			echo "{\"match\":true,\"gateway_fingerprint\":\"$gw\"}"
+			json_init
+			json_add_boolean match 1
+			json_add_string gateway_fingerprint "$gw"
+			json_dump
 		else
-			echo "{\"match\":false,\"gateway_fingerprint\":\"$gw\"}"
+			json_init
+			json_add_boolean match 0
+			json_add_string gateway_fingerprint "$gw"
+			json_dump
 		fi
 		exit 0
 		;;
@@ -211,7 +245,10 @@ call)
 		# Re-sync the redirect rules first (the followed device may have
 		# changed), then restart the daemon so it reads the new config.
 		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
-		/etc/init.d/wloc-service restart >/dev/null 2>&1
+		if ! /etc/init.d/wloc-service restart >/dev/null 2>&1; then
+			echo '{"error":"wloc-service restart failed"}'
+			exit 1
+		fi
 		sleep 2
 		echo '{"ok":true}'
 		exit 0
@@ -219,7 +256,10 @@ call)
 	restart_gateway)
 		# Regenerate the sing-box config and restart the proxy for the
 		# Wi-Fi Calling Gateway (brief interruption of device proxy).
-		/etc/init.d/wificalling-gateway restart >/dev/null 2>&1
+		if ! /etc/init.d/wificalling-gateway restart >/dev/null 2>&1; then
+			echo '{"error":"wificalling-gateway restart failed"}'
+			exit 1
+		fi
 		sleep 2
 		echo '{"ok":true}'
 		exit 0
@@ -232,6 +272,22 @@ call)
 			exit 1
 		fi
 		/usr/sbin/wloc-health.sh
+		exit 0
+		;;
+	clear_log)
+		# Truncate a usage log immediately with a shell redirect (O_TRUNC).
+		# The old path went through LuCI's fs.write ubus call, which could
+		# stall while a monitor process holds the file open, leaving the
+		# confirm modal open until the write returned.
+		read -r input
+		json_load "$input"
+		json_get_var log log
+		case "$log" in
+			wfc) : > /var/run/wificalling-gateway/events.log ;;
+			wloc) : > /var/run/wloc-service/events.jsonl ;;
+			*) echo '{"error":"unknown log target"}'; exit 1 ;;
+		esac
+		echo '{"ok":true}'
 		exit 0
 		;;
 	node_test)
@@ -252,21 +308,35 @@ call)
 		exit 0
 		;;
 	regen_ca)
-		# Regenerate the root CA: remove the persisted key/cert, restart the
-		# daemon (procd respawns and creates a fresh CA + info), then rewrite
-		# the iOS profile. The iPhone must reinstall and re-trust the CA.
-		rm -f /etc/wloc-service/ca.pem /etc/wloc-service/ca.key /etc/wloc-service/ca.info.json
+		# Regenerate the root CA: move the persisted key/cert aside (restore
+		# them if the daemon fails to produce a new CA, so the router is never
+		# left with no CA at all), restart the daemon (procd respawns and
+		# creates a fresh CA + info), then rewrite the iOS profile. The iPhone
+		# must reinstall and re-trust the CA.
+		ca_backup=/etc/wloc-service/ca.old.$$
+		mkdir -p "$ca_backup"
+		mv -f /etc/wloc-service/ca.pem /etc/wloc-service/ca.key /etc/wloc-service/ca.info.json "$ca_backup"/ 2>/dev/null || true
 		/usr/sbin/wloc-redirect-sync.sh >/dev/null 2>&1 || true
 		/etc/init.d/wloc-service restart >/dev/null 2>&1
 		sleep 3
 		if [ ! -f /etc/wloc-service/ca.info.json ]; then
+			# Roll back so the previous CA keeps working; a router with no CA
+			# at all cannot rebuild trust without manual reconstruction.
+			mv -f "$ca_backup"/* /etc/wloc-service/ 2>/dev/null || true
+			rmdir "$ca_backup" 2>/dev/null || true
 			json_init
 			json_add_string error "重新生成证书失败，请检查 wloc-service 状态"
 			json_dump
 			exit 1
 		fi
+		rm -rf "$ca_backup"
 		if [ -x "$EXPORT" ]; then
-			"$EXPORT" >/dev/null 2>&1
+			if ! "$EXPORT" >/dev/null 2>&1; then
+				json_init
+				json_add_string error "新 CA 已生成，但 iOS 描述文件导出失败；请手动点击\"重新生成描述文件\""
+				json_dump
+				exit 1
+			fi
 		fi
 		cat /etc/wloc-service/ca.info.json
 		exit 0

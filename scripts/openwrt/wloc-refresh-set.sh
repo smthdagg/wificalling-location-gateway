@@ -45,11 +45,19 @@ ensure_client_dns_sets() {
             uci add_list "dhcp.$section.name=$set_name"
             changed=1
         }
-        uci -q delete "dhcp.$section.domain" || true
-        for host in $HOSTS; do
-            uci add_list "dhcp.$section.domain=$host"
-        done
-        changed=1
+        # Replace the domain list wholesale, but flag a change only when the
+        # current list actually differs from the desired set: refresh runs on
+        # every enable/reload and a no-op rewrite must not restart dnsmasq.
+        current_domains=$(uci -q get "dhcp.$section.domain" 2>/dev/null || true)
+        # shellcheck disable=SC2086  # HOSTS is a space-separated list; word splitting intended
+        desired_domains=$(printf '%s\n' $HOSTS | sort)
+        if [ "$(printf '%s' "$current_domains" | tr ' ' '\n' | sort)" != "$desired_domains" ]; then
+            uci -q delete "dhcp.$section.domain" || true
+            for host in $HOSTS; do
+                uci add_list "dhcp.$section.domain=$host"
+            done
+            changed=1
+        fi
     }
 
     # Migration from the first dynamic-DNS attempt, which embedded the family
@@ -77,6 +85,8 @@ ensure_client_dns_sets() {
         changed=1
     done
 
+    # Keep the stable local ingress owned by wloc-redirect-sync.sh, but clear
+    # only retired hostname rules from earlier package revisions.
     for host in gs-loc-corpa.apple.com gs-loc.apple.com.cn; do
         uci -q del_list "dhcp.@dnsmasq[0].address=/$host/$ROUTER_IP" || true
         uci -q del_list "dhcp.@dnsmasq[0].rebind_domain=/$host/" || true
@@ -145,10 +155,7 @@ ips4=$(collect_v4 | grep -v "^$ROUTER_IP$" | sort -u | csv)
     exit 1
 }
 
-nft list table inet "$TABLE" >/dev/null 2>&1 || {
-    echo "wloc-refresh-set: owned nft table is absent" >&2
-    exit 1
-}
+nft add table inet "$TABLE" 2>/dev/null || true
 nft flush set inet "$TABLE" "$SET" 2>/dev/null || nft add set inet "$TABLE" "$SET" '{ type ipv4_addr; }'
 nft flush set inet "$TABLE" apple_hosts6 2>/dev/null || nft add set inet "$TABLE" apple_hosts6 '{ type ipv6_addr; }'
 nft add element inet "$TABLE" "$SET" "{ $ips4 }"
@@ -157,7 +164,10 @@ mkdir -p /var/run/wloc-service
 # separate public answer for each name: an Apple/Autonavi CDN address is not
 # interchangeable across TLS hostnames.
 upstream_map=/var/run/wloc-service/upstream-map
-upstream_map_tmp=$upstream_map.tmp
+# $$ suffix: init start, a daemon-triggered sync, and a manual run can
+# overlap; concurrent writers to a shared tmp would mv a corrupted map
+# into place. (The stop path also removes the legacy unsuffixed name.)
+upstream_map_tmp=$upstream_map.tmp.$$
 : > "$upstream_map_tmp"
 for host in $HOSTS; do
     nslookup -type=A "$host" 1.1.1.1 2>/dev/null \
