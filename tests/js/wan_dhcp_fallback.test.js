@@ -18,8 +18,7 @@ function main() {
 	const root = path.resolve(__dirname, '..', '..');
 	const overviewSources = [
 		'openwrt/files/www/luci-static/resources/view/wificalling-gateway/overview.js',
-		'openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-gateway/overview.js',
-		'openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/overview.js'
+		'openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-gateway/overview.js'
 	];
 	const wlocSources = [
 		'openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wloc.js',
@@ -46,8 +45,12 @@ function main() {
 
 	wlocSources.forEach(function(relative) {
 		const source = fs.readFileSync(path.join(root, relative), 'utf8');
-		assert(source.includes('var autoRegen = regenProfile().then'),
-			`${relative}: the page must auto-(re)generate the CA profile on load`);
+		// The auto-regen must still fire on load, but raced against a bounded
+		// wait so a stalled openssl/export cannot blank the page.
+		assert(source.includes('var autoRegen = Promise.race(['),
+			`${relative}: the page must auto-(re)generate the CA profile on load, bounded`);
+		assert(source.includes('regenProfile().then'),
+			`${relative}: the bounded race must still run the profile regen`);
 		assert(source.includes('wlocI18n.t(\'Profile unavailable: \')'),
 			`${relative}: a failed auto-regen must show the reason instead of a dead link`);
 		assert(source.includes("'id': 'wloc-cert-link'"),

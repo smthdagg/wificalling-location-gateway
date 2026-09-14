@@ -21,6 +21,25 @@ HOSTS="gs-loc.apple.com gs-loc-cn.apple.com gsp-ssl.ls.apple.com bluedot.is.auto
 DNS_CONF=/etc/dnsmasq.conf
 DNS_MARKER='# wloc-service DNS hijack (do not edit)'
 
+# Resolve this script's own absolute path so the fail-open withdrawal below
+# re-invokes the installed helper regardless of how it was invoked.
+self=$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")
+
+# Fail-open guarantee: a sync that exits nonzero after having (re)installed
+# state must withdraw that state instead of leaving a half-installed
+# hijack/route behind (DNS outage, nft failure, invalid scope...). The guard
+# variable prevents recursion when the withdrawal itself exits nonzero.
+withdraw_on_failure() {
+    wloc_exit_status=$?
+    if [ "$wloc_exit_status" -ne 0 ]; then
+        WLOC_WITHDRAW_GUARD=1 "$self" stop >/dev/null 2>&1 || true
+    fi
+    exit "$wloc_exit_status"
+}
+if [ -z "${WLOC_WITHDRAW_GUARD:-}" ]; then
+    trap withdraw_on_failure EXIT
+fi
+
 valid_ipv4() {
     case "$1" in ''|*[!0-9.]*|*..*|.*|*.) return 1;; esac
     awk -F. 'NF == 4 { for (i = 1; i <= 4; i++) if ($i !~ /^[0-9]+$/ || $i > 255) exit 1; exit 0 } { exit 1 }' <<EOF
@@ -57,9 +76,12 @@ if [ "$action" = stop ]; then
         dns_changed=1
     done
     if [ "$dns_changed" -eq 1 ]; then
-        uci commit dhcp
-        /etc/init.d/dnsmasq restart
-        restart_passwall_dns
+        # A failed commit/restart must never abort the route/nft teardown
+        # below: half-removed DNS with live TPROXY is worse than either end
+        # state, so every activation step here is best-effort.
+        uci commit dhcp 2>/dev/null || true
+        /etc/init.d/dnsmasq restart 2>/dev/null || true
+        restart_passwall_dns || true
     fi
     ip rule del fwmark "$FWMARK" lookup "$ROUTE_TABLE" 2>/dev/null || true
     ip route del local 0.0.0.0/0 dev lo table "$ROUTE_TABLE" 2>/dev/null || true
@@ -80,11 +102,9 @@ fi
 
 [ -n "$ips" ] || {
     echo "wloc-redirect-sync: no devices in the gateway device policy" >&2
-    # Fail-open on an empty scope: a sync without devices must withdraw the
-    # state installed for a previously bound device (rule, route, nft table,
-    # DNS hijack). Deleting the last device or stopping the service must never
-    # leave a stale static route table entry behind.
-    "$0" stop >/dev/null 2>&1 || true
+    # Fail-open on an empty scope: deleting the last device must never leave a
+    # stale static route table entry behind. The EXIT trap performs the
+    # withdrawal on this nonzero exit.
     exit 1
 }
 for ip in $ips; do

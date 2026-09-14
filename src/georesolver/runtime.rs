@@ -30,7 +30,7 @@ pub enum ProviderFailure {
 /// Implementations talk to the chosen online Geo provider on the router. They
 /// must not retain credentials or precise user locations beyond the record
 /// itself.
-pub trait GeoProviderRuntime {
+pub trait GeoProviderRuntime: Send {
     /// Resolve `ip` through `provider`.
     ///
     /// Returns the record together with the address it was actually resolved

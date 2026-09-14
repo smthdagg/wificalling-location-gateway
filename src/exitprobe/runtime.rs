@@ -49,7 +49,7 @@ impl ProbeFailure {
 /// Implementations talk to sing-box or an equivalent probe mechanism on the
 /// router. They must not retain credentials, raw captures, or device
 /// identifiers.
-pub trait ExitProbeRuntime {
+pub trait ExitProbeRuntime: Send {
     /// Probe the current public exit IP of the bound node.
     fn probe_exit_ip(&mut self) -> Result<IpAddr, ProbeFailure>;
     /// Report the router's verified WAN addresses (all known families).

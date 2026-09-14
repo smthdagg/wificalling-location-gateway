@@ -17,11 +17,15 @@ json_escape() {
 
 now=$(date +%s)
 
-# File age in seconds (busybox-safe; -1 when unknown).
+# File age in seconds (-1 when unknown). Prefer stat (GNU/busybox -c, BSD -f);
+# busybox `date -r FILE` needs a DESKTOP build and is missing on many
+# firmware busybox configurations, which silently reported everything stale.
 file_age() {
-	local f="$1"
-	if [ -f "$f" ] && date -r "$f" +%s >/dev/null 2>&1; then
-		echo $((now - $(date -r "$f" +%s)))
+	local f="$1" mtime
+	mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null) ||
+		mtime=$(date -r "$f" +%s 2>/dev/null) || mtime=
+	if [ -n "$mtime" ]; then
+		echo $((now - mtime))
 	else
 		echo -1
 	fi

@@ -174,7 +174,7 @@ return view.extend({
 				if (ev.city || ev.country_code)
 					where = (ev.city || '') + (ev.country_code ? ' (' + ev.country_code + ')' : '');
 				else if (ev.latitude != null && ev.longitude != null)
-					where = ev.latitude.toFixed(4) + ', ' + ev.longitude.toFixed(4);
+					where = Number(ev.latitude).toFixed(4) + ', ' + Number(ev.longitude).toFixed(4);
 				return E('tr', { class: 'tr' }, [
 					E('td', { class: 'td' }, fmtTime(ev.time)),
 					E('td', { class: 'td' }, eventLabel(ev.type)),

@@ -78,8 +78,14 @@ return view.extend({
 			row(wlocBody, wlocI18n.t('Socket'), yesNo(!!w.socket));
 			row(wlocBody, wlocI18n.t('Status file'), statusDot(!!w.status_fresh, w.status_fresh ? wlocI18n.t('Fresh') : wlocI18n.t('Stale')));
 			row(wlocBody, wlocI18n.t('Phase'), w.phase || '-');
-			row(wlocBody, wlocI18n.t('Exit probe'), statusDot(w.exit === 'verified', w.exit || '-'));
-			row(wlocBody, wlocI18n.t('Geo'), statusDot(w.geo === 'fresh', w.geo || '-'));
+			// Manual mode reports exit/geo as "manual" (a healthy state -
+			// probing is skipped by design), so show it green, not as an error.
+			var exitOk = (w.exit === 'verified' || w.exit === 'manual');
+			var exitText = (w.exit === 'manual') ? wlocI18n.t('Manual location') : (w.exit || '-');
+			var geoOk = (w.geo === 'fresh' || w.geo === 'manual');
+			var geoText = (w.geo === 'manual') ? wlocI18n.t('Manual location') : (w.geo || '-');
+			row(wlocBody, wlocI18n.t('Exit probe'), statusDot(exitOk, exitText));
+			row(wlocBody, wlocI18n.t('Geo'), statusDot(geoOk, geoText));
 
 			// gateway
 			row(gwBody, wlocI18n.t('Monitor'), statusDot(!!g.running, g.running ? wlocI18n.t('Running') : wlocI18n.t('Stopped')));

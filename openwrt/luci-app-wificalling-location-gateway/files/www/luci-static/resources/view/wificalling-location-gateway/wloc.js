@@ -80,8 +80,13 @@ return view.extend({
 		// sub-100ms): the profile link must work even before anyone clicks
 		// "Regenerate profile", otherwise a fresh install - or a secondary
 		// router without DHCP - shows a dead /wloc-ca.mobileconfig link.
-		var autoRegen = regenProfile().then(function(r) { return r; },
-			function(e) { return { error: String(e) }; });
+		var autoRegen = Promise.race([
+			regenProfile().then(function(r) { return r; },
+				function(e) { return { error: String(e) }; }),
+			// A stalled openssl/export must not blank the whole settings page:
+			// race the regen against a bounded wait and render without it.
+			new Promise(function(resolve) { setTimeout(function() { resolve({}); }, 5000); })
+		]);
 		return Promise.all([
 			L.resolveDefault(fs.read(STATUS_FILE), '{}'),
 			L.resolveDefault(fs.read(EVENTS_FILE), ''),
@@ -128,6 +133,10 @@ return view.extend({
 			callCtl(on ? 'enable' : 'disable', null, null, null).then(function(r) {
 				if (r.error) {
 					notify(wlocI18n.t('Switch failed'), r.error);
+					// The daemon-level failure must not leave the checkbox
+					// showing the new state: the user could otherwise persist
+					// a phantom enabled/disabled value via Save & Apply.
+					if (ev && ev.target) ev.target.checked = !on;
 					return;
 				}
 				uci.set('wloc-service', 'main', 'enabled', on ? '1' : '0');
@@ -155,9 +164,15 @@ return view.extend({
 			var main = uci.get('wloc-service', 'main');
 			var manualLat = main && main.manual_lat;
 			var manualLon = main && main.manual_lon;
+			// The form framework cannot revert a ListValue from onchange, so
+			// every failure path resets the select explicitly.
+			var revert = function() {
+				if (ev && ev.target) ev.target.value = (value === 'manual') ? 'auto' : 'manual';
+			};
 			if (value === 'manual' && (!manualLat || !manualLon)) {
 				notify(wlocI18n.t('Mode switch failed'),
 					wlocI18n.t('Enter and apply manual coordinates first.'));
+				revert();
 				return Promise.resolve(false);
 			}
 			return callCtl('mode-set', value,
@@ -165,6 +180,7 @@ return view.extend({
 				value === 'manual' ? manualLon : null).then(function(response) {
 				if (response && response.error) {
 					notify(wlocI18n.t('Mode switch failed'), response.error);
+					revert();
 					return false;
 				}
 				// The backend mode-set already persisted geo_source (and the
@@ -175,6 +191,7 @@ return view.extend({
 				return true;
 			}).catch(function(e) {
 				notify(wlocI18n.t('Mode switch failed'), String(e));
+				revert();
 				return false;
 			});
 		};
@@ -332,16 +349,24 @@ return view.extend({
 				notify(wlocI18n.t('Apply failed'), wlocI18n.t('Preset has no coordinates.'));
 				return;
 			}
-			uci.set('wloc-service', 'main', 'manual_lat', s.latitude);
-			uci.set('wloc-service', 'main', 'manual_lon', s.longitude);
-			uci.set('wloc-service', 'main', 'geo_source', 'manual');
-			uci.save('wloc-service').then(function() {
-				return ui.changes.apply(true);
-			}).then(function() {
-				return callCtl('geo-set', null, s.latitude, s.longitude);
-			}).then(function(r) {
-				if (r && r.error) notify(wlocI18n.t('Apply failed'), r.error);
-				else notify(wlocI18n.t('Applied'), wlocI18n.t('Preset is now the active location.'));
+			// Apply through the daemon FIRST and persist only on success: the
+			// reverse order (config-first) would leave UCI claiming "manual"
+			// while the daemon still runs the old target after a failure.
+			callCtl('geo-set', null, s.latitude, s.longitude).then(function(r) {
+				if (r && r.error) {
+					notify(wlocI18n.t('Apply failed'), r.error);
+					return;
+				}
+				uci.set('wloc-service', 'main', 'manual_lat', s.latitude);
+				uci.set('wloc-service', 'main', 'manual_lon', s.longitude);
+				uci.set('wloc-service', 'main', 'geo_source', 'manual');
+				uci.save('wloc-service').then(function() {
+					return ui.changes.apply(true);
+				}).then(function() {
+					notify(wlocI18n.t('Applied'), wlocI18n.t('Preset is now the active location.'));
+				}).catch(function(e) {
+					notify(wlocI18n.t('Apply failed'), String(e));
+				});
 			}).catch(function(e) {
 				notify(wlocI18n.t('Apply failed'), String(e));
 			});
@@ -416,6 +441,9 @@ return view.extend({
 								renderPresets();
 								notify(wlocI18n.t('Applied'), wlocI18n.t('Preset saved.'));
 							}).catch(function(e) {
+								// Close the modal or the error toast renders
+								// underneath it and the dialog hangs.
+								ui.hideModal();
 								notify(wlocI18n.t('Apply failed'), String(e));
 							});
 						} }, _('Save'))

@@ -16,8 +16,7 @@ function main() {
 	const root = path.resolve(__dirname, '..', '..');
 	const overviewSources = [
 		'openwrt/files/www/luci-static/resources/view/wificalling-gateway/overview.js',
-		'openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-gateway/overview.js',
-		'openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/overview.js'
+		'openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-gateway/overview.js'
 	];
 	const i18nSources = [
 		'openwrt/files/www/luci-static/resources/wificalling-location-gateway/i18n.js',

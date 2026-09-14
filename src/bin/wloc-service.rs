@@ -222,10 +222,12 @@ fn write_proxy_health(path: &Path, health: &ProxyHealth) -> std::io::Result<()> 
         "last_failure": health.last_failure,
         "failures": health.failures,
     });
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, serde_json::to_string(&snapshot).unwrap_or_default())
+    wificalling_location_gateway::service::write_atomic(
+        path,
+        serde_json::to_string(&snapshot)
+            .unwrap_or_default()
+            .as_bytes(),
+    )
 }
 
 /// A health file belongs to one daemon lifetime; never inherit a stopped
@@ -336,8 +338,14 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let uci = match WlocUciConfig::load(Path::new(&uci_path)) {
         Ok(config) => config,
         Err(error) => {
-            eprintln!("wloc-service: {error}; using defaults");
-            WlocUciConfig::default()
+            // A corrupt/unreadable config must never resurrect interception:
+            // fail closed with interception disabled (the startup reconcile
+            // below then withdraws any redirect a previous life installed).
+            eprintln!("wloc-service: {error}; fail-closed defaults (disabled)");
+            WlocUciConfig {
+                enabled: false,
+                ..WlocUciConfig::default()
+            }
         }
     };
     // The device whose node binding the location follows. It is normally
@@ -431,7 +439,30 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         CaBundle::load(&key_der, &cert_der)?
     } else {
         let ca = CaBundle::generate()?;
-        std::fs::write(&ca_key_path, ca.export_key_der())?;
+        // The key must be 0600 from creation, not after a world-readable
+        // write window.
+        {
+            #[cfg(unix)]
+            fn key_writer(path: &Path) -> std::io::Result<std::fs::File> {
+                use std::os::unix::fs::OpenOptionsExt;
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .mode(0o600)
+                    .open(path)
+            }
+            #[cfg(not(unix))]
+            fn key_writer(path: &Path) -> std::io::Result<std::fs::File> {
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(path)
+            }
+            use std::io::Write;
+            key_writer(Path::new(&ca_key_path))?.write_all(&ca.export_key_der())?;
+        }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -443,6 +474,12 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         eprintln!("MITM root CA generated; export at {ca_path} (install on the test device)");
         ca
     };
+    #[cfg(unix)]
+    {
+        // Repair permissions on a key left loose by an older version.
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&ca_key_path, std::fs::Permissions::from_mode(0o600));
+    }
     eprintln!("MITM root CA ready (private key: {ca_key_path})");
     // Expose the CA basics (fingerprint, issue/expiry) for the admin UI.
     let ca_info = serde_json::json!({
@@ -549,6 +586,14 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
         if !enabled {
             eprintln!("wloc-service: automatic location target is unavailable");
+        }
+    } else {
+        // Reconcile a stale redirect a previous life may have installed: a
+        // crash while enabled followed by an out-of-band UCI flip to 0, or a
+        // procd respawn (which does not re-run the init stop cleanup), must
+        // not keep TPROXY + DNS hijack alive while the config says disabled.
+        if let Err(error) = service.disable() {
+            eprintln!("wloc-service: reconcile disable failed: {error:?}");
         }
     }
 
