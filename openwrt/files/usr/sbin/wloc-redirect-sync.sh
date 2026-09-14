@@ -80,6 +80,11 @@ fi
 
 [ -n "$ips" ] || {
     echo "wloc-redirect-sync: no devices in the gateway device policy" >&2
+    # Fail-open on an empty scope: a sync without devices must withdraw the
+    # state installed for a previously bound device (rule, route, nft table,
+    # DNS hijack). Deleting the last device or stopping the service must never
+    # leave a stale static route table entry behind.
+    "$0" stop >/dev/null 2>&1 || true
     exit 1
 }
 for ip in $ips; do
