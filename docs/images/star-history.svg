@@ -11,25 +11,25 @@
 <text x="40" y="22.0" font-size="11" fill="#1f2328" text-anchor="end">300</text>
 <line x1="48.0" y1="18" x2="48.0" y2="304" stroke="#eaeef2"/>
 <text x="48.0" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-09</text>
-<line x1="155.3" y1="18" x2="155.3" y2="304" stroke="#eaeef2"/>
-<text x="155.3" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-14</text>
-<line x1="262.6" y1="18" x2="262.6" y2="304" stroke="#eaeef2"/>
-<text x="262.6" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-19</text>
-<line x1="369.9" y1="18" x2="369.9" y2="304" stroke="#eaeef2"/>
-<text x="369.9" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-24</text>
-<line x1="477.2" y1="18" x2="477.2" y2="304" stroke="#eaeef2"/>
-<text x="477.2" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-29</text>
-<line x1="584.5" y1="18" x2="584.5" y2="304" stroke="#eaeef2"/>
-<text x="584.5" y="322" font-size="11" fill="#1f2328" text-anchor="middle">09-03</text>
-<line x1="691.8" y1="18" x2="691.8" y2="304" stroke="#eaeef2"/>
-<text x="691.8" y="322" font-size="11" fill="#1f2328" text-anchor="middle">09-08</text>
-<line x1="799.1" y1="18" x2="799.1" y2="304" stroke="#eaeef2"/>
-<text x="799.1" y="322" font-size="11" fill="#1f2328" text-anchor="middle">09-13</text>
+<line x1="152.5" y1="18" x2="152.5" y2="304" stroke="#eaeef2"/>
+<text x="152.5" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-14</text>
+<line x1="256.9" y1="18" x2="256.9" y2="304" stroke="#eaeef2"/>
+<text x="256.9" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-19</text>
+<line x1="361.4" y1="18" x2="361.4" y2="304" stroke="#eaeef2"/>
+<text x="361.4" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-24</text>
+<line x1="465.9" y1="18" x2="465.9" y2="304" stroke="#eaeef2"/>
+<text x="465.9" y="322" font-size="11" fill="#1f2328" text-anchor="middle">08-29</text>
+<line x1="570.4" y1="18" x2="570.4" y2="304" stroke="#eaeef2"/>
+<text x="570.4" y="322" font-size="11" fill="#1f2328" text-anchor="middle">09-03</text>
+<line x1="674.8" y1="18" x2="674.8" y2="304" stroke="#eaeef2"/>
+<text x="674.8" y="322" font-size="11" fill="#1f2328" text-anchor="middle">09-08</text>
+<line x1="779.3" y1="18" x2="779.3" y2="304" stroke="#eaeef2"/>
+<text x="779.3" y="322" font-size="11" fill="#1f2328" text-anchor="middle">09-13</text>
 <line x1="48" y1="304" x2="842" y2="304" stroke="#d0d7de"/>
 <line x1="48" y1="18" x2="48" y2="304" stroke="#d0d7de"/>
-<path d="M48 304 L112.4 304.0 L133.8 298.3 L155.3 195.3 L176.8 159.1 L198.2 154.3 L219.7 151.5 L241.1 146.7 L262.6 139.1 L284.1 132.4 L305.5 128.6 L327.0 122.9 L348.4 121.0 L369.9 114.3 L391.4 112.4 L412.8 111.4 L434.3 109.5 L455.7 107.6 L477.2 103.8 L498.6 101.9 L520.1 99.0 L541.6 99.0 L563.0 99.0 L584.5 98.1 L605.9 98.1 L627.4 98.1 L648.9 98.1 L670.3 95.2 L691.8 95.2 L713.2 95.2 L734.7 94.3 L756.2 93.3 L777.6 91.4 L777.6 304 Z" fill="#ddf4ff"/>
-<path d="M112.4 304.0 L133.8 298.3 L155.3 195.3 L176.8 159.1 L198.2 154.3 L219.7 151.5 L241.1 146.7 L262.6 139.1 L284.1 132.4 L305.5 128.6 L327.0 122.9 L348.4 121.0 L369.9 114.3 L391.4 112.4 L412.8 111.4 L434.3 109.5 L455.7 107.6 L477.2 103.8 L498.6 101.9 L520.1 99.0 L541.6 99.0 L563.0 99.0 L584.5 98.1 L605.9 98.1 L627.4 98.1 L648.9 98.1 L670.3 95.2 L691.8 95.2 L713.2 95.2 L734.7 94.3 L756.2 93.3 L777.6 91.4" fill="none" stroke="#0969da" stroke-width="2"/>
-<circle cx="777.6" cy="91.4" r="3.5" fill="#0969da"/>
-<text x="768.6" y="85.4" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">223</text>
-<text x="768.6" y="101.4" font-size="11" fill="#1f2328" text-anchor="end">stars</text>
+<path d="M48 304 L110.7 304.0 L131.6 298.3 L152.5 195.3 L173.4 159.1 L194.3 154.3 L215.2 151.5 L236.1 146.7 L256.9 139.1 L277.8 132.4 L298.7 128.6 L319.6 122.9 L340.5 121.0 L361.4 114.3 L382.3 112.4 L403.2 111.4 L424.1 109.5 L445.0 107.6 L465.9 103.8 L486.8 101.9 L507.7 99.0 L528.6 99.0 L549.5 99.0 L570.4 98.1 L591.3 98.1 L612.2 98.1 L633.1 98.1 L653.9 95.2 L674.8 95.2 L695.7 95.2 L716.6 94.3 L737.5 93.3 L758.4 91.4 L779.3 90.5 L779.3 304 Z" fill="#ddf4ff"/>
+<path d="M110.7 304.0 L131.6 298.3 L152.5 195.3 L173.4 159.1 L194.3 154.3 L215.2 151.5 L236.1 146.7 L256.9 139.1 L277.8 132.4 L298.7 128.6 L319.6 122.9 L340.5 121.0 L361.4 114.3 L382.3 112.4 L403.2 111.4 L424.1 109.5 L445.0 107.6 L465.9 103.8 L486.8 101.9 L507.7 99.0 L528.6 99.0 L549.5 99.0 L570.4 98.1 L591.3 98.1 L612.2 98.1 L633.1 98.1 L653.9 95.2 L674.8 95.2 L695.7 95.2 L716.6 94.3 L737.5 93.3 L758.4 91.4 L779.3 90.5" fill="none" stroke="#0969da" stroke-width="2"/>
+<circle cx="779.3" cy="90.5" r="3.5" fill="#0969da"/>
+<text x="770.3" y="84.5" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">224</text>
+<text x="770.3" y="100.5" font-size="11" fill="#1f2328" text-anchor="end">stars</text>
 </svg>
