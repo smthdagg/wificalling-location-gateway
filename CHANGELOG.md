@@ -2,6 +2,35 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r15] - 2026-09-14
+
+Shadowsocks proxy node support on the proven integrated 1.3.0-r1 Gateway
+baseline (external contribution by Peter-So, reviewed and security-hardened;
+the out-of-band v1.3.0-r14 IPv6 release was withdrawn).
+
+- The Gateway compiler, subscription importer and LuCI UI accept
+  `shadowsocks` nodes, reusing the generic credential/auxiliary slots
+  (f[6]/f[10]) for password/method with no TLS/transport arm.
+- Import supports SIP002 (base64url), legacy and cleartext forms; `plugin=`
+  links are rejected.
+- Ciphers are validated against the pinned sing-box 1.12 set at import,
+  LuCI validation and compile time: an unsupported cipher previously passed
+  through and made sing-box reject the entire config, taking every other
+  node down.
+- No IPv6 interception: the IPv4-first contract and its tests are unchanged.
+
+### 中文说明
+
+在已验证的 1.3.0-r1 整合 Gateway 基线上新增 Shadowsocks 节点支持（外部贡献
+Peter-So，经评审与安全加固；此前带外发布的 v1.3.0-r14 IPv6 版本已撤回）。
+
+- 编译、订阅导入与 LuCI 界面支持 `shadowsocks` 节点，复用通用槽位
+  （f[6]/f[10]）承载密码与加密方式，无 TLS/传输层。
+- 导入支持 SIP002（base64url）、legacy 与明文三种格式；拒绝 `plugin=` 链接。
+- 加密方式按固定 sing-box 1.12 支持集在导入、LuCI 校验与编译三层校验：
+  不受支持的加密方式此前会穿透并被 sing-box 整体拒载，连累所有节点。
+- 不启用 IPv6 拦截：IPv4 优先契约及其测试保持不变。
+
 ## [1.3.0-r13] - 2026-08-29
 
 Replaces the flat 32/64 MiB start-time memory thresholds with a computed
