@@ -335,7 +335,7 @@ return view.extend({
 		// title; showing the label field again would duplicate it.
 		nodeLabel.modalonly = true;
 		var p = s.option(form.ListValue, 'protocol', wlocI18n.t('Protocol'));
-		['anytls','hysteria2','tuic','vless','vmess','trojan','wireguard'].forEach(function(x) { p.value(x); });
+		['anytls','hysteria2','tuic','vless','vmess','trojan','wireguard','shadowsocks'].forEach(function(x) { p.value(x); });
 		s.option(form.Value, 'server', wlocI18n.t('Server')).datatype = 'host';
 		s.option(form.Value, 'port', wlocI18n.t('Port')).datatype = 'port';
 		var nodeStatus = s.option(form.DummyValue, '_node_status', wlocI18n.t('Node status'));
@@ -359,6 +359,19 @@ return view.extend({
 		var uuidField = s.option(form.Value, 'uuid', wlocI18n.t('UUID'));
 		uuidField.password = true; uuidField.textvalue = function(id) { return this.cfgvalue(id) ? wlocI18n.t('Set') : wlocI18n.t('Not set'); };
 		uuidField.modalonly = true;
+		// Shadowsocks cipher.  The field is free text only because the pinned
+		// sing-box version defines the supported set; validation below rejects
+		// anything it cannot load, since sing-box refuses the whole config
+		// (and every node with it) on an unsupported cipher.
+		var methodOpt = s.option(form.Value, 'method', wlocI18n.t('Shadowsocks method'));
+		methodOpt.placeholder = 'aes-256-gcm';
+		methodOpt.modalonly = true;
+		var ssMethods = ['aes-128-gcm','aes-192-gcm','aes-256-gcm','chacha20-ietf-poly1305','xchacha20-ietf-poly1305','2022-blake3-aes-128-gcm','2022-blake3-aes-256-gcm','2022-blake3-chacha20-poly1305'];
+		methodOpt.validate = function(section_id, value) {
+			if (uci.get('wificalling-gateway', section_id, 'protocol') != 'shadowsocks')
+				return true;
+			return (ssMethods.indexOf(value || '') >= 0) ? true : wlocI18n.t('Unsupported Shadowsocks encryption method');
+		};
 		var sniOpt = s.option(form.Value, 'sni', wlocI18n.t('TLS server name'));
 		sniOpt.modalonly = true;
 		var securityOpt = s.option(form.ListValue, 'security', wlocI18n.t('Security'));
