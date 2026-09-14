@@ -54,8 +54,22 @@ grep -q '"source_ip_cidr":\["192.168.1.100/32"\],"action":"route","outbound":"no
 	exit 1
 }
 
-# 2. An empty cipher must fail the whole compile, not emit a broken outbound
-#    that would make sing-box reject every other node with it.
+# 2. An unsupported cipher must fail the whole compile with an explicit
+#    message, not emit an outbound that would make sing-box reject the entire
+#    config and take every other node down with it.
+if write_node 'rc4-md5' && sh "$compiler" "$normalized" "$output" 2>/dev/null; then
+	echo 'FAIL: unsupported cipher must abort the compile' >&2
+	exit 1
+fi
+write_node 'rc4-md5'
+sh "$compiler" "$normalized" "$output" 2>&1 | grep -F 'uses an unsupported encryption method' >/dev/null || {
+	echo 'FAIL: unsupported cipher must fail with an explicit message' >&2
+	exit 1
+}
+
+# 3. An empty cipher must fail the whole compile with an explicit message,
+#    not emit a broken outbound that would make sing-box reject every other
+#    node with it.
 write_node ''
 if sh "$compiler" "$normalized" "$work/rejected.json" 2>"$work/err"; then
 	echo 'FAIL: compiler accepted a shadowsocks node without a cipher' >&2

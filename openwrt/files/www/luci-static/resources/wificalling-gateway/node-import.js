@@ -123,6 +123,10 @@ function parseVmess(uri) {
 // ss://<base64url(method:password)>@host:port#label  (SIP002), or the legacy
 // ss://<base64(method:password@host:port)>#label.  Both forms appear in the
 // wild, sometimes with the userinfo left in cleartext.
+// sing-box 1.12 (the pinned runtime) supports exactly these shadowsocks
+// ciphers; anything else would make it reject the entire generated config.
+var SS_METHODS = ['aes-128-gcm','aes-192-gcm','aes-256-gcm','chacha20-ietf-poly1305','xchacha20-ietf-poly1305','2022-blake3-aes-128-gcm','2022-blake3-aes-256-gcm','2022-blake3-chacha20-poly1305'];
+
 function parseShadowsocks(uri) {
 	var body = uri.slice(uri.indexOf('://') + 3).trim();
 	var at = body.indexOf('#');
@@ -150,6 +154,10 @@ function parseShadowsocks(uri) {
 	var server = hostport.slice(0, at).replace(/^\[|\]$/g, ''), port = hostport.slice(at + 1);
 	if (!server || !/^[0-9]+$/.test(port)) throw new Error(_('Server and port are required'));
 	if (!method || !password) throw new Error(_('Shadowsocks method and password are required'));
+	// An unsupported cipher would be emitted into the outbound and make
+	// sing-box reject the whole config, taking every other node down with it.
+	if (SS_METHODS.indexOf(method) < 0)
+		throw new Error(_('Unsupported Shadowsocks encryption method: ') + method);
 	return {
 		enabled: '1', protocol: 'shadowsocks', server: server, port: port,
 		method: method, password: password, label: label || 'SS ' + server

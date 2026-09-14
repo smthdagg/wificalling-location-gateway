@@ -40,6 +40,7 @@ $1=="node" {
   # Shadowsocks carries no TLS/transport layer: the cipher is the only extra
   # field, and an empty one makes sing-box reject the whole config at load.
   if (proto=="shadowsocks" && $10=="") fail("shadowsocks node " id " is missing the encryption method")
+  if (proto=="shadowsocks" && $10!="" && $10 !~ /^(aes-128-gcm|aes-192-gcm|aes-256-gcm|chacha20-ietf-poly1305|xchacha20-ietf-poly1305|2022-blake3-aes-128-gcm|2022-blake3-aes-256-gcm|2022-blake3-chacha20-poly1305)$/) fail("shadowsocks node " id " uses an unsupported encryption method: " $10)
   if (proto=="wireguard") {
     if ($21=="" || $13=="" || $22=="") fail("wireguard node " id " is missing private_key, peer_public_key or local_address")
     if ($23!="" && $23 !~ /^[0-9]+(,[0-9]+)*$/) fail("wireguard node " id " reserved must be comma-separated numbers: " $23)

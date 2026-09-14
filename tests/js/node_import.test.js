@@ -108,6 +108,15 @@ function main() {
 	const colonPw = Buffer.from('aes-256-gcm:se:cret').toString('base64').replace(/=+$/, '');
 	assert.strictEqual(parser.parse('ss://' + colonPw + '@example.test:8388').password, 'se:cret');
 
+	// A cipher sing-box 1.12 can actually load is accepted by name.
+	assert.strictEqual(parser.parse('ss://' + Buffer.from('chacha20-ietf-poly1305:secret').toString('base64').replace(/=+$/, '') + '@example.test:8388').method, 'chacha20-ietf-poly1305');
+
+	// An unsupported cipher would make sing-box reject the whole config:
+	// the import must refuse it up front with a clear error.
+	assert.throws(function() {
+		parser.parse('ss://' + Buffer.from('rc4-md5:secret').toString('base64').replace(/=+$/, '') + '@example.test:8388');
+	}, /Unsupported Shadowsocks/, 'unsupported ciphers must be rejected at import');
+
 	// Plugins change the wire format; importing one silently would produce a
 	// node that looks configured and never connects.
 	assert.throws(function() {

@@ -190,6 +190,10 @@ var ZH = {
 	/* ---- wfc settings (overview) ---- */
 	/* ---- shadowsocks ---- */
 	'Shadowsocks method': 'Shadowsocks 加密方式',
+	'Shadowsocks method': 'Shadowsocks 加密方式',
+	'Shadowsocks requires an encryption method': 'Shadowsocks 需要加密方式',
+	'Unsupported Shadowsocks encryption method': '不支持的 Shadowsocks 加密方式',
+	'Unsupported Shadowsocks encryption method: ': '不支持的 Shadowsocks 加密方式：',
 	'Shadowsocks requires an encryption method': 'Shadowsocks 必须填写加密方式',
 	'Shadowsocks method and password are required': 'Shadowsocks 的加密方式与密码不能为空',
 	'Shadowsocks plugins (obfs, v2ray-plugin) are not supported': '不支持带插件的 Shadowsocks 节点（obfs、v2ray-plugin）',

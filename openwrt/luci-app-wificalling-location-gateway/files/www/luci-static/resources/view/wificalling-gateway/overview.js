@@ -359,18 +359,18 @@ return view.extend({
 		var uuidField = s.option(form.Value, 'uuid', wlocI18n.t('UUID'));
 		uuidField.password = true; uuidField.textvalue = function(id) { return this.cfgvalue(id) ? wlocI18n.t('Set') : wlocI18n.t('Not set'); };
 		uuidField.modalonly = true;
-		// Shadowsocks cipher.  A free-text field on purpose: subscriptions ship
-		// ciphers outside any fixed list, and a ListValue would silently drop
-		// an imported value it does not know about.
+		// Shadowsocks cipher.  The field is free text only because the pinned
+		// sing-box version defines the supported set; validation below rejects
+		// anything it cannot load, since sing-box refuses the whole config
+		// (and every node with it) on an unsupported cipher.
 		var methodOpt = s.option(form.Value, 'method', wlocI18n.t('Shadowsocks method'));
 		methodOpt.placeholder = 'aes-256-gcm';
 		methodOpt.modalonly = true;
-		// sing-box refuses to load a shadowsocks outbound without a cipher, and
-		// a rejected config takes down every other node with it.
+		var ssMethods = ['aes-128-gcm','aes-192-gcm','aes-256-gcm','chacha20-ietf-poly1305','xchacha20-ietf-poly1305','2022-blake3-aes-128-gcm','2022-blake3-aes-256-gcm','2022-blake3-chacha20-poly1305'];
 		methodOpt.validate = function(section_id, value) {
 			if (uci.get('wificalling-gateway', section_id, 'protocol') != 'shadowsocks')
 				return true;
-			return (value || '').length ? true : wlocI18n.t('Shadowsocks requires an encryption method');
+			return (ssMethods.indexOf(value || '') >= 0) ? true : wlocI18n.t('Unsupported Shadowsocks encryption method');
 		};
 		var sniOpt = s.option(form.Value, 'sni', wlocI18n.t('TLS server name'));
 		sniOpt.modalonly = true;
