@@ -25,9 +25,10 @@ function normalizeLink(value) {
 
 function common(protocol, url) {
 	if (!url.hostname || !url.port) throw new Error(_('Server and port are required'));
+	var label = url.searchParams.get('remarks') || url.searchParams.get('remark') || '';
 	return {
 		enabled: '1', protocol: protocol, server: url.hostname, port: url.port,
-		label: decodeLabel(url.hash.replace(/^#/, '')) || protocol.toUpperCase() + ' ' + url.hostname
+		label: decodeLabel(url.hash.replace(/^#/, '')) || decodeLabel(label) || protocol.toUpperCase() + ' ' + url.hostname
 	};
 }
 
@@ -71,6 +72,8 @@ function parseUrl(uri, protocol) {
 		if (!out.flow && p.get('xtls') === '2') out.flow = 'xtls-rprx-vision';
 		out.fingerprint = p.get('fp') || p.get('fingerprint') || 'chrome';
 		var vless_type = p.get('type') || '';
+		var legacy_obfs = (p.get('obfs') || '').toLowerCase();
+		if (!vless_type && (legacy_obfs === 'websocket' || legacy_obfs === 'ws')) vless_type = 'ws';
 		if (vless_type === 'xhttp') {
 			// XHTTP is a clash/mihomo transport; sing-box has no xhttp
 			// transport, so the node would never connect here.
@@ -78,7 +81,7 @@ function parseUrl(uri, protocol) {
 		}
 		if (vless_type === 'ws' || vless_type === 'grpc' || vless_type === 'httpupgrade') {
 			out.transport = vless_type;
-			out.host = p.get('host') || '';
+			out.host = p.get('host') || p.get('obfsParam') || p.get('obfs_param') || '';
 			// grpc carries no path; its service_name goes in the path slot
 			// (the UCI/normalized.conf layout has no separate field).
 			out.path = (vless_type === 'grpc')
@@ -179,7 +182,7 @@ function parse(uri) {
 		if (authority.indexOf('@') < 0) {
 			try {
 				var decodedAuthority = decodeBase64(authority);
-				var legacyAuthority = decodedAuthority.match(/^(?:auto:|:)([^@]+)@(.+)$/);
+			var legacyAuthority = decodedAuthority.match(/^(?:(?:auto|none):|:)([^@]+)@(.+)$/);
 				if (legacyAuthority) {
 					value = 'vless://' + encodeURIComponent(legacyAuthority[1]) + '@' + legacyAuthority[2] +
 						(queryStart < 0 ? '' : value.slice(queryStart));

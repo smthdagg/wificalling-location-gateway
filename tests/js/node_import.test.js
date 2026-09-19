@@ -49,6 +49,23 @@ function main() {
 	assert.strictEqual(emptyPrefixResult.server, 'example.test');
 	assert.strictEqual(emptyPrefixResult.port, '443');
 
+	const legacyWebsocketAuthority = Buffer.from('none:uuid@example.test:2083').toString('base64').replace(/=+$/, '');
+	const legacyWebsocket = parser.parse(
+		'vless\\://' + legacyWebsocketAuthority +
+		'?path=/3d6a5589&remarks=%5BUK%5D%20relay&obfsParam=cdn.example&obfs=websocket' +
+		'&tls=1&peer=cdn.example&udp=1&fingerprint=chrome'
+	);
+	assert.strictEqual(legacyWebsocket.uuid, 'uuid');
+	assert.strictEqual(legacyWebsocket.server, 'example.test');
+	assert.strictEqual(legacyWebsocket.port, '2083');
+	assert.strictEqual(legacyWebsocket.label, '[UK] relay');
+	assert.strictEqual(legacyWebsocket.security, 'tls');
+	assert.strictEqual(legacyWebsocket.sni, 'cdn.example');
+	assert.strictEqual(legacyWebsocket.transport, 'ws');
+	assert.strictEqual(legacyWebsocket.path, '/3d6a5589');
+	assert.strictEqual(legacyWebsocket.host, 'cdn.example');
+	assert.strictEqual(legacyWebsocket.fingerprint, 'chrome');
+
 	const commonCases = [
 		['anytls://user:secret@example.test:443?peer=example.test', { protocol: 'anytls', password: 'secret', sni: 'example.test' }],
 		['hysteria2://user:secret@example.test:443?sni=example.test', { protocol: 'hysteria2', password: 'secret', sni: 'example.test' }],
