@@ -43,6 +43,14 @@ function verifyFaqUsesLocalization(sourcePath) {
 		`${sourcePath}: FAQ must invoke the shared tab localizer`);
 }
 
+function verifyFaqCopiesMatch(faqSources, root) {
+	const canonical = fs.readFileSync(path.join(root, faqSources[0]), 'utf8');
+	faqSources.slice(1).forEach(function(relative) {
+		assert.strictEqual(fs.readFileSync(path.join(root, relative), 'utf8'), canonical,
+			`${relative}: packaged FAQ must match the source FAQ exactly`);
+	});
+}
+
 function main() {
 	const root = path.resolve(__dirname, '..', '..');
 	const i18nSources = [
@@ -59,6 +67,7 @@ function main() {
 	faqSources.forEach(function(relative) {
 		verifyFaqUsesLocalization(path.join(root, relative));
 	});
+	verifyFaqCopiesMatch(faqSources, root);
 	console.log('tab localization tests passed');
 }
 
