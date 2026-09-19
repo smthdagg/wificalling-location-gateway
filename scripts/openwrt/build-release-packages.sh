@@ -254,7 +254,7 @@ wait_for_managed_processes() {
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 wait_for_managed_processes || exit 1
-rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256 /tmp/sing-box-lite.new.* /tmp/node-health-*
+rm -f /tmp/wloc-sing-box-lite-* /tmp/.wloc-sing-box-lite-*.lock /tmp/node-health-*
 exit 0
 endef
 define Package/wificalling-location-gateway/prerm
@@ -284,7 +284,7 @@ wait_for_managed_processes() {
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 wait_for_managed_processes || exit 1
-rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256 /tmp/sing-box-lite.new.* /tmp/node-health-*
+rm -f /tmp/wloc-sing-box-lite-* /tmp/.wloc-sing-box-lite-*.lock /tmp/node-health-*
 exit 0
 endef
 define Package/wificalling-location-gateway/postinst
@@ -297,7 +297,45 @@ done
 /etc/init.d/wloc-service enable >/dev/null 2>&1 || true
 mkdir -p /var/run/wificalling-gateway
 chmod 0700 /var/run/wificalling-gateway
+recover_shared_lite_runtime() {
+  [ -e /tmp/sing-box-lite ] && return 0
+  stale=0
+  for cmdline in /proc/[0-9]*/cmdline; do
+    [ -r "\$\$cmdline" ] || continue
+    command_line=\$\$(tr '\000' ' ' < "\$\$cmdline" 2>/dev/null || true)
+    printf '%s' "\$\$command_line" | grep -F '/tmp/sing-box-lite' >/dev/null && stale=1
+  done
+  [ "\$\$stale" -eq 1 ] || return 0
+  for service in /etc/init.d/passwall /etc/init.d/passwall2; do
+    [ -x "\$\$service" ] || continue
+    "\$\$service" restart >/dev/null 2>&1 || logger -t wificalling-location-gateway 'PassWall runtime recovery failed during package install'
+    return 0
+  done
+  logger -t wificalling-location-gateway 'PassWall holds a deleted Lite runtime but no restart service is available'
+}
+recover_shared_lite_runtime
 /etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || { logger -t wificalling-location-gateway 'Gateway failed to start after package install'; exit 1; }
+gateway_instance_ready() {
+  [ "\$(/etc/init.d/wificalling-gateway status 2>/dev/null)" = running ] || return 1
+  proxy=0
+  monitor=0
+  for cmdline in /proc/[0-9]*/cmdline; do
+    [ -r "\$\$cmdline" ] || continue
+    command_line=\$\$(tr '\000' ' ' < "\$\$cmdline" 2>/dev/null || true)
+    printf '%s' "\$\$command_line" | grep -F '/var/run/wificalling-gateway/sing-box.json' >/dev/null && proxy=1
+    printf '%s' "\$\$command_line" | grep -F '/usr/libexec/wificalling-gateway/monitor-loop.sh' >/dev/null && monitor=1
+  done
+  [ "\$\$proxy" -eq 1 ] && [ "\$\$monitor" -eq 1 ]
+}
+gateway_enabled=\$\$(uci -q get wificalling-gateway.main.enabled 2>/dev/null || echo 0)
+if [ "\$\$gateway_enabled" = 1 ]; then
+  i=0
+  while [ "\$\$i" -lt 10 ] && ! gateway_instance_ready; do
+    sleep 1
+    i=\$\$((i + 1))
+  done
+  gateway_instance_ready || { logger -t wificalling-location-gateway 'Gateway has no running proxy and monitor after package install'; exit 1; }
+fi
 /etc/init.d/wloc-service restart >/dev/null 2>&1 || { logger -t wificalling-location-gateway 'WLOC failed to start after package install'; exit 1; }
 rm -f /tmp/luci-indexcache.*
 /etc/init.d/rpcd reload >/dev/null 2>&1 || true
@@ -368,7 +406,7 @@ wait_for_managed_processes() {
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 wait_for_managed_processes || exit 1
-rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256 /tmp/sing-box-lite.new.* /tmp/node-health-*
+rm -f /tmp/wloc-sing-box-lite-* /tmp/.wloc-sing-box-lite-*.lock /tmp/node-health-*
 exit 0
 endef
 define Package/wificalling-location-gateway-lite/prerm
@@ -398,7 +436,7 @@ wait_for_managed_processes() {
 /etc/init.d/wloc-service stop >/dev/null 2>&1 || true
 /etc/init.d/wificalling-gateway stop >/dev/null 2>&1 || true
 wait_for_managed_processes || exit 1
-rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256 /tmp/sing-box-lite.new.* /tmp/node-health-*
+rm -f /tmp/wloc-sing-box-lite-* /tmp/.wloc-sing-box-lite-*.lock /tmp/node-health-*
 exit 0
 endef
 define Package/wificalling-location-gateway-lite/postinst
@@ -411,7 +449,45 @@ done
 /etc/init.d/wloc-service enable >/dev/null 2>&1 || true
 mkdir -p /var/run/wificalling-gateway
 chmod 0700 /var/run/wificalling-gateway
+recover_shared_lite_runtime() {
+  [ -e /tmp/sing-box-lite ] && return 0
+  stale=0
+  for cmdline in /proc/[0-9]*/cmdline; do
+    [ -r "\$\$cmdline" ] || continue
+    command_line=\$\$(tr '\000' ' ' < "\$\$cmdline" 2>/dev/null || true)
+    printf '%s' "\$\$command_line" | grep -F '/tmp/sing-box-lite' >/dev/null && stale=1
+  done
+  [ "\$\$stale" -eq 1 ] || return 0
+  for service in /etc/init.d/passwall /etc/init.d/passwall2; do
+    [ -x "\$\$service" ] || continue
+    "\$\$service" restart >/dev/null 2>&1 || logger -t wificalling-location-gateway 'PassWall runtime recovery failed during package install'
+    return 0
+  done
+  logger -t wificalling-location-gateway 'PassWall holds a deleted Lite runtime but no restart service is available'
+}
+recover_shared_lite_runtime
 /etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || { logger -t wificalling-location-gateway 'Gateway failed to start after package install'; exit 1; }
+gateway_instance_ready() {
+  [ "\$(/etc/init.d/wificalling-gateway status 2>/dev/null)" = running ] || return 1
+  proxy=0
+  monitor=0
+  for cmdline in /proc/[0-9]*/cmdline; do
+    [ -r "\$\$cmdline" ] || continue
+    command_line=\$\$(tr '\000' ' ' < "\$\$cmdline" 2>/dev/null || true)
+    printf '%s' "\$\$command_line" | grep -F '/var/run/wificalling-gateway/sing-box.json' >/dev/null && proxy=1
+    printf '%s' "\$\$command_line" | grep -F '/usr/libexec/wificalling-gateway/monitor-loop.sh' >/dev/null && monitor=1
+  done
+  [ "\$\$proxy" -eq 1 ] && [ "\$\$monitor" -eq 1 ]
+}
+gateway_enabled=\$\$(uci -q get wificalling-gateway.main.enabled 2>/dev/null || echo 0)
+if [ "\$\$gateway_enabled" = 1 ]; then
+  i=0
+  while [ "\$\$i" -lt 10 ] && ! gateway_instance_ready; do
+    sleep 1
+    i=\$\$((i + 1))
+  done
+  gateway_instance_ready || { logger -t wificalling-location-gateway 'Gateway has no running proxy and monitor after package install'; exit 1; }
+fi
 /etc/init.d/wloc-service restart >/dev/null 2>&1 || { logger -t wificalling-location-gateway 'WLOC failed to start after package install'; exit 1; }
 rm -f /tmp/luci-indexcache.*
 /etc/init.d/rpcd reload >/dev/null 2>&1 || true

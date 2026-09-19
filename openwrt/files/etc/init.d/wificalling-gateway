@@ -74,10 +74,14 @@ require_start_memory() {
 	# - A refusal schedules a bounded background retry (30 s x 20) so a
 	#   temporarily memory-tight router self-heals instead of staying down
 	#   until a manual restart (procd never re-runs a failed start_service).
-	local reserve_kib=8192 variant gz inflated_kb needed_kb
+	local reserve_kib=8192 variant gz runtime_sha runtime shared_ready inflated_kb needed_kb
 	variant=$(cat /usr/share/wificalling-location-gateway/runtime-variant 2>/dev/null)
 	gz=/usr/share/wificalling-location-gateway/sing-box-lite.gz
-	if [ "$variant" = lite ] && [ ! -x /tmp/sing-box-lite ] && [ -s "$gz" ]; then
+	runtime_sha=$(cat /usr/share/wificalling-location-gateway/sing-box-lite.sha256 2>/dev/null || true)
+	runtime=/tmp/wloc-sing-box-lite-$runtime_sha
+	shared_ready=0
+	[ -x /tmp/sing-box-lite ] && [ "$(cat /tmp/sing-box-lite.sha256 2>/dev/null || true)" = "$runtime_sha" ] && shared_ready=1
+	if [ "$variant" = lite ] && [ "$shared_ready" -eq 0 ] && [ ! -x "$runtime" ] && [ -s "$gz" ]; then
 		inflated_kb=$(gzip -dc "$gz" 2>/dev/null | wc -c)
 		case "$inflated_kb" in ''|*[!0-9]*) return 0;; esac
 		inflated_kb=$((inflated_kb / 1024))

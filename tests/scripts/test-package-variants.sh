@@ -103,10 +103,18 @@ grep -F 'schedule_memory_retry' "$repo_root/openwrt/files/etc/init.d/wificalling
 	fail 'A memory-gated start must self-heal via a bounded background retry'
 grep -F 'MemAvailable' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
 	fail 'Gateway memory preflight must use the kernel available-memory metric'
-grep -F 'rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256' "$ax6s_builder" >/dev/null ||
-	fail 'AX6S package lifecycle must remove its stopped tmpfs runtime before upgrade'
-grep -F 'rm -f /tmp/sing-box-lite /tmp/sing-box-lite.sha256' "$release_builder" >/dev/null ||
-	fail 'release package lifecycle must remove its stopped tmpfs runtime before upgrade'
+grep -F 'target=/tmp/sing-box-lite' "$runtime_packager" >/dev/null ||
+	fail 'WFC Lite runtime must retain the shared path when its digest is unchanged'
+grep -F 'fallback_target=/tmp/wloc-sing-box-lite-$expected_sha' "$runtime_packager" >/dev/null ||
+	fail 'WFC Lite runtime must use a hash-scoped fallback when PassWall owns the shared path'
+grep -F 'runtime_in_use()' "$runtime_packager" >/dev/null ||
+	fail 'WFC Lite runtime must detect a shared path held by another process'
+grep -F 'shared_ready=' "$repo_root/openwrt/files/etc/init.d/wificalling-gateway" >/dev/null ||
+	fail 'Gateway memory preflight must recognize the shared Lite runtime digest'
+grep -F 'rm -f /tmp/wloc-sing-box-lite-* /tmp/.wloc-sing-box-lite-*.lock' "$ax6s_builder" >/dev/null ||
+	fail 'AX6S package lifecycle must clean only its own Lite runtime paths'
+grep -F 'rm -f /tmp/wloc-sing-box-lite-* /tmp/.wloc-sing-box-lite-*.lock' "$release_builder" >/dev/null ||
+	fail 'release package lifecycle must clean only its own Lite runtime paths'
 grep -F '/tmp/node-health-*' "$ax6s_builder" >/dev/null ||
 	fail 'AX6S package lifecycle must clear stale node-health cache before upgrade'
 grep -F '/tmp/node-health-*' "$release_builder" >/dev/null ||
@@ -115,8 +123,8 @@ grep -F '/usr/bin/sing-box' "$repo_root/openwrt/files/etc/init.d/wificalling-gat
 	fail 'both variants must keep the shared sing-box executable contract'
 grep -F '/usr/share/wificalling-location-gateway/sing-box-lite.gz' "$runtime_packager" >/dev/null ||
 	fail 'Lite must keep the compressed runtime on persistent storage'
-grep -F '/tmp/sing-box-lite' "$runtime_packager" >/dev/null ||
-	fail 'Lite must expand sing-box into tmpfs at runtime'
+grep -F '/tmp/wloc-sing-box-lite-' "$runtime_packager" >/dev/null ||
+	fail 'Lite must expand the WFC sing-box runtime into tmpfs at runtime'
 
 # A package install must not report success after silently failing to restart
 # either service. Check both builders because AX6S and SDK releases use
@@ -132,6 +140,12 @@ for builder in "$release_builder" "$ax6s_builder"; do
 		fail "package builder must fail explicitly when Gateway restart fails: $builder"
 	grep -F '/etc/init.d/wloc-service restart >/dev/null 2>&1 || {' "$builder" >/dev/null ||
 		fail "package builder must fail explicitly when WLOC restart fails: $builder"
+	grep -F 'gateway_instance_ready()' "$builder" >/dev/null ||
+		fail "package builder must verify the Gateway instance after restart: $builder"
+	grep -F 'gateway_instance_ready || {' "$builder" >/dev/null ||
+		fail "package builder must reject a restart with no Gateway instance: $builder"
+	grep -F 'recover_shared_lite_runtime()' "$builder" >/dev/null ||
+		fail "package builder must recover a PassWall runtime deleted by an older package: $builder"
 done
 
 printf '%s\n' 'Standard/Lite package variant tests passed'

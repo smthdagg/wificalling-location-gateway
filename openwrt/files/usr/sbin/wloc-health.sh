@@ -95,8 +95,23 @@ if [ -f "$rundir/normalized.conf" ]; then
 fi
 
 nft_rules=0
+wloc_redirect_present=0
 if command -v nft >/dev/null 2>&1; then
 	nft_rules=$(nft list ruleset 2>/dev/null | grep -c -E 'tproxy|redirect' || true)
+	if nft list chain inet wloc_service prerouting >/dev/null 2>&1; then
+		wloc_redirect_present=1
+	fi
+fi
+
+# status.json can survive a daemon restart. Never expose a stale
+# "intercepting" phase when the owned redirect chain is absent: an empty or
+# invalid scope is intentionally fail-open.
+if [ "$wloc_phase" = intercepting ] && [ "$wloc_redirect_present" -eq 0 ]; then
+	if [ "$wloc_running" -eq 1 ] && [ "$wloc_socket" -eq 1 ]; then
+		wloc_phase=ready_passthrough
+	else
+		wloc_phase=disabled
+	fi
 fi
 
 devices=$(grep -c '^device|' "$rundir/normalized.conf" 2>/dev/null || true)
@@ -126,8 +141,8 @@ if [ -f "$node_status" ]; then
 fi
 
 printf '{"generated_at":%s,' "$now"
-printf '"services":{"wloc":{"running":%s,"socket":%s,"status_fresh":%s,"phase":"%s","exit":"%s","geo":"%s","last_error":%s},' \
-	"$wloc_running" "$wloc_socket" "$wloc_status_fresh" "$wloc_phase" "$wloc_exit" "$wloc_geo" "$wloc_error"
+printf '"services":{"wloc":{"running":%s,"socket":%s,"status_fresh":%s,"phase":"%s","redirect_present":%s,"exit":"%s","geo":"%s","last_error":%s},' \
+	"$wloc_running" "$wloc_socket" "$wloc_status_fresh" "$wloc_phase" "$wloc_redirect_present" "$wloc_exit" "$wloc_geo" "$wloc_error"
 printf '"gateway":{"running":%s,"monitor":%s,"singbox":%s,"config_present":%s,"config_valid":%s,"config_age":%s,"config_stale":%s,"nft_rules":%s,"devices":%s,' \
 	"$monitor_running" "$monitor_running" "$sb_running" "$sb_config" "$sb_config_valid" "$sb_config_age" "$sb_config_stale" "$nft_rules" "$devices"
 printf '"patches":{"psk":%s,"handshake":%s,"compact":%s,"device_guard":%s}}},' \

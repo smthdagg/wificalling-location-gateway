@@ -7,6 +7,7 @@ refresh="$repo_root/openwrt/files/usr/sbin/wloc-refresh-set.sh"
 service="$repo_root/openwrt/files/etc/init.d/wloc-service"
 gateway_service="$repo_root/openwrt/files/etc/init.d/wificalling-gateway"
 gateway_firewall="$repo_root/openwrt/files/usr/libexec/wificalling-gateway/firewall.sh"
+passwall_bypass="$repo_root/openwrt/files/usr/libexec/wificalling-gateway/passwall-bypass.sh"
 config="$repo_root/openwrt/files/etc/config/wloc-service"
 rust="$repo_root/src/lib.rs"
 daemon="$repo_root/src/bin/wloc-service.rs"
@@ -15,6 +16,13 @@ grep -F 'if [ "$action" = stop ]; then' "$redirect" >/dev/null ||
 	{ echo 'WLOC redirect helper must support explicit teardown' >&2; exit 1; }
 grep -F '/usr/sbin/wloc-redirect-sync.sh stop' "$service" >/dev/null ||
 	{ echo 'WLOC init stop must remove owned firewall state' >&2; exit 1; }
+# A failed startup enable (empty device scope, missing DNS set, or a cold
+# Gateway) must overwrite a previous status file before the control socket is
+# served; otherwise the UI can display an old "intercepting" state.
+grep -F 'let _ = service.status();' "$daemon" >/dev/null ||
+	{ echo 'WLOC daemon must publish fresh startup status after reconciliation' >&2; exit 1; }
+grep -F '.stderr(std::process::Stdio::null())' "$daemon" >/dev/null ||
+	{ echo 'WLOC redirect presence probe must suppress expected missing-table errors' >&2; exit 1; }
 # Static-route lifecycle: TPROXY interception lives or dies with the device
 # scope. An install adds the rule+route, a stop removes them, and ANY nonzero
 # sync exit must withdraw the state of a previously bound device via the
@@ -39,6 +47,8 @@ guard_line=$(grep -n 'if \[ -z "\${WLOC_WITHDRAW_GUARD:-}" \]; then' "$redirect"
 # withdraw the previous rule/route/table instead of leaving them installed.
 [ "$(grep -cF 'ip route flush table 166' "$gateway_firewall")" -ge 2 ] ||
 	{ echo 'Gateway firewall must flush its route on stop and on an empty client set' >&2; exit 1; }
+grep -F 'nft list chain inet passwall "$chain" >/dev/null 2>&1 || continue' "$passwall_bypass" >/dev/null ||
+	{ echo 'PassWall bypass must skip chains missing on the installed PassWall variant' >&2; exit 1; }
 grep -F 'APPROVED_WLOC_HOSTS: [&str; 6]' "$rust" >/dev/null ||
 	{ echo 'Rust interception allowlist must contain exactly six hosts' >&2; exit 1; }
 grep -F 'HOSTS="gs-loc.apple.com gs-loc-cn.apple.com gsp-ssl.ls.apple.com bluedot.is.autonavi.com bluedot.is.autonavi.com.gds.alibabadns.com gspe19-cn-ssl-ls-apple-com.v.aaplimg.com"' "$refresh" >/dev/null ||

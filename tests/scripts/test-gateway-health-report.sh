@@ -37,4 +37,11 @@ grep -F '"state":"\(reachable\|tcp_reachable' "$health" >/dev/null ||
 grep -F '"state":"\(unreachable\|handshake_failed' "$health" >/dev/null ||
 	fail 'Gateway health must count unreachable node results as down'
 
+# A stale status.json must not claim WLOC is intercepting after its owned
+# redirect table has been withdrawn (for example, an empty device scope).
+grep -F 'nft list chain inet wloc_service prerouting' "$health" >/dev/null ||
+	fail 'WLOC health must verify the owned redirect chain'
+grep -F 'wloc_phase=ready_passthrough' "$health" >/dev/null ||
+	fail 'WLOC health must downgrade stale interception to pass-through'
+
 printf 'gateway health report checks passed\n'

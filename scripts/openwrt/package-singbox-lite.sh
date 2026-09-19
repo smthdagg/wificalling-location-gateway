@@ -36,11 +36,28 @@ archive=/usr/share/wificalling-location-gateway/sing-box-lite.gz
 expected_sha='$expected_sha'
 target=/tmp/sing-box-lite
 stamp=/tmp/sing-box-lite.sha256
-lock_dir=/tmp/.sing-box-lite.lock
+fallback_target=/tmp/wloc-sing-box-lite-$expected_sha
+fallback_stamp=/tmp/wloc-sing-box-lite-$expected_sha.sha256
+lock_dir=/tmp/.wloc-sing-box-lite-$expected_sha.lock
 
 runtime_ready() {
 	[ -x "\$target" ] && [ "\$(cat "\$stamp" 2>/dev/null || true)" = "\$expected_sha" ]
 }
+
+runtime_in_use() {
+	for cmdline in /proc/[0-9]*/cmdline; do
+		[ -r "\$cmdline" ] || continue
+		[ "\$cmdline" = "/proc/\$\$/cmdline" ] && continue
+		command_line=\$(tr '\000' ' ' < "\$cmdline" 2>/dev/null || true)
+		printf '%s' "\$command_line" | grep -F "\$target" >/dev/null && return 0
+	done
+	return 1
+}
+
+if ! runtime_ready && runtime_in_use; then
+	target=\$fallback_target
+	stamp=\$fallback_stamp
+fi
 
 if ! runtime_ready; then
 	if mkdir "\$lock_dir" 2>/dev/null; then

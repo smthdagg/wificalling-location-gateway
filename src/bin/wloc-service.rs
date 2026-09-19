@@ -68,6 +68,7 @@ impl RuntimeControl for OpenWrtRuntime {
     fn redirect_present(&mut self) -> Result<bool, RuntimeFailure> {
         Ok(std::process::Command::new("nft")
             .args(["list", "table", "inet", "wloc_service"])
+            .stderr(std::process::Stdio::null())
             .status()
             .map(|status| status.success())
             .unwrap_or(false))
@@ -596,6 +597,12 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             eprintln!("wloc-service: reconcile disable failed: {error:?}");
         }
     }
+
+    // Replace any status left by an older daemon before exposing the socket.
+    // A failed enable is still a healthy daemon in fail-open pass-through;
+    // the UI must never mistake the previous process's "intercepting" state
+    // for the current runtime.
+    let _ = service.status();
 
     if let Some(parent) = Path::new(&socket_path).parent() {
         std::fs::create_dir_all(parent)?;
