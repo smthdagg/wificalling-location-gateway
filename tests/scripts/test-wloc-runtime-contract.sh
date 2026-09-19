@@ -63,6 +63,16 @@ grep -F 'dnsmasq --help' "$refresh" >/dev/null ||
 	{ echo 'DNS refresh must fall back safely when dnsmasq lacks nftset support' >&2; exit 1; }
 grep -F 'upstream_map_tmp=' "$refresh" >/dev/null ||
 	{ echo 'DNS refresh must publish host-specific upstream targets' >&2; exit 1; }
+grep -F 'resolv.conf.auto' "$refresh" >/dev/null ||
+	{ echo 'DNS refresh must use the router-provided resolver list' >&2; exit 1; }
+grep -F 'resolve_a()' "$refresh" >/dev/null ||
+	{ echo 'DNS refresh must retry A lookups across configured and fallback resolvers' >&2; exit 1; }
+grep -F 'for resolver in $DNS_SERVERS' "$refresh" >/dev/null ||
+	{ echo 'DNS refresh must iterate the resolver fallback list' >&2; exit 1; }
+if grep -F 'nslookup -type=A "$host" 223.5.5.5' "$refresh" >/dev/null ||
+	grep -F 'nslookup -type=A "$host" 1.1.1.1' "$refresh" >/dev/null; then
+	{ echo 'DNS refresh must not depend on a single hardcoded public resolver' >&2; exit 1; }
+fi
 grep -F '/usr/sbin/wloc-refresh-set.sh' "$service" >/dev/null ||
 	{ echo 'WLOC init start must populate the initial upstream target' >&2; exit 1; }
 grep -F 'START=100' "$service" >/dev/null ||
