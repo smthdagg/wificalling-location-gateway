@@ -39,15 +39,21 @@ start_service() {
 		return 0
 	fi
 
-	# Validate the IPv6 device scope and prepare destination sets. The daemon
-	# installs TPROXY only after it has verified Gateway and location health.
+	# Validate the device scope and destination set before interception. A
+	# clean install has neither yet: keep the daemon/control socket alive in
+	# pass-through mode so LuCI can configure the service without an Agent-side
+	# repair. The daemon itself still refuses to install the redirect.
+	scope_ready=1
 	if ! /usr/sbin/wloc-redirect-sync.sh prepare >/dev/null 2>&1; then
-		logger -t wloc-service "scope validation failed; refusing to start"
-		return 1
+		logger -t wloc-service "scope not ready; keeping daemon in pass-through mode (device scope invalid)"
+		scope_ready=0
 	fi
-	if ! /usr/sbin/wloc-refresh-set.sh >/dev/null 2>&1; then
-		logger -t wloc-service "Apple destination refresh failed; refusing to start"
-		return 1
+	if [ "$scope_ready" -eq 1 ] && ! /usr/sbin/wloc-refresh-set.sh >/dev/null 2>&1; then
+		logger -t wloc-service "scope not ready; keeping daemon in pass-through mode (Apple destination set unavailable)"
+		scope_ready=0
+	fi
+	if [ "$scope_ready" -eq 0 ]; then
+		/usr/sbin/wloc-redirect-sync.sh stop >/dev/null 2>&1 || true
 	fi
 
 	procd_open_instance

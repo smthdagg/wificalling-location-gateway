@@ -274,8 +274,8 @@ PREINST
 rm -f /var/run/wloc-service/control.sock
 mkdir -p /var/run/wificalling-gateway
 chmod 0700 /var/run/wificalling-gateway
-/etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || true
-/etc/init.d/wloc-service restart >/dev/null 2>&1 || true
+/etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || { logger -t wificalling-location-gateway 'Gateway failed to start after package install'; exit 1; }
+/etc/init.d/wloc-service restart >/dev/null 2>&1 || { logger -t wificalling-location-gateway 'WLOC failed to start after package install'; exit 1; }
 rm -f /tmp/luci-indexcache.*
 /etc/init.d/rpcd reload >/dev/null 2>&1 || true
 exit 0

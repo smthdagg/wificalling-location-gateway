@@ -14,7 +14,9 @@
 # copies its coordinates into manual_lat/manual_lon and sets geo_source.
 
 config wloc-service 'main'
-	option enabled '1'
+	# Stay fail-closed until a Gateway device and node are configured.
+	# The daemon still starts in pass-through mode so LuCI can configure it.
+	option enabled '0'
 	option geo_source 'auto'
 	option manual_lat '51.5074'
 	option manual_lon '-0.1278'
