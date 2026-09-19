@@ -4,15 +4,20 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-async function loadModeHandler(sourcePath, manualLat, manualLon, ctlResults) {
+async function loadModeHandler(sourcePath, manualLat, manualLon, ctlResults, assignedDevice) {
 	const source = fs.readFileSync(sourcePath, 'utf8');
 	const calls = { save: 0, apply: 0, restart: 0, ctl: [], notifications: [] };
 	let modeOption;
+	let followOption;
 
 	const section = {
 		option: function(type, name) {
-			const option = { value: function() {} };
+			const option = {
+				values: [],
+				value: function(key, label) { this.values.push([key, label]); }
+			};
 			if (name === 'geo_source') modeOption = option;
+			if (name === 'assigned_device') followOption = option;
 			return option;
 		}
 	};
@@ -30,7 +35,7 @@ async function loadModeHandler(sourcePath, manualLat, manualLon, ctlResults) {
 	const uci = {
 		get: function(config, sectionName) {
 			if (config === 'wloc-service' && sectionName === 'main') {
-				return { manual_lat: manualLat, manual_lon: manualLon };
+				return { manual_lat: manualLat, manual_lon: manualLon, assigned_device: assignedDevice };
 			}
 			return null;
 		},
@@ -104,7 +109,7 @@ async function loadModeHandler(sourcePath, manualLat, manualLon, ctlResults) {
 	);
 	await page.render(['{}', '', null, null, {}, '{}']);
 	assert(modeOption && typeof modeOption.onchange === 'function', 'location mode handler not found');
-	return { handler: modeOption.onchange, calls };
+	return { handler: modeOption.onchange, followOption, calls };
 }
 
 async function verifyManualSwitch(sourcePath) {
@@ -143,6 +148,16 @@ async function verifyManualSwitchWithoutCoordinates(sourcePath) {
 	assert.strictEqual(harness.calls.notifications.length, 1, 'the user must receive one actionable error');
 }
 
+async function verifyEmptyFollowDeviceDefaultsToBlank(sourcePath) {
+	const harness = await loadModeHandler(sourcePath, '', '', null, '192.0.2.10');
+	assert(harness.followOption, 'follow-device option not found');
+	assert(harness.followOption.values.some(function(entry) {
+		return entry[0] === '' && entry[1] === '';
+	}), 'an empty device list must provide a blank option');
+	assert.strictEqual(harness.followOption.rmempty, true, 'an empty device list must be valid');
+	assert.strictEqual(harness.followOption.cfgvalue('main'), '', 'an empty device list must default to an empty value');
+}
+
 async function main() {
 	const root = path.resolve(__dirname, '..', '..');
 	const sources = [
@@ -154,6 +169,7 @@ async function main() {
 		await verifyManualSwitch(sourcePath);
 		await verifyAutoSwitch(sourcePath);
 		await verifyManualSwitchWithoutCoordinates(sourcePath);
+		await verifyEmptyFollowDeviceDefaultsToBlank(sourcePath);
 	}
 	console.log('wloc mode switch tests passed');
 }
