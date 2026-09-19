@@ -402,6 +402,44 @@ struct OkRuntime {
     install_fails: bool,
 }
 
+struct ModeSwitchRuntime {
+    gateway_required: bool,
+    shared_healthy: Arc<Mutex<bool>>,
+}
+
+impl RuntimeControl for ModeSwitchRuntime {
+    fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure> {
+        Ok(!self.gateway_required || *self.shared_healthy.lock().unwrap())
+    }
+    fn set_gateway_engine_required(&mut self, required: bool) {
+        self.gateway_required = required;
+    }
+    fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn remove_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn redirect_present(&mut self) -> Result<bool, RuntimeFailure> {
+        Ok(false)
+    }
+    fn disarm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn drain_engine(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn stop_engine(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+}
+
 struct CleanupRuntime {
     removed: Arc<Mutex<bool>>,
 }
@@ -982,6 +1020,82 @@ fn periodic_manual_health_check_does_not_probe_or_touch_auto_evidence() {
     assert_eq!(status["geo_source"], "manual");
     assert_eq!(status["exit"]["state"], "manual");
     assert_eq!(status["geo"]["state"], "manual");
+}
+
+#[test]
+fn online_auto_to_manual_drops_the_gateway_health_dependency() {
+    let shared_healthy = Arc::new(Mutex::new(true));
+    let mut service = WlocService::new(
+        ModeSwitchRuntime {
+            gateway_required: true,
+            shared_healthy: Arc::clone(&shared_healthy),
+        },
+        fresh_probe(),
+        fresh_geo(current_unix()),
+        WlocServiceConfig {
+            node_ref: NodeRef::new("node-1").unwrap(),
+            providers: vec![ProviderRef::new("geo-a").unwrap()],
+            probe_limits: limits(),
+            scope_valid: true,
+            ipv6_ready: true,
+            assigned_device_configured: true,
+            assigned_device: Some("192.168.31.176".to_owned()),
+            reverse_geo_lookup: None,
+        },
+    );
+    service.enable().unwrap();
+    *shared_healthy.lock().unwrap() = false;
+    service
+        .set_manual_location(&RequestParams {
+            query: None,
+            latitude: Some(51.5074),
+            longitude: Some(-0.1278),
+        })
+        .unwrap();
+    service.refresh_periodic_at(current_unix() + 1);
+
+    assert_eq!(
+        service.status_at(current_unix() + 1).unwrap()["service_phase"],
+        "intercepting"
+    );
+}
+
+#[test]
+fn online_manual_to_auto_restores_the_gateway_health_dependency() {
+    let shared_healthy = Arc::new(Mutex::new(false));
+    let mut service = WlocService::new(
+        ModeSwitchRuntime {
+            gateway_required: false,
+            shared_healthy: Arc::clone(&shared_healthy),
+        },
+        fresh_probe(),
+        fresh_geo(current_unix()),
+        WlocServiceConfig {
+            node_ref: NodeRef::new("node-1").unwrap(),
+            providers: vec![ProviderRef::new("geo-a").unwrap()],
+            probe_limits: limits(),
+            scope_valid: true,
+            ipv6_ready: true,
+            assigned_device_configured: true,
+            assigned_device: Some("192.168.31.176".to_owned()),
+            reverse_geo_lookup: None,
+        },
+    );
+    service
+        .set_manual_location(&RequestParams {
+            query: None,
+            latitude: Some(51.5074),
+            longitude: Some(-0.1278),
+        })
+        .unwrap();
+    service.enable().unwrap();
+    service.clear_manual_location().unwrap();
+    service.refresh_periodic_at(current_unix() + 1);
+
+    assert_eq!(
+        service.status_at(current_unix() + 1).unwrap()["service_phase"],
+        "disabled"
+    );
 }
 
 #[test]

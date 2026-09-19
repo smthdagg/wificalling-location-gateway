@@ -89,8 +89,11 @@ grep -F 'START=100' "$service" >/dev/null ||
 	{ echo 'WLOC must start after the Gateway sing-box service' >&2; exit 1; }
 grep -F 'reload_service() { restart; }' "$service" >/dev/null ||
 	{ echo 'WLOC must restart when its persisted configuration changes' >&2; exit 1; }
-grep -F 'procd_add_reload_trigger wloc-service wificalling-gateway' "$service" >/dev/null ||
-	{ echo 'WLOC must reload when either its scope or Gateway device policy changes' >&2; exit 1; }
+grep -F 'procd_add_reload_trigger wloc-service' "$service" >/dev/null ||
+	{ echo 'WLOC must reload when its own scope/configuration changes' >&2; exit 1; }
+if grep -F 'procd_add_reload_trigger wloc-service wificalling-gateway' "$service" >/dev/null; then
+	{ echo 'WLOC must not restart when the WFC service changes' >&2; exit 1; }
+fi
 # Both branches (enabled and disabled) start the daemon; the enabled branch
 # must still populate DNS targets before its procd instance. Compare the LAST
 # occurrence of each so the disabled branch's early daemon start cannot mask
