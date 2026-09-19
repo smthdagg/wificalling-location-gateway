@@ -76,4 +76,6 @@ stop_service() {
 
 reload_service() { restart; }
 
-service_triggers() { procd_add_reload_trigger wloc-service wificalling-gateway; }
+# WLOC owns its lifecycle. Auto mode observes WFC exit changes through its
+# periodic health/fingerprint checks; manual mode must not restart for WFC.
+service_triggers() { procd_add_reload_trigger wloc-service; }

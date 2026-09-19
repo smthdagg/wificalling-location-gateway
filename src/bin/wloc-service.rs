@@ -62,6 +62,13 @@ impl RuntimeControl for OpenWrtRuntime {
             !gateway_engine_required(self.location_mode) || shared_gateway_engine_healthy();
         Ok(engine_healthy_for_mode(self.location_mode, shared_healthy))
     }
+    fn set_gateway_engine_required(&mut self, required: bool) {
+        self.location_mode = if required {
+            LocationMode::Auto
+        } else {
+            LocationMode::Manual
+        };
+    }
     fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
     }

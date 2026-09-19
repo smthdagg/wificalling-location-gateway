@@ -31,6 +31,9 @@ pub enum ControlError {
 pub trait RuntimeControl: Send {
     fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure>;
     fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure>;
+    /// Update whether health includes the optional WFC Gateway engine.
+    /// WLOC manual mode is independent; auto mode reads the WFC exit.
+    fn set_gateway_engine_required(&mut self, _required: bool) {}
     fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure>;
     fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure>;
     fn remove_redirect(&mut self) -> Result<(), RuntimeFailure>;

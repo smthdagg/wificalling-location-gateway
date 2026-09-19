@@ -141,7 +141,7 @@ pub enum GeoSource {
 
 impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<R, P, G> {
     pub fn new(runtime: R, probe: P, geo: G, config: WlocServiceConfig) -> Self {
-        Self {
+        let mut service = Self {
             state: ServiceState::disabled(),
             runtime,
             probe,
@@ -167,7 +167,14 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             last_probe_error: None,
             status_file: None,
             events_file: None,
-        }
+        };
+        service.sync_runtime_mode();
+        service
+    }
+
+    fn sync_runtime_mode(&mut self) {
+        self.runtime
+            .set_gateway_engine_required(matches!(self.geo_source, GeoSource::Auto));
     }
 
     /// Attach a shared sink that receives the freshest `PatchTarget` whenever
@@ -433,6 +440,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             latitude,
             longitude,
         };
+        self.sync_runtime_mode();
         // A coordinate mode switch is a local control operation and must not
         // block the root-only control socket on an external reverse-geocode
         // request. The coordinates are authoritative; optional place metadata
@@ -505,6 +513,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             return Ok(());
         }
         self.geo_source = GeoSource::Auto;
+        self.sync_runtime_mode();
         self.manual_geo = None;
         self.geo_generation += 1;
         self.advance_generation();
@@ -548,6 +557,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     /// the desired state enabled so the next healthy periodic tick can restore
     /// it after procd restarts sing-box.
     fn refresh_runtime_health(&mut self) -> bool {
+        self.sync_runtime_mode();
         if !matches!(
             self.state.phase(),
             ServicePhase::Starting | ServicePhase::ReadyPassThrough | ServicePhase::Intercepting
@@ -708,6 +718,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
         // startup enable races the Gateway boot, the periodic tick must keep
         // retrying instead of leaving WLOC disabled until a manual toggle.
         self.desired_state = DesiredState::Enabled;
+        self.sync_runtime_mode();
         if self.state.phase() != ServicePhase::Disabled {
             return Err(DispatchError::InvalidConfig);
         }
