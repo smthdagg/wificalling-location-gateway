@@ -130,7 +130,14 @@ append_device() {
 	config_get label "$s" label "$s"; config_get node "$s" node; config_get route_mode "$s" route_mode independent
 	case "$node" in *'|'*) logger -t "$APP" "invalid delimiter in device $s"; return 1;; esac
 	DEVICE_IPS=""; config_list_foreach "$s" source_ip append_ip
-	[ "$route_mode" = independent ] || return 0
+	case "$route_mode" in
+	independent|'') ;;
+	follow_gateway|*)
+		logger -t "$APP" "device $s uses unsupported route_mode=$route_mode; select independent tunnel and bind a node"
+		invalid_route_mode=1
+		return 0
+		;;
+	esac
 	local safe_label
 	safe_label=$(printf '%s' "$label" | tr '|' ' ')
 	printf 'device|%s|%s|%s\n' "$safe_label" "$node" "$DEVICE_IPS" >> "$RUNDIR/normalized.conf"
@@ -161,7 +168,12 @@ start_service() {
 	[ "$event_interval" -ge 30 ] && [ "$event_interval" -le 3600 ] || event_interval=60
 	[ "$max_events_per_device" -ge 1 ] && [ "$max_events_per_device" -le 500 ] || max_events_per_device=20
 	config_get_bool log_enabled main log_enabled 1
+	invalid_route_mode=0
 	config_foreach append_node node; config_foreach append_device device
+	[ "$invalid_route_mode" -eq 0 ] || {
+		logger -t "$APP" "unsupported device routing mode; Gateway not started"
+		return 1
+	}
 	# Keep DHCP static leases (MAC -> IP) in sync with the independent
 	# device policies; harmless when no clients are configured.
 	/usr/libexec/$APP/dhcp-sync.sh "$RUNDIR/clients" || logger -t "$APP" "dhcp-sync failed"

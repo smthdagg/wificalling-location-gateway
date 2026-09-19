@@ -92,16 +92,13 @@ if [ "$action" = stop ]; then
     exit 0
 fi
 
-# WLOC is scoped to the device selected in its own settings. The Gateway
-# first-device fallback preserves fresh-install behavior when the WLOC option
-# has not been saved yet; it must never expand scope to every Gateway device.
+# WLOC is scoped only to the device selected in its own settings. Never infer
+# this safety boundary from a WFC device policy: manual WLOC is independent,
+# and auto mode only reads the WFC node's exit IP.
 ips=$(uci -q get wloc-service.main.assigned_device 2>/dev/null || true)
-if [ -z "$ips" ]; then
-    ips=$(uci -q get wificalling-gateway.@device[0].source_ip 2>/dev/null || true)
-fi
 
 [ -n "$ips" ] || {
-    echo "wloc-redirect-sync: no devices in the gateway device policy" >&2
+    echo "wloc-redirect-sync: no WLOC target device configured; staying pass-through" >&2
     # Fail-open on an empty scope: deleting the last device must never leave a
     # stale static route table entry behind. The EXIT trap performs the
     # withdrawal on this nonzero exit.

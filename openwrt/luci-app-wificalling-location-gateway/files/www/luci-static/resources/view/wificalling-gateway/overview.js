@@ -446,10 +446,11 @@ return view.extend({
 		var deviceLabel = s.option(form.Value, 'label', wlocI18n.t('Device display name'));
 		deviceLabel.rmempty = false; deviceLabel.placeholder = wlocI18n.t('Example: iPhone 12');
 		var routeMode = s.option(form.ListValue, 'route_mode', wlocI18n.t('Routing mode'));
-		routeMode.value('independent', wlocI18n.t('Independent tunnel')); routeMode.value('follow_gateway', wlocI18n.t('Follow gateway'));
+		routeMode.value('independent', wlocI18n.t('Independent tunnel'));
 		routeMode.default = 'independent';
+		routeMode.description = wlocI18n.t('Only independent tunnel is supported. Legacy follow-gateway entries are rejected with a startup diagnostic.');
 		var selectedNode = s.option(form.ListValue, 'node', wlocI18n.t('Node'));
-		selectedNode.rmempty = false; selectedNode.depends('route_mode', 'independent');
+		selectedNode.rmempty = false;
 		selectedNode.description = wlocI18n.t('Save the node first, then reload this page to select it for a device.');
 		uci.sections('wificalling-gateway', 'node').forEach(function(node) { selectedNode.value(node['.name'], node.label || node['.name']); });
 		var ips = s.option(form.DynamicList, 'source_ip', wlocI18n.t('LAN IPv4 addresses'));

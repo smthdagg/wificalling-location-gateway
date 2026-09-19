@@ -18,7 +18,7 @@ var CONTENT = {
 		wfcSteps: [
 			'1. 进入「Wi-Fi 通话设置」页面，在「导入代理节点」中粘贴节点链接（支持 AnyTLS、Hysteria2/Hy2、TUIC、VLESS、VMess、Trojan、WireGuard(wg://)），或点击「添加代理节点」手动填写节点信息。',
 			'2. 点击「保存并应用」，节点即生效。',
-			'3. 在「设备策略」中点击「添加局域网设备」，填写设备名称、路由模式（独立隧道或跟随网关）、绑定节点与局域网 IP。',
+			'3. 在「设备策略」中点击「添加局域网设备」，选择“独立通道”，绑定节点并填写局域网 IP；“跟随网关”目前未实现。',
 			'4. 再次「保存并应用」。',
 			'5. 在 iPhone 上连接本路由器 Wi-Fi，并开启「设置 → 蜂窝网络 → Wi-Fi 通话」。',
 			'6. 到「Wi-Fi 通话监控与日志」页查看隧道状态：显示「已注册」表示观察到 ASSURED 双向 UDP 4500 隧道，Wi-Fi 通话通道已建立。'
@@ -36,8 +36,8 @@ var CONTENT = {
 		wlocSteps: [
 			'1. 安装根证书：在 iPhone 的 Safari 中打开 {profile-url}，安装配置描述文件。',
 			'2. 开启完全信任：iPhone「设置 → 通用 → 关于本机 → 证书信任设置」，将 wloc-service 根证书开启完全信任。',
-			'3. 在「WLOC 设置」页面打开「启用 WLOC 拦截」。',
-			'4. 选择定位模式：自动（跟随节点）——跟随测试设备绑定的节点出口定位；手动位置——用「手动搜索」搜索地名（如 Tokyo）或直接输入坐标，也可从「已保存的位置」一键应用。',
+			'3. 在「WLOC 设置」页面填写 WLOC 自己的目标设备 IPv4；为空时保持禁用/直通，然后打开「启用 WLOC 拦截」。',
+			'4. 选择定位模式：自动——只读取 WFC 节点出口 IP 的地理位置，WLOC 流量仍走普通 WAN；手动位置——用「手动搜索」搜索地名（如 Tokyo）或直接输入坐标，完全不依赖 WFC。',
 			'5. 切换模式或更换位置后，在 iPhone 上重新触发定位（开关一次飞行模式，或关闭再打开 Wi-Fi，或重新打开地图/天气应用）。',
 			'6. 到「WLOC 监控与日志」页确认当前定位、GPS 坐标与「定位目标更新」事件。'
 		],
@@ -60,7 +60,7 @@ var CONTENT = {
 		wfcSteps: [
 			'1. Open the "Wi-Fi Calling Settings" page and paste a node link under "Import proxy node" (AnyTLS, Hysteria2/Hy2, TUIC, VLESS, VMess, Trojan, WireGuard (wg://)), or click "Add proxy node" to enter node details manually.',
 			'2. Click "Save & Apply" to activate the node.',
-			'3. Under "Device Policies", click "Add LAN device" and enter the device name, routing mode (independent tunnel or follow gateway), the bound node and the LAN IP.',
+			'3. Under "Device Policies", click "Add LAN device", select Independent tunnel, bind a node and enter the LAN IP; Follow gateway is not implemented.',
 			'4. "Save & Apply" again.',
 			'5. On the iPhone, join this router\'s Wi-Fi and enable Wi-Fi Calling (Settings > Cellular > Wi-Fi Calling).',
 			'6. Check the "Wi-Fi Calling Monitor & Log" page: "Registered" means an ASSURED bidirectional UDP 4500 tunnel was observed and the Wi-Fi Calling channel is up.'
@@ -78,8 +78,8 @@ var CONTENT = {
 		wlocSteps: [
 			'1. Install the root CA: open {profile-url} in Safari on the iPhone and install the configuration profile.',
 			'2. Enable full trust: on the iPhone go to Settings > General > About > Certificate Trust Settings and enable full trust for the wloc-service root CA.',
-			'3. Turn on "Enable WLOC interception" on the WLOC Settings page.',
-			'4. Choose a location mode: Auto (follow node) follows the bound node\'s exit; Manual lets you search a place name (e.g. Tokyo) or enter coordinates, or apply a saved preset in one click.',
+			'3. On WLOC Settings, enter WLOC\'s own target-device IPv4; leaving it empty keeps interception disabled/pass-through, then turn on "Enable WLOC interception".',
+			'4. Choose a location mode: Auto only reads the WFC node exit IP for Geo lookup while WLOC traffic uses the normal WAN; Manual searches a place or accepts coordinates and is fully independent of WFC.',
 			'5. After switching the mode or location, re-trigger location on the iPhone (toggle airplane mode once, or toggle Wi-Fi, or reopen the Maps/Weather app).',
 			'6. Confirm the current location, GPS coordinates and "target updated" events on the WLOC Monitor & Log page.'
 		],
@@ -87,7 +87,7 @@ var CONTENT = {
 		wlocNotes: [
 			'Cloudflare WARP (or any VPN app) must be OFF on the iPhone, otherwise the router redirect is bypassed and spoofing will not take effect.',
 			'If the CA is not trusted, HTTPS interception fails: make sure the profile is installed and full trust is enabled.',
-			'Auto mode follows the location of the node exit IP; manual GPS stays local to the router and is never sent out.',
+			'Auto mode only reads the WFC node exit IP for Geo lookup; WLOC data traffic does not enter the WFC tunnel. Manual GPS stays local to the router and does not require WFC.',
 			'Location requests are triggered by iPhone apps (Maps, Weather, etc.). If maps do not refresh, re-trigger location and wait a moment.',
 			'The WLOC usage log keeps the newest 20 entries and can be cleared with one click; it only records replacement metadata, never raw WLOC responses.',
 			'Settings (switch, mode, manual coordinates, presets) are stored in /etc/config/wloc-service and survive reboots.',

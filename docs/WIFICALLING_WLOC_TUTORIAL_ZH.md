@@ -1,6 +1,6 @@
 # Wi‑Fi Calling & WLOC 完整使用教程
 
-适用于 OpenWrt / ImmortalWrt 网关上的 Wi‑Fi Calling + WLOC 1.2.x 稳定整合包。本教程严格按照插件内置 FAQ 的操作顺序编写：**先完整配置 Wi‑Fi Calling Gateway，再配置 WLOC**。
+适用于 OpenWrt / ImmortalWrt 网关上的 Wi‑Fi Calling + WLOC 1.2.x 稳定整合包。本教程分别说明 Wi‑Fi Calling Gateway 与 WLOC；WLOC 手动模式不要求先配置 WFC。
 
 [English tutorial](WIFICALLING_WLOC_TUTORIAL_EN.md)
 
@@ -115,8 +115,8 @@ Wi‑Fi Calling 对丢包和抖动比较敏感，建议优先使用 **AnyTLS、V
 
 继续前确认：
 
-1. 第一部分的代理节点和 iPhone 设备策略已经保存。
-2. iPhone 正在使用该设备策略中的局域网 IP。
+1. WLOC 设置中的目标设备 IPv4 已单独填写；为空时 WLOC 保持禁用/直通。
+2. 自动模式需要 WFC 节点可用来只读获取出口 IP；手动模式不需要 WFC。
 3. **关闭 Shadowrocket、Cloudflare WARP、Loon、WireGuard 和其他手机 VPN。** 手机 VPN 会绕过路由器重定向，使 WLOC 不生效。
 4. iPhone 使用 Safari 下载证书描述文件。
 
@@ -179,12 +179,12 @@ Safari 提示“此网站正尝试下载一个配置描述文件”时，点击�
 
 ### 12.1 选择跟随设备
 
-在“跟随设备”中选择第一部分已经配置好的测试 iPhone。自动模式会跟随该设备绑定节点的出口位置。
+填写 WLOC 自己的目标设备 IPv4。自动模式只读取 WFC 节点出口 IP；手动模式不依赖 WFC。
 
 ### 12.2 自动模式
 
 1. 将“定位模式”设为“自动（跟随节点）”。
-2. 确认“跟随设备”正确。
+2. 确认 WLOC 目标设备 IPv4 正确。
 3. 打开“启用 WLOC 拦截”。
 4. 点击“保存并应用”。
 
@@ -220,7 +220,7 @@ Safari 提示“此网站正尝试下载一个配置描述文件”时，点击�
 检查以下项目：
 
 - `Service phase` 为 `intercepting`。
-- `Follow device` 是当前测试 iPhone。旁边的“刷新 IP”按钮可立即重新探测跟随节点的出口 IP。
+- `WLOC target device` 是 WLOC 自己绑定的测试设备。自动模式旁边的“刷新 IP”按钮只重新读取 WFC 节点出口 IP。
 - 在 Wi‑Fi 通话设置中切换设备的节点后，自动模式会在下一次出口证据检查时跟随新节点；需要立即生效时点击“刷新 IP”。
 - `Location mode` 与自动或手动模式一致。
 - 国家、城市、时区和 GPS 坐标符合目标。

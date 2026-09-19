@@ -14,16 +14,15 @@
 # copies its coordinates into manual_lat/manual_lon and sets geo_source.
 
 config wloc-service 'main'
-	# Stay fail-closed until a Gateway device and node are configured.
+	# Stay fail-closed until a WLOC target device is configured.
 	# The daemon still starts in pass-through mode so LuCI can configure it.
 	option enabled '0'
 	option geo_source 'auto'
 	option manual_lat '51.5074'
 	option manual_lon '-0.1278'
 	option node_ref 'default'
-	# assigned_device is chosen from LuCI (WLOC Settings > Follow device);
-	# when unset the daemon follows the first device policy of the
-	# wificalling-gateway config instead of any fixed example address.
+	# assigned_device is owned by WLOC and chosen from LuCI. It is only the
+	# interception scope; it is not a WFC route or node binding.
 	option probe_interval '300'
 	option geo_provider 'http'
 

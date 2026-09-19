@@ -144,7 +144,7 @@ fi
 if grep -F "routeMode.value('follow_gateway'" "$repo_root/openwrt/files/www/luci-static/resources/view/wificalling-gateway/overview.js" >/dev/null; then
 	{ echo 'LuCI must not present follow_gateway as an implemented mode' >&2; exit 1; }
 fi
-grep -F 'unsupported route_mode=follow_gateway' "$gateway_service" >/dev/null ||
+grep -F 'uses unsupported route_mode=$route_mode' "$gateway_service" >/dev/null ||
 	{ echo 'legacy follow_gateway must produce an actionable startup diagnostic' >&2; exit 1; }
 
 # A clean install has no device policy yet. WLOC must stay fail-closed until

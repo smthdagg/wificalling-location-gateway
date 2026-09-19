@@ -1,6 +1,6 @@
 # Wi‑Fi Calling & WLOC Complete User Guide
 
-This guide applies to the stable integrated Wi‑Fi Calling + WLOC 1.2.x package on an OpenWrt or ImmortalWrt gateway. It follows the built-in FAQ order: **complete Wi‑Fi Calling Gateway first, then configure WLOC**.
+This guide covers Wi‑Fi Calling Gateway and WLOC separately. WLOC manual mode does not require Wi‑Fi Calling to be configured first.
 
 [中文教程](WIFICALLING_WLOC_TUTORIAL_ZH.md)
 
@@ -113,8 +113,8 @@ Enable Airplane Mode, turn Wi‑Fi back on, and look for the carrier Wi‑Fi Cal
 
 Confirm that:
 
-1. The proxy node and iPhone device policy from Part One have been saved.
-2. The iPhone uses the LAN address in that device policy.
+1. Enter the target device IPv4 separately in WLOC Settings; leaving it empty keeps WLOC disabled/pass-through.
+2. Auto mode needs a working WFC node only to read its exit IP; Manual mode does not need WFC.
 3. **Shadowrocket, Cloudflare WARP, Loon, WireGuard, and every other device VPN are off.** A device VPN bypasses the router redirect.
 4. Safari will be used to download the certificate profile.
 
@@ -177,12 +177,12 @@ Return to **WLOC Settings**.
 
 ### 12.1 Select the followed device
 
-Under **Follow device**, select the test iPhone configured in Part One. Auto mode follows the exit of the node bound to this device.
+Enter WLOC's own target-device IPv4. Auto mode only reads the WFC node exit IP; Manual mode does not require WFC.
 
 ### 12.2 Auto mode
 
 1. Set **Location mode** to **Auto (follow node)**.
-2. Confirm the followed device.
+2. Confirm the WLOC target-device IPv4.
 3. Enable **WLOC interception**.
 4. Select **Save & Apply**.
 
@@ -218,7 +218,7 @@ Open **WLOC Monitor & Log**.
 Check that:
 
 - `Service phase` is `intercepting`.
-- `Follow device` is the test iPhone. The **Refresh IP** button next to it re-probes the followed node's exit IP immediately.
+- `WLOC target device` is the device scoped by WLOC. In Auto mode, the **Refresh IP** button only re-reads the WFC node exit IP.
 - After you switch a device's node in the Wi‑Fi Calling settings, the monitor exit IP follows the new node automatically within about 10 seconds; click **Refresh IP** to make it immediate.
 - `Location mode` matches Auto or Manual.
 - Country, city, timezone, and coordinates match the target.

@@ -34,9 +34,10 @@ async function loadModeHandler(sourcePath, manualLat, manualLon, ctlResults, ass
 		Value: function() {}
 	};
 	const uci = {
-		get: function(config, sectionName) {
+		get: function(config, sectionName, optionName) {
 			if (config === 'wloc-service' && sectionName === 'main') {
-				return { manual_lat: manualLat, manual_lon: manualLon, assigned_device: assignedDevice };
+				var main = { manual_lat: manualLat, manual_lon: manualLon, assigned_device: assignedDevice };
+				return optionName ? main[optionName] : main;
 			}
 			return null;
 		},
@@ -150,7 +151,7 @@ async function verifyManualSwitchWithoutCoordinates(sourcePath) {
 }
 
 async function verifyEmptyFollowDeviceDefaultsToBlank(sourcePath) {
-	const harness = await loadModeHandler(sourcePath, '', '', null, '192.0.2.10');
+	const harness = await loadModeHandler(sourcePath, '', '', null, '');
 	assert(harness.followOption, 'follow-device option not found');
 	assert.strictEqual(harness.followOption.isValue, true,
 		'WLOC scope must be an independent IP input, not a WFC device list');

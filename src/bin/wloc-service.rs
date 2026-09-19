@@ -47,14 +47,20 @@ fn now_unix() -> u64 {
 
 /// Runtime control for the single OpenWrt daemon. The daemon owns the proxy;
 /// the helper owns only the named WLOC nftables table.
-struct OpenWrtRuntime;
+struct OpenWrtRuntime {
+    /// Auto mode reads the WFC node exit; manual mode only needs this WLOC
+    /// daemon and must remain usable when the Gateway is absent.
+    location_mode: LocationMode,
+}
 
 impl RuntimeControl for OpenWrtRuntime {
     fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
     }
     fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure> {
-        Ok(shared_gateway_engine_healthy())
+        let shared_healthy =
+            !gateway_engine_required(self.location_mode) || shared_gateway_engine_healthy();
+        Ok(engine_healthy_for_mode(self.location_mode, shared_healthy))
     }
     fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
@@ -349,15 +355,9 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
         }
     };
-    // The device whose node binding the location follows. It is normally
-    // chosen from LuCI; when unset, fall back to the first device policy of
-    // the Gateway config so a fresh install follows something on any subnet
-    // instead of a fixed example address.
-    let assigned_device = if uci.assigned_device.trim().is_empty() {
-        gateway_first_device_ip().unwrap_or_default()
-    } else {
-        uci.assigned_device.clone()
-    };
+    // WLOC owns its interception scope. Never infer it from a WFC device:
+    // manual mode is independent, and auto mode only reads the WFC exit IP.
+    let assigned_device = uci.assigned_device.clone();
     eprintln!(
         "wloc-service: uci enabled={} geo_source={:?} node={} device={}",
         uci.enabled,
@@ -385,7 +385,9 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     };
 
     let service = WlocService::new(
-        OpenWrtRuntime,
+        OpenWrtRuntime {
+            location_mode: uci.location_mode,
+        },
         build_probe(&assigned_device),
         geo,
         WlocServiceConfig {
@@ -653,19 +655,12 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-/// The first source IP of the Gateway device policy - the natural follow
-/// target when wloc-service has no assigned device configured.
-fn gateway_first_device_ip() -> Option<String> {
-    let output = std::process::Command::new("uci")
-        .args(["-q", "get", "wificalling-gateway.@device[0].source_ip"])
-        .output()
-        .ok()?;
-    let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if ip.is_empty() {
-        None
-    } else {
-        Some(ip)
-    }
+fn gateway_engine_required(mode: LocationMode) -> bool {
+    matches!(mode, LocationMode::Auto)
+}
+
+fn engine_healthy_for_mode(mode: LocationMode, shared_gateway_healthy: bool) -> bool {
+    !gateway_engine_required(mode) || shared_gateway_healthy
 }
 
 /// Read the persisted CA info JSON (fingerprint/issued_at/expires_at).

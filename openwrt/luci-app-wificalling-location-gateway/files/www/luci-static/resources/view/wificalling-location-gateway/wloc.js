@@ -41,11 +41,6 @@ var regenCa = rpc.declare({
 	method: 'regen_ca'
 });
 
-var restartService = rpc.declare({
-	object: 'luci.wloc',
-	method: 'restart_service'
-});
-
 var verifyFingerprint = rpc.declare({
 	object: 'luci.wloc',
 	method: 'verify_fingerprint',
@@ -124,7 +119,6 @@ return view.extend({
 			L.resolveDefault(fs.read(STATUS_FILE), '{}'),
 			L.resolveDefault(fs.read(EVENTS_FILE), ''),
 			uci.load('wloc-service'),
-			uci.load('wificalling-gateway'),
 			L.resolveDefault(certInfo(), {}),
 			L.resolveDefault(fs.read('/var/run/wloc-service/proxy-health.json'), '{}'),
 			autoRegen
@@ -136,23 +130,13 @@ return view.extend({
 		var status;
 		try { status = JSON.parse(data[0]); } catch (e) { status = {}; }
 		var eventsText = data[1] || '';
-		var ca = data[4] || {};
+		var ca = data[3] || {};
 		var proxyHealth;
-		try { proxyHealth = JSON.parse(data[5] || '{}'); } catch (e) { proxyHealth = {}; }
-		var regen = data[6] || {};
-		var deviceList = uci.sections('wificalling-gateway', 'device').map(function(d) {
-			// source_ip is a DynamicList value (array) on the device policy.
-			var raw = d.source_ip;
-			var ip = Array.isArray(raw) ? (raw[0] || '') : (raw || '');
-			// Only enabled devices can be followed: their bound node is the
-			// one compiled into sing-box.json and probed for the exit IP. A
-			// disabled device's node is filtered out, so following it would
-			// silently probe a fallback node - never offer it here.
-			return { ip: ip, label: d.label || ip, enabled: d.enabled !== '0' };
-		}).filter(function(d) { return d.ip && d.enabled; });
+		try { proxyHealth = JSON.parse(data[4] || '{}'); } catch (e) { proxyHealth = {}; }
+		var regen = data[5] || {};
 
 		var m = new form.Map('wloc-service', wlocI18n.t('WLOC Settings'),
-			wlocI18n.t('WLOC location interception: spoofs the Apple WLOC response so the test device reports the gateway-chosen location. GPS values stay on this router.'));
+			wlocI18n.t('WLOC location interception: rewrites the Apple WLOC response for the selected device. GPS values stay on this router.'));
 
 		/* ---------- 3. Module on/off switch ---------- */
 		var so = m.section(form.NamedSection, 'main', 'wloc-service');
@@ -232,31 +216,13 @@ return view.extend({
 		so.option(form.Value, 'manual_lat', wlocI18n.t('Manual latitude'));
 		so.option(form.Value, 'manual_lon', wlocI18n.t('Manual longitude'));
 
-		var follow = so.option(form.ListValue, 'assigned_device', wlocI18n.t('Follow device'),
-			wlocI18n.t('The device whose bound node the WLOC location follows (its exit IP drives auto mode).'));
-		follow.value('', '');
+		var follow = so.option(form.Value, 'assigned_device', wlocI18n.t('WLOC target device IPv4'),
+			wlocI18n.t('WLOC owns this device scope. Auto mode only reads the WFC node exit IP; manual mode does not use WFC. Leave empty to keep WLOC disabled/pass-through.'));
+		follow.datatype = 'ip4addr';
 		follow.rmempty = true;
+		follow.placeholder = '192.168.31.100';
 		follow.cfgvalue = function(section_id) {
-			var current = uci.get('wloc-service', 'main', 'assigned_device') || '';
-			return deviceList.some(function(d) { return d.ip === current; }) ? current : '';
-		};
-		deviceList.forEach(function(d) {
-			follow.value(d.ip, d.label + ' (' + d.ip + ')');
-		});
-		follow.onchange = function(ev, section_id, value) {
-			uci.set('wloc-service', 'main', 'assigned_device', value);
-			uci.save('wloc-service').then(function() {
-				return ui.changes.apply(true);
-			}).then(function() {
-				return restartService();
-			}).then(function(r) {
-				if (r && r.error)
-					notify(wlocI18n.t('Apply failed'), r.error);
-				else
-				notify(wlocI18n.t('Applied'), wlocI18n.t('Device saved. WLOC now follows its node.'), 'success');
-			}).catch(function(e) {
-				notify(wlocI18n.t('Apply failed'), String(e));
-			});
+			return uci.get('wloc-service', 'main', 'assigned_device') || '';
 		};
 
 		/* ---------- 6. Manual search + coordinate apply ---------- */
