@@ -7,6 +7,7 @@ refresh="$repo_root/openwrt/files/usr/sbin/wloc-refresh-set.sh"
 service="$repo_root/openwrt/files/etc/init.d/wloc-service"
 gateway_service="$repo_root/openwrt/files/etc/init.d/wificalling-gateway"
 gateway_firewall="$repo_root/openwrt/files/usr/libexec/wificalling-gateway/firewall.sh"
+config="$repo_root/openwrt/files/etc/config/wloc-service"
 rust="$repo_root/src/lib.rs"
 daemon="$repo_root/src/bin/wloc-service.rs"
 
@@ -113,6 +114,18 @@ grep -F 'ip6 daddr @apple_hosts6 reject with tcp reset' "$redirect" >/dev/null |
 	{ echo 'WLOC must reject only approved IPv6 targets so clients fall back to IPv4' >&2; exit 1; }
 grep -F 'wloc-service.main.assigned_device' "$redirect" >/dev/null ||
 	{ echo 'TPROXY source scope must come from the WLOC assigned device' >&2; exit 1; }
+
+# A clean install has no device policy yet. WLOC must stay fail-closed until
+# configured, but its daemon/control socket must still start so LuCI can show
+# the reason and let the user configure it without an Agent-side repair.
+grep -F "option enabled '0'" "$config" >/dev/null ||
+	{ echo 'WLOC must default to disabled before a device scope is configured' >&2; exit 1; }
+grep -F 'scope_ready=1' "$service" >/dev/null ||
+	{ echo 'WLOC init must track scope readiness independently from daemon startup' >&2; exit 1; }
+grep -F 'scope_ready=0' "$service" >/dev/null ||
+	{ echo 'WLOC init must keep a pass-through daemon when scope preparation fails' >&2; exit 1; }
+grep -F 'scope not ready; keeping daemon in pass-through mode' "$service" >/dev/null ||
+	{ echo 'WLOC init must log an actionable pass-through reason' >&2; exit 1; }
 if grep -F 'uci -q show wificalling-gateway' "$redirect" >/dev/null; then
 	{ echo 'TPROXY must not scope WLOC to every Gateway device policy' >&2; exit 1; }
 fi

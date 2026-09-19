@@ -118,4 +118,20 @@ grep -F '/usr/share/wificalling-location-gateway/sing-box-lite.gz' "$runtime_pac
 grep -F '/tmp/sing-box-lite' "$runtime_packager" >/dev/null ||
 	fail 'Lite must expand sing-box into tmpfs at runtime'
 
+# A package install must not report success after silently failing to restart
+# either service. Check both builders because AX6S and SDK releases use
+# different packaging paths.
+for builder in "$release_builder" "$ax6s_builder"; do
+	if grep -F '/etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || true' "$builder" >/dev/null; then
+		fail "package builder must not swallow Gateway restart failures: $builder"
+	fi
+	if grep -F '/etc/init.d/wloc-service restart >/dev/null 2>&1 || true' "$builder" >/dev/null; then
+		fail "package builder must not swallow WLOC restart failures: $builder"
+	fi
+	grep -F '/etc/init.d/wificalling-gateway restart >/dev/null 2>&1 || {' "$builder" >/dev/null ||
+		fail "package builder must fail explicitly when Gateway restart fails: $builder"
+	grep -F '/etc/init.d/wloc-service restart >/dev/null 2>&1 || {' "$builder" >/dev/null ||
+		fail "package builder must fail explicitly when WLOC restart fails: $builder"
+done
+
 printf '%s\n' 'Standard/Lite package variant tests passed'
