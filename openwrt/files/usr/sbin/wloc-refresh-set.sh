@@ -132,16 +132,41 @@ ROUTER_IP=$(lan_ip)
     exit 1
 }
 
+# Prefer the resolver(s) supplied by the current WAN/firmware, then retain a
+# small public fallback list for networks whose local DNS cannot resolve the
+# approved names. Skip the router itself: WLOC's local DNS ingress deliberately
+# answers these names with ROUTER_IP, which is not an upstream destination.
+resolver_list() {
+    {
+        awk '$1 == "nameserver" && $2 ~ /^[0-9]+(\.[0-9]+){3}$/ { print $2 }' \
+            /tmp/resolv.conf.d/resolv.conf.auto \
+            /tmp/resolv.conf.d/resolv.conf \
+            /etc/resolv.conf 2>/dev/null || true
+        printf '%s\n' 223.5.5.5 119.29.29.29 1.1.1.1
+    } | awk 'NF && !seen[$1]++ { print $1 }'
+}
+
+DNS_SERVERS=$(resolver_list)
+resolve_a() {
+    resolve_host=$1
+    for resolver in $DNS_SERVERS; do
+        answers=$(nslookup -type=A "$resolve_host" "$resolver" 2>/dev/null | awk -v router="$ROUTER_IP" '
+            $1 == "Name:" { answer = 1; next }
+            answer && $1 == "Address:" && $2 ~ /^[0-9]+(\.[0-9]+){3}$/ && $2 != router { print $2 }
+            answer && $1 == "Address" && $2 ~ /^[0-9]+:$/ && $3 ~ /^[0-9]+(\.[0-9]+){3}$/ && $3 != router { print $3 }
+        ' | sort -u)
+        [ -n "$answers" ] && { printf '%s\n' "$answers"; return 0; }
+    done
+    return 1
+}
+
 ensure_client_dns_sets
 
 collect_v4() {
-    # Query explicit public resolvers.  The client DNS answer is never used
-    # as a trust decision; it only feeds the owned destination set.
+    # The client DNS answer is never used as a trust decision; this only feeds
+    # the owned destination set.
     for host in $HOSTS; do
-        nslookup -type=A "$host" 223.5.5.5 2>/dev/null \
-            | sed -n 's/^Address: *\([0-9][0-9.]*\)$/\1/p'
-        nslookup -type=A "$host" 119.29.29.29 2>/dev/null \
-            | sed -n 's/^Address: *\([0-9][0-9.]*\)$/\1/p'
+        resolve_a "$host" || true
     done
 }
 
@@ -170,9 +195,8 @@ upstream_map=/var/run/wloc-service/upstream-map
 upstream_map_tmp=$upstream_map.tmp.$$
 : > "$upstream_map_tmp"
 for host in $HOSTS; do
-    nslookup -type=A "$host" 1.1.1.1 2>/dev/null \
-        | sed -n 's/^Address: *\([0-9][0-9.]*\)$/\1/p' \
-        | grep -v "^$ROUTER_IP$" | head -n 4 \
+    resolve_a "$host" 2>/dev/null \
+        | head -n 4 \
         | sed "s/^/$host /" >> "$upstream_map_tmp" || true
 done
 [ -s "$upstream_map_tmp" ] || {
