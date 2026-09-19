@@ -234,6 +234,12 @@ return view.extend({
 
 		var follow = so.option(form.ListValue, 'assigned_device', wlocI18n.t('Follow device'),
 			wlocI18n.t('The device whose bound node the WLOC location follows (its exit IP drives auto mode).'));
+		follow.value('', '');
+		follow.rmempty = true;
+		follow.cfgvalue = function(section_id) {
+			var current = uci.get('wloc-service', 'main', 'assigned_device') || '';
+			return deviceList.some(function(d) { return d.ip === current; }) ? current : '';
+		};
 		deviceList.forEach(function(d) {
 			follow.value(d.ip, d.label + ' (' + d.ip + ')');
 		});
