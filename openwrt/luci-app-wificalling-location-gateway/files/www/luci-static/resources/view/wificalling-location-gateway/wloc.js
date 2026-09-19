@@ -65,8 +65,41 @@ function fmtTime(unix) {
 	return new Date(unix * 1000).toLocaleString();
 }
 
-function notify(title, message) {
-	ui.addNotification(null, E('p', [ E('strong', title + ': '), message ]));
+function notify(title, message, kind) {
+	// LuCI's global notification close control is theme-dependent and is not
+	// reliably clickable on older firmware. Success messages add no value here;
+	// the form already reflects the saved state, so only actionable errors get
+	// a local, explicit dismiss control.
+	if (kind === 'success') return;
+	var host = typeof document !== 'undefined'
+		? (document.querySelector('#maincontent') || document.body) : null;
+	if (!host) {
+		ui.addNotification(null, E('p', [ E('strong', title + ': '), message ]), kind || 'error');
+		return;
+	}
+	var box;
+	function remove() {
+		if (box && box.parentNode) box.parentNode.removeChild(box);
+	}
+	box = E('div', {
+		'class': 'alert-message ' + (kind || 'error'),
+		'role': 'alert',
+		'style': 'display:flex;align-items:center;gap:12px'
+	}, [
+		E('p', { 'style': 'margin:0;flex:1' }, [ E('strong', title + ': '), message ]),
+		E('button', {
+			'type': 'button',
+			'class': 'btn',
+			'aria-label': wlocI18n.t('Close'),
+			'click': function(ev) {
+				if (ev && ev.preventDefault) ev.preventDefault();
+				if (ev && ev.stopPropagation) ev.stopPropagation();
+				remove();
+			}
+		}, wlocI18n.t('Close'))
+	]);
+	host.insertBefore(box, host.firstElementChild || null);
+	return box;
 }
 
 function gpsOf(geo) {
@@ -214,7 +247,7 @@ return view.extend({
 				if (r && r.error)
 					notify(wlocI18n.t('Apply failed'), r.error);
 				else
-					notify(wlocI18n.t('Applied'), wlocI18n.t('Device saved. WLOC now follows its node.'));
+				notify(wlocI18n.t('Applied'), wlocI18n.t('Device saved. WLOC now follows its node.'), 'success');
 			}).catch(function(e) {
 				notify(wlocI18n.t('Apply failed'), String(e));
 			});
@@ -305,7 +338,7 @@ return view.extend({
 					uci.save('wloc-service');
 					ui.changes.apply(true);
 					renderPresets();
-					notify(wlocI18n.t('Applied'), wlocI18n.t('Coordinates are now the active location and were saved to the list below.'));
+					notify(wlocI18n.t('Applied'), wlocI18n.t('Coordinates are now the active location and were saved to the list below.'), 'success');
 				}).catch(function(err) {
 					// Re-enable the button or it stays dead until a page reload.
 					coordBtn.disabled = false;
@@ -363,7 +396,7 @@ return view.extend({
 				uci.save('wloc-service').then(function() {
 					return ui.changes.apply(true);
 				}).then(function() {
-					notify(wlocI18n.t('Applied'), wlocI18n.t('Preset is now the active location.'));
+					notify(wlocI18n.t('Applied'), wlocI18n.t('Preset is now the active location.'), 'success');
 				}).catch(function(e) {
 					notify(wlocI18n.t('Apply failed'), String(e));
 				});
@@ -439,7 +472,7 @@ return view.extend({
 							}).then(function() {
 								ui.hideModal();
 								renderPresets();
-								notify(wlocI18n.t('Applied'), wlocI18n.t('Preset saved.'));
+								notify(wlocI18n.t('Applied'), wlocI18n.t('Preset saved.'), 'success');
 							}).catch(function(e) {
 								// Close the modal or the error toast renders
 								// underneath it and the dialog hangs.
@@ -515,7 +548,7 @@ return view.extend({
 					}
 					notify(wlocI18n.t('Profile ready'),
 						wlocI18n.t('On the iPhone open Safari and visit %s, then enable full trust in Settings > General > About > Certificate Trust Settings.')
-							.format(r.url || PROFILE_URL));
+							.format(r.url || PROFILE_URL), 'success');
 				}).catch(function(e) {
 					repackBtn.disabled = false;
 					notify(wlocI18n.t('Regenerate failed'), String(e));
@@ -545,7 +578,7 @@ return view.extend({
 								}
 								renderCertInfo(r);
 								notify(wlocI18n.t('Profile ready'),
-									wlocI18n.t('New CA generated. Reinstall and trust it on the iPhone.'));
+									wlocI18n.t('New CA generated. Reinstall and trust it on the iPhone.'), 'success');
 							}).catch(function(e) {
 								newCaBtn.disabled = false;
 								notify(wlocI18n.t('Regenerate failed'), String(e));
