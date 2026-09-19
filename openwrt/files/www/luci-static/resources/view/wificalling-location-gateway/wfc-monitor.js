@@ -60,13 +60,18 @@ return view.extend({
 				default: return wlocI18n.t('Encrypted activity; call/SMS unknown');
 			}
 		}
+		function epdgLabel(d) {
+			var ips = Array.isArray(d.epdg_ips) ? d.epdg_ips : (d.epdg_ip ? [d.epdg_ip] : []);
+			var count = Number(d.channel_count) || ips.length;
+			return (ips.length ? ips.join(', ') : '-') + (count > 1 ? ' [' + count + ']' : '');
+		}
 		function lines(value) { return value.trim() ? value.trim().split('\n').reverse() : []; }
 
 		/* ---------- 设备隧道状态 ---------- */
 		var statusBody = E('tbody', {}, []);
 		function statusRows(source) {
 			return (source.devices || []).map(function(d) {
-				var values = [d.label, d.ip, wfcLabel(d.wificalling || d.state), d.node || '-', d.epdg_ip || '-',
+				var values = [d.label, d.ip, wfcLabel(d.wificalling || d.state), d.node || '-', epdgLabel(d),
 					(d.ike_seen ? '500' : '-') + ' / ' + (d.nat_t_seen ? '4500' : '-'),
 					d.assured ? wlocI18n.t('Yes') : wlocI18n.t('No'), d.sent_packets + ' ↑ / ' + d.reply_packets + ' ↓', when(d.last_activity)];
 				return E('tr', { class: 'tr' }, values.map(function(x) { return E('td', { class: 'td' }, String(x)); }));
