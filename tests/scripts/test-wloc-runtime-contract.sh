@@ -134,6 +134,18 @@ grep -F 'ip6 daddr @apple_hosts6 reject with tcp reset' "$redirect" >/dev/null |
 	{ echo 'WLOC must reject only approved IPv6 targets so clients fall back to IPv4' >&2; exit 1; }
 grep -F 'wloc-service.main.assigned_device' "$redirect" >/dev/null ||
 	{ echo 'TPROXY source scope must come from the WLOC assigned device' >&2; exit 1; }
+if grep -F 'wificalling-gateway.@device[0].source_ip' "$redirect" >/dev/null; then
+	{ echo 'WLOC must not fall back to the first WFC device policy' >&2; exit 1; }
+fi
+
+# The external Gateway-following mode is not implemented. Keep the safe
+# independent mode visible and make old follow_gateway configurations fail
+# with an actionable diagnostic instead of silently dropping the device.
+if grep -F "routeMode.value('follow_gateway'" "$repo_root/openwrt/files/www/luci-static/resources/view/wificalling-gateway/overview.js" >/dev/null; then
+	{ echo 'LuCI must not present follow_gateway as an implemented mode' >&2; exit 1; }
+fi
+grep -F 'unsupported route_mode=follow_gateway' "$gateway_service" >/dev/null ||
+	{ echo 'legacy follow_gateway must produce an actionable startup diagnostic' >&2; exit 1; }
 
 # A clean install has no device policy yet. WLOC must stay fail-closed until
 # configured, but its daemon/control socket must still start so LuCI can show

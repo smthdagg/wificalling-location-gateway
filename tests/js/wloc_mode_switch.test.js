@@ -13,6 +13,7 @@ async function loadModeHandler(sourcePath, manualLat, manualLon, ctlResults, ass
 	const section = {
 		option: function(type, name) {
 			const option = {
+				isValue: type === form.Value,
 				values: [],
 				value: function(key, label) { this.values.push([key, label]); }
 			};
@@ -151,11 +152,18 @@ async function verifyManualSwitchWithoutCoordinates(sourcePath) {
 async function verifyEmptyFollowDeviceDefaultsToBlank(sourcePath) {
 	const harness = await loadModeHandler(sourcePath, '', '', null, '192.0.2.10');
 	assert(harness.followOption, 'follow-device option not found');
-	assert(harness.followOption.values.some(function(entry) {
-		return entry[0] === '' && entry[1] === '';
-	}), 'an empty device list must provide a blank option');
+	assert.strictEqual(harness.followOption.isValue, true,
+		'WLOC scope must be an independent IP input, not a WFC device list');
 	assert.strictEqual(harness.followOption.rmempty, true, 'an empty device list must be valid');
 	assert.strictEqual(harness.followOption.cfgvalue('main'), '', 'an empty device list must default to an empty value');
+}
+
+function verifyWlocDoesNotLoadGatewayConfig(sourcePath) {
+	const source = fs.readFileSync(sourcePath, 'utf8');
+	assert(!source.includes("uci.load('wificalling-gateway')"),
+		'WLOC settings must open without a WFC UCI configuration');
+	assert(source.includes("assigned_device'"), 'WLOC must retain its own target-device setting');
+	assert(source.includes("datatype = 'ip4addr'"), 'WLOC target-device input must be restricted to IPv4');
 }
 
 async function main() {
@@ -170,6 +178,7 @@ async function main() {
 		await verifyAutoSwitch(sourcePath);
 		await verifyManualSwitchWithoutCoordinates(sourcePath);
 		await verifyEmptyFollowDeviceDefaultsToBlank(sourcePath);
+		verifyWlocDoesNotLoadGatewayConfig(sourcePath);
 	}
 	console.log('wloc mode switch tests passed');
 }

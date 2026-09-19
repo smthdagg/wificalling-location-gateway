@@ -706,6 +706,14 @@ mod tests {
     use wificalling_location_gateway::mitm::CaBundle;
 
     #[test]
+    fn manual_location_does_not_require_the_gateway_engine() {
+        assert!(!gateway_engine_required(LocationMode::Manual));
+        assert!(engine_healthy_for_mode(LocationMode::Manual, false));
+        assert!(!engine_healthy_for_mode(LocationMode::Auto, false));
+        assert!(engine_healthy_for_mode(LocationMode::Auto, true));
+    }
+
+    #[test]
     fn recognizes_only_a_running_shared_singbox_command() {
         assert!(is_shared_singbox_cmdline(
             b"/tmp/sing-box-lite\0run\0-c\0/var/run/wificalling-gateway/sing-box.json\0"
