@@ -1,7 +1,8 @@
 # WLOC service configuration
 #
 # The control daemon serves the frozen wloc.service/v1 API on a root-only
-# Unix socket. Options here are read once at daemon startup:
+# Unix socket. These options provide startup defaults; the active location
+# mode can be switched online with geo-set/geo-clear without restarting:
 #   enabled          module on/off (also runtime control.enable/disable)
 #   geo_source       auto (follow the bound node exit) | manual (fixed preset)
 #   manual_lat/lon   coordinates used when geo_source=manual
