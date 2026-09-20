@@ -2,6 +2,7 @@
 set -eu
 
 dist_dir=
+only=
 plan_only=0
 report=
 OPENWRT_24_ROOTFS='ghcr.io/openwrt/rootfs:x86_64-24.10.8@sha256:9972a4b4747cd136abd597475d7b88c51a49fd849d0d53f069a2f4bf446061b9'
@@ -18,8 +19,9 @@ while [ "$#" -gt 0 ]; do
 	case "$1" in
 		--dist-dir) [ "$#" -ge 2 ] || fail 'missing --dist-dir value'; dist_dir=$2; shift 2 ;;
 		--report) [ "$#" -ge 2 ] || fail 'missing --report value'; report=$2; shift 2 ;;
+		--only) [ "$#" -ge 2 ] || fail 'missing --only value'; only=$2; shift 2 ;;
 		--plan) plan_only=1; shift ;;
-		-h|--help) echo 'Usage: verify-docker-matrix.sh [--plan] --dist-dir DIR [--report FILE]'; exit 0 ;;
+		-h|--help) echo 'Usage: verify-docker-matrix.sh [--plan] --dist-dir DIR [--report FILE] [--only CASE]'; exit 0 ;;
 		*) fail "unknown argument: $1" ;;
 	esac
 done
@@ -92,6 +94,7 @@ run_case() {
 		lite) package_name=wificalling-location-gateway-lite ;;
 		*) fail "unsupported matrix variant: $variant" ;;
 	esac
+	case "$name" in *"$only"*) ;; *) return 0 ;; esac
 	container="wloc-matrix-${name}-$$"
 	containers="$containers $container"
 	image_tag=${image%@*}
@@ -102,9 +105,9 @@ run_case() {
 		# longer available inside this minimal rootfs.
 		docker run -d --rm --privileged --pull never --platform "$platform" \
 			--name "$container" -v "$dist_dir:/packages:ro" \
-			-e "WLG_PACKAGE_BASENAME=${package_path##*/}" \
+			-e "WLG_PACKAGE_BASENAME=${package_path##*/}" -v /tmp/apklogs:/apklogs \
 			--entrypoint /bin/sh "$image" -c \
-			'mkdir -p /usr/sbin; [ -e /usr/sbin/ip ] || ln -s /sbin/ip /usr/sbin/ip; apk_ok=0; for attempt in 1 2 3; do apk add --allow-untrusted "/packages/$WLG_PACKAGE_BASENAME" >/tmp/wlg-apk-install.log 2>&1 && apk_ok=1 && break; sleep 5; done; [ "$apk_ok" = 1 ] && exec /sbin/init' >/dev/null
+			'mkdir -p /usr/sbin; [ -e /usr/sbin/ip ] || ln -s /sbin/ip /usr/sbin/ip; apk_ok=0; for attempt in 1 2 3 4 5 6; do apk add --allow-untrusted "/packages/$WLG_PACKAGE_BASENAME" >>/apklogs/apk-install.log 2>&1 && apk_ok=1 && break; sleep 15; done; [ "$apk_ok" = 1 ] && exec /sbin/init' >/dev/null
 	else
 		docker run -d --rm --privileged --pull never --platform "$platform" \
 			--name "$container" -v "$dist_dir:/packages:ro" \
@@ -112,10 +115,12 @@ run_case() {
 	fi
 
 	ready=0
+	budget=240
+	[ "$manager" = apk ] && budget=900
 	# 90 s: the apk case pre-installs the package before init, and a slow
 	# network can stall that dependency resolution past 45 s without the
 	# package being at fault.
-	for _attempt in $(seq 1 240); do
+	for _attempt in $(seq 1 $budget); do
 		if docker exec "$container" /bin/sh -c 'ubus list system >/dev/null 2>&1'; then
 			ready=1
 			break

@@ -48,6 +48,8 @@ Redmi AX6S upgrade.
 - The IPv6 guard set stayed empty forever and `ipv6_ready` lied about it.
 - Live auto/manual mode switching left the engine health stale.
 
+- **Known issue (observed on-device):** editing WFC nodes/device policies in LuCI can drop the `main.enabled` option from `/etc/config/wificalling-gateway`; if the gateway shows `active with no instances` after LuCI edits, run `uci set wificalling-gateway.main.enabled=1; uci commit wificalling-gateway; /etc/init.d/wificalling-gateway restart`.
+
 ### Line compatibility notes (from live AX6S testing / 线路兼容性提醒)
 
 - **Carrier anti-proxy policies.** Some carriers reject VoWiFi from
@@ -125,6 +127,9 @@ AX6S 实机测试版本：WLOC/WFC 解耦、双模块 IPv6 加固、按通道显
 - **多卡实测通过。** 一部手机可同时保持多条 VoWiFi 隧道（Lebara +
   Vodafone 同时注册验证）；每台设备仍需各自一条设备策略。
 
+
+
+- **已知问题（实机观察）：** 在 LuCI 中编辑 WFC 节点/设备策略时，`/etc/config/wificalling-gateway` 的 `main.enabled` 选项可能丢失；若 LuCI 操作后网关显示 `active with no instances`，执行 `uci set wificalling-gateway.main.enabled=1; uci commit wificalling-gateway; /etc/init.d/wificalling-gateway restart` 即可恢复。
 
 ## [1.3.0-r16] - 2026-09-14
 
