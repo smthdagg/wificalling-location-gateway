@@ -104,7 +104,7 @@ run_case() {
 			--name "$container" -v "$dist_dir:/packages:ro" \
 			-e "WLG_PACKAGE_BASENAME=${package_path##*/}" \
 			--entrypoint /bin/sh "$image" -c \
-			'mkdir -p /usr/sbin; [ -e /usr/sbin/ip ] || ln -s /sbin/ip /usr/sbin/ip; apk add --allow-untrusted "/packages/$WLG_PACKAGE_BASENAME" >/tmp/wlg-apk-install.log && exec /sbin/init' >/dev/null
+			'mkdir -p /usr/sbin; [ -e /usr/sbin/ip ] || ln -s /sbin/ip /usr/sbin/ip; apk_ok=0; for attempt in 1 2 3; do apk add --allow-untrusted "/packages/$WLG_PACKAGE_BASENAME" >/tmp/wlg-apk-install.log 2>&1 && apk_ok=1 && break; sleep 5; done; [ "$apk_ok" = 1 ] && exec /sbin/init' >/dev/null
 	else
 		docker run -d --rm --privileged --pull never --platform "$platform" \
 			--name "$container" -v "$dist_dir:/packages:ro" \
@@ -115,7 +115,7 @@ run_case() {
 	# 90 s: the apk case pre-installs the package before init, and a slow
 	# network can stall that dependency resolution past 45 s without the
 	# package being at fault.
-	for _attempt in $(seq 1 90); do
+	for _attempt in $(seq 1 240); do
 		if docker exec "$container" /bin/sh -c 'ubus list system >/dev/null 2>&1'; then
 			ready=1
 			break
