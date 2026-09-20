@@ -43,10 +43,10 @@ plan=$(
 )
 
 for expected in \
-	'wificalling-location-gateway_1.4.0-r17_x86_64.ipk' \
-	'wificalling-location-gateway-lite_1.4.0-r17_x86_64.ipk' \
-	'wificalling-location-gateway-1.4.0-r17.apk' \
-	'wificalling-location-gateway-lite-1.4.0-r17.apk'; do
+	'wificalling-location-gateway_1.4.0-r1_x86_64.ipk' \
+	'wificalling-location-gateway-lite_1.4.0-r1_x86_64.ipk' \
+	'wificalling-location-gateway-1.4.0-r1.apk' \
+	'wificalling-location-gateway-lite-1.4.0-r1.apk'; do
 	printf '%s\n' "$plan" | grep -F "$expected" >/dev/null ||
 		fail "dual-variant plan is missing $expected"
 done

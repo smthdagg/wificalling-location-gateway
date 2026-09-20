@@ -135,10 +135,10 @@ The runtime packages contain architecture-specific ELF files and **must match th
 
 ### 1. Choose the right package
 
-Release `v1.4.0-r17` provides two installation variants for each of three targets. Both belong to this project and contain the same WCG, WLOC, control tools, LuCI and saved UCI schema:
+Release `v1.4.0-r1` provides two installation variants for each of three targets. Both belong to this project and contain the same WCG, WLOC, control tools, LuCI and saved UCI schema:
 
-- Standard: `wificalling-location-gateway_1.4.0-r17_aarch64_cortex-a53.ipk`, `wificalling-location-gateway_1.4.0-r17_x86_64.ipk`, `wificalling-location-gateway-1.4.0-r17.apk`
-- Lite: `wificalling-location-gateway-lite_1.4.0-r17_aarch64_cortex-a53.ipk`, `wificalling-location-gateway-lite_1.4.0-r17_x86_64.ipk`, `wificalling-location-gateway-lite-1.4.0-r17.apk`
+- Standard: `wificalling-location-gateway_1.4.0-r1_aarch64_cortex-a53.ipk`, `wificalling-location-gateway_1.4.0-r1_x86_64.ipk`, `wificalling-location-gateway-1.4.0-r1.apk`
+- Lite: `wificalling-location-gateway-lite_1.4.0-r1_aarch64_cortex-a53.ipk`, `wificalling-location-gateway-lite_1.4.0-r1_x86_64.ipk`, `wificalling-location-gateway-lite-1.4.0-r1.apk`
 
 ### r16 changes
 
@@ -181,7 +181,7 @@ Full instructions for both methods live in the
 ### 2. Redmi AX6S (Lite recommended)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway-lite_1.4.0-r17_aarch64_cortex-a53.ipk
+opkg install /tmp/wificalling-location-gateway-lite_1.4.0-r1_aarch64_cortex-a53.ipk
 ```
 
 Back up both UCI files first. On storage-constrained AX6S units, stop the services and remove the old integrated and sing-box packages before installing Lite; do not delete the saved UCI files. The r16 Lite package replaces the separate sing-box package and owns its transparent wrapper. `/tmp` is RAM: prefer the signed-feed upgrade (`opkg update && opkg upgrade wificalling-location-gateway-lite`), and when installing a local IPK, delete it right after installation (`opkg install /tmp/x.ipk && rm -f /tmp/x.ipk`) — leftover files in `/tmp` can push available memory below the cold-start memory gate.
@@ -189,14 +189,14 @@ Back up both UCI files first. On storage-constrained AX6S units, stop the servic
 ### 3. OpenWrt 24.10 / iStoreOS 24.10 (IPK)
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.4.0-r17_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.4.0-r1_x86_64.ipk
 # Or use the corresponding Lite asset when a bundled, bounded runtime is preferred.
 ```
 
 ### 4. OpenWrt 25.12 (native APK v3)
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.4.0-r17.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.4.0-r1.apk
 ```
 
 `--allow-untrusted` applies only to locally built packages that are not yet signed in a repository. Formal releases use repository signing; never rename an IPK into an APK.
@@ -259,7 +259,7 @@ This pins the OpenWrt 24.10.8 `mediatek/mt7622` toolchain, Rust version, and SHA
 
 ./scripts/openwrt/build-release-packages.sh \
   --version 1.4.0 \
-  --release 17 \
+  --release 1 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
   --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \
@@ -428,7 +428,7 @@ flowchart TD
 
 | 平台 | 架构 | 包管理器 | 当前证据 | 状态 |
 |---|---:|---|---|---|
-| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | 已升级 1.4.0-r17：双卡（Lebara+Vodafone）VoWiFi 同时注册并实际通话成功，单机多隧道按通道显示；WFC IPv6 进隧道、WLOC IPv6 兜底生效；升级后可用内存高于 32 MiB | **Docker + 路由器 + iPhone WLOC 通过** |
+| Redmi AX6S · ImmortalWrt 24.10.6 | MediaTek MT7622 / AArch64 | opkg | 已升级 1.4.0-r1：双卡（Lebara+Vodafone）VoWiFi 同时注册并实际通话成功，单机多隧道按通道显示；WFC IPv6 进隧道、WLOC IPv6 兜底生效；升级后可用内存高于 32 MiB | **Docker + 路由器 + iPhone WLOC 通过** |
 | OpenWrt 24.10.8 | x86_64 | opkg / IPK | Docker 中启动 init/ubus、安装集成包、启动服务、Socket 与 v1 状态检查 | **安装矩阵通过** |
 | iStoreOS 24.10.5 | x86_64 | opkg / IPK | 同上 | **安装矩阵通过** |
 | OpenWrt 25.12.3 | x86_64 | apk / APK v3 | 同上，使用原生 APK v3，非改名 IPK | **安装矩阵通过** |
@@ -459,10 +459,10 @@ Some carriers reject VoWiFi from datacenter exit IPs (observed: IKE INITs droppe
 
 ### 1. 选择正确的安装包
 
-`v1.4.0-r17` 为三个目标各提供 Standard 与 Lite 两种安装规格。它们属于同一个项目，WCG、WLOC、控制工具、LuCI 与 UCI 数据结构完全一致：
+`v1.4.0-r1` 为三个目标各提供 Standard 与 Lite 两种安装规格。它们属于同一个项目，WCG、WLOC、控制工具、LuCI 与 UCI 数据结构完全一致：
 
-- Standard：`wificalling-location-gateway_1.4.0-r17_aarch64_cortex-a53.ipk`、`wificalling-location-gateway_1.4.0-r17_x86_64.ipk`、`wificalling-location-gateway-1.4.0-r17.apk`
-- Lite：`wificalling-location-gateway-lite_1.4.0-r17_aarch64_cortex-a53.ipk`、`wificalling-location-gateway-lite_1.4.0-r17_x86_64.ipk`、`wificalling-location-gateway-lite-1.4.0-r17.apk`
+- Standard：`wificalling-location-gateway_1.4.0-r1_aarch64_cortex-a53.ipk`、`wificalling-location-gateway_1.4.0-r1_x86_64.ipk`、`wificalling-location-gateway-1.4.0-r1.apk`
+- Lite：`wificalling-location-gateway-lite_1.4.0-r1_aarch64_cortex-a53.ipk`、`wificalling-location-gateway-lite_1.4.0-r1_x86_64.ipk`、`wificalling-location-gateway-lite-1.4.0-r1.apk`
 
 ### r16 更新说明
 
@@ -501,7 +501,7 @@ OpenWrt 25.x 的 `.apk` 手动安装命令）。
 ### 2. Redmi AX6S（推荐 Lite）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway-lite_1.4.0-r17_aarch64_cortex-a53.ipk
+opkg install /tmp/wificalling-location-gateway-lite_1.4.0-r1_aarch64_cortex-a53.ipk
 ```
 
 安装前先备份两份 UCI 配置。AX6S 空间不足时，先停止服务并卸载旧整合包和旧 sing-box 包，再安装 Lite；不要删除 UCI 配置。r16 Lite 会替代独立 sing-box 包并拥有透明启动包装器。/tmp 是内存：优先使用签名软件源升级（`opkg update && opkg upgrade wificalling-location-gateway-lite`）；本地上传 IPK 安装后请立即删除（`opkg install /tmp/x.ipk && rm -f /tmp/x.ipk`）——/tmp 残留文件可能把可用内存压到冷启动内存门禁以下。
@@ -509,14 +509,14 @@ opkg install /tmp/wificalling-location-gateway-lite_1.4.0-r17_aarch64_cortex-a53
 ### 3. OpenWrt 24.10 / iStoreOS 24.10（IPK）
 
 ```sh
-opkg install /tmp/wificalling-location-gateway_1.4.0-r17_x86_64.ipk
+opkg install /tmp/wificalling-location-gateway_1.4.0-r1_x86_64.ipk
 # 需要内置、受限运行时时也可选择对应 Lite 文件。
 ```
 
 ### 4. OpenWrt 25.12（原生 APK v3）
 
 ```sh
-apk add --allow-untrusted /tmp/wificalling-location-gateway-1.4.0-r17.apk
+apk add --allow-untrusted /tmp/wificalling-location-gateway-1.4.0-r1.apk
 ```
 
 `--allow-untrusted` 仅适用于当前未接入软件源签名的本地构建包。正式软件源发布应使用仓库签名，且不能把 IPK 重命名为 APK。
@@ -579,7 +579,7 @@ OPENWRT_CROSS_CACHE_DIR=/tmp/wloc-rust-openwrt \
 
 ./scripts/openwrt/build-release-packages.sh \
   --version 1.4.0 \
-  --release 17 \
+  --release 1 \
   --arch x86_64 \
   --service-bin "$PWD/dist/runtime/x86_64/wloc-service" \
   --ctl-bin "$PWD/dist/runtime/x86_64/wloc-ctl" \

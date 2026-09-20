@@ -25,7 +25,7 @@ grep -F 'The multi-device/2.0 Beta line is maintained only in the separate Beta 
 
 grep -F '\$\$required' "$builder" >/dev/null ||
 	fail 'package post-install must preserve the full prerequisite path through Make'
-grep -F 'mkdir -p /var/run/wificalling-gateway' "$builder" >/dev/null ||
+grep -F 'mkdir -p /var/lock /var/run/wificalling-gateway' "$builder" >/dev/null ||
 	fail 'release post-install must create the volatile Gateway runtime directory before restart'
 grep -F 'chmod 0700 /var/run/wificalling-gateway' "$builder" >/dev/null ||
 	fail 'release post-install must restrict the Gateway runtime directory'
@@ -93,9 +93,9 @@ plan=$(
 		--ctl-bin "$tmp/wloc-ctl"
 )
 
-printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway_1.4.0-r17_x86_64.ipk' >/dev/null ||
+printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway_1.4.0-r1_x86_64.ipk' >/dev/null ||
 	fail '24.10 must produce one architecture-specific integrated IPK'
-printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway-1.4.0-r17.apk (arch: x86_64)' >/dev/null ||
+printf '%s\n' "$plan" | grep -F 'wificalling-location-gateway-1.4.0-r1.apk (arch: x86_64)' >/dev/null ||
 	fail '25.12 must produce one architecture-specific integrated APK'
 if printf '%s\n' "$plan" | grep -E 'wloc-service[_-]|luci-app-wificalling-location-gateway[_-]' >/dev/null; then
 	fail 'formal 1.3.0 plan must not expose split component packages'

@@ -44,13 +44,13 @@ plan=$(
 		--arch x86_64 --service-bin "$tmp/wloc-service" --ctl-bin "$tmp/wloc-ctl"
 )
 for expected in \
-	'wificalling-location-gateway_1.4.0-r17_x86_64.ipk' \
-	'wificalling-location-gateway-1.4.0-r17.apk'; do
+	'wificalling-location-gateway_1.4.0-r1_x86_64.ipk' \
+	'wificalling-location-gateway-1.4.0-r1.apk'; do
 	printf '%s\n' "$plan" | grep -F "$expected" >/dev/null ||
 		fail "release plan is missing $expected"
 done
 
-grep -F 'version=${1:-1.4.0-r17}' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null ||
+grep -F 'version=${1:-1.4.0-r1}' "$repo_root/scripts/build-luci-ipk.sh" >/dev/null ||
 	fail 'AX6S standalone builder default must be 1.4.0 release 16'
 
 printf '%s\n' 'release version tests passed'
