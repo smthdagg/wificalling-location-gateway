@@ -203,6 +203,17 @@ grep -F 'meta nfproto ipv6 counter drop' "$gateway_firewall" >/dev/null ||
 	{ echo 'Policy device IPv6 must drop when the tunnel cannot carry it' >&2; exit 1; }
 grep -F 'meta nfproto ipv4 meta l4proto tcp' "$gateway_firewall" >/dev/null ||
 	{ echo 'IPv4 tproxy rules must be family-scoped so IPv6 falls through to the v6 rules' >&2; exit 1; }
+# WLOC IPv6 audit: the v6 fallback guard must be real, not decorative. The
+# reject set needs AAAA answers, the marker must reflect the installed rules,
+# and the daemon must report the runtime state instead of a constant.
+grep -F 'type=AAAA' "$refresh" >/dev/null ||
+	{ echo 'refresh-set must resolve AAAA records to feed the IPv6 guard set' >&2; exit 1; }
+grep -F 'add element inet "$TABLE" apple_hosts6' "$refresh" >/dev/null ||
+	{ echo 'refresh-set must populate the apple_hosts6 nft set' >&2; exit 1; }
+grep -F 'ipv6-scope-ready' "$redirect" >/dev/null ||
+	{ echo 'redirect sync must publish the IPv6 scope marker for truthful status' >&2; exit 1; }
+grep -F 'ipv6_scope_ready' "$daemon" >/dev/null ||
+	{ echo 'daemon must report ipv6_ready from the runtime scope marker' >&2; exit 1; }
 if grep -F 'bind_tproxy_listener_v6' "$daemon" >/dev/null ||
 	grep -F 'proxy_listener_v6' "$daemon" >/dev/null; then
 	{ echo 'daemon must bind only the IPv4 TPROXY listener' >&2; exit 1; }

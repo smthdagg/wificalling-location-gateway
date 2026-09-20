@@ -170,6 +170,30 @@ collect_v4() {
     done
 }
 
+# AAAA answers feed the @apple_hosts6 reject set: a client that bypasses the
+# local DNS hijack (DoH, Private Relay, a hand-edited resolver) still reaches
+# the real Apple WLOC servers over IPv6, and this set is what the per-device
+# `ip6 daddr @apple_hosts6 reject` guard matches on. Without it the set stays
+# empty and the IPv6 fallback guard never fires.
+resolve_aaaa() {
+    resolve_host=$1
+    for resolver in $DNS_SERVERS; do
+        answers=$(nslookup -type=AAAA "$resolve_host" "$resolver" 2>/dev/null | awk '
+            $1 == "Name:" { answer = 1; next }
+            answer && $1 == "Address:" && $2 ~ /^[0-9A-Fa-f:]*:[0-9A-Fa-f:]+$/ { print $2 }
+            answer && $1 == "Address" && $3 ~ /^[0-9A-Fa-f:]*:[0-9A-Fa-f:]+$/ { print $3 }
+        ' | sort -u)
+        [ -n "$answers" ] && { printf '%s\n' "$answers"; return 0; }
+    done
+    return 1
+}
+
+collect_aaaa() {
+    for host in $HOSTS; do
+        resolve_aaaa "$host" || true
+    done
+}
+
 csv() {
     tr '\n' ',' | sed 's/,$//'
 }
@@ -184,6 +208,12 @@ nft add table inet "$TABLE" 2>/dev/null || true
 nft flush set inet "$TABLE" "$SET" 2>/dev/null || nft add set inet "$TABLE" "$SET" '{ type ipv4_addr; }'
 nft flush set inet "$TABLE" apple_hosts6 2>/dev/null || nft add set inet "$TABLE" apple_hosts6 '{ type ipv6_addr; }'
 nft add element inet "$TABLE" "$SET" "{ $ips4 }"
+# Global (non link-local, non ULA) AAAA answers only: the guard is about
+# internet-side Apple endpoints, never about on-link addresses.
+ips6=$(collect_aaaa | grep -vE '^(fe[89ab]|f[cd][0-9a-f]{2}):' | sort -u | csv)
+if [ -n "$ips6" ]; then
+    nft add element inet "$TABLE" apple_hosts6 "{ $ips6 }"
+fi
 mkdir -p /var/run/wloc-service
 # Local DNS maps each approved name to this router for stable ingress. Keep a
 # separate public answer for each name: an Apple/Autonavi CDN address is not

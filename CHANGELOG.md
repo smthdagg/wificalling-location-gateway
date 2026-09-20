@@ -2,6 +2,44 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r42] - 2026-09-20
+
+WLOC IPv6 audit follow-up: make the IPv6 fallback guard real and the
+reported state truthful.
+
+- `wloc-refresh-set.sh` now also resolves AAAA records for every approved
+  WLOC host and populates the `apple_hosts6` nft set. Previously the set was
+  flushed but never filled (only A records were resolved), so the per-device
+  `ip6 daddr @apple_hosts6 reject` guard never matched anything and a client
+  bypassing the local DNS hijack (DoH, Private Relay) could reach the real
+  Apple WLOC endpoints over native IPv6 unpatched.
+- `wloc-redirect-sync.sh` writes `/var/run/wloc-service/ipv6-scope-ready`
+  when the per-device IPv6 reject rules are installed (device MAC resolved)
+  and removes it otherwise; the stop path already cleaned it.
+- The daemon reports `safety.ipv6_ready` from that runtime marker instead of
+  a hardcoded `false`, so the status/monitor finally reflects whether the
+  IPv6 guard is live. The enable path itself remains IPv6-independent.
+- Regression coverage: runtime contract checks for AAAA resolution, set
+  population, the scope marker, and the runtime hook; a state-marker test
+  asserts status tracks install/withdraw.
+
+### 中文说明
+
+WLOC IPv6 审核跟进：让 IPv6 兜底防护真正生效、状态如实上报。
+
+- `wloc-refresh-set.sh` 现在同时解析所有 WLOC 域名的 AAAA 记录并填充
+  `apple_hosts6` nft 集合。此前该集合每次只被清空、从不填充（仅解析 A
+  记录），导致按设备下发的 `ip6 daddr @apple_hosts6 reject` 防护从未匹配
+  过任何流量——绕过本地 DNS 劫持的客户端（DoH、私有中继等）可以经原生
+  IPv6 直连真实 Apple WLOC 端点而不被处理。
+- `wloc-redirect-sync.sh` 在按设备安装 IPv6 拒绝规则后写入
+  `/var/run/wloc-service/ipv6-scope-ready` 标记（设备 MAC 解析失败时不
+  写），停止路径沿用既有清理。
+- 守护进程的 `safety.ipv6_ready` 改为读取该运行时标记，替代写死的
+  `false`，状态页如实反映 IPv6 防护是否在位；启用路径本身仍不依赖 IPv6。
+- 回归覆盖：AAAA 解析、集合填充、范围标记与运行时钩子的契约检查，以及
+  状态随标记安装/撤销变化的测试。
+
 ## [1.3.0-r41] - 2026-09-20
 
 Device-level IPv6 for the Wi-Fi Calling tunnel (AX6S live-testing follow-up).

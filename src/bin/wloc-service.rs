@@ -95,6 +95,13 @@ impl RuntimeControl for OpenWrtRuntime {
     fn stop_engine(&mut self) -> Result<(), RuntimeFailure> {
         Ok(())
     }
+
+    fn ipv6_scope_ready(&self) -> bool {
+        // The redirect helper creates this marker once the per-device IPv6
+        // reject rules (@apple_hosts6) are installed, and removes it on
+        // teardown - status reports the real guard state, not a constant.
+        Path::new("/var/run/wloc-service/ipv6-scope-ready").exists()
+    }
 }
 
 fn run_redirect_helper(action: Option<&str>) -> Result<(), RuntimeFailure> {

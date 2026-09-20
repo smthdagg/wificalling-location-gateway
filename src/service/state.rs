@@ -42,6 +42,14 @@ impl SafetyState {
         self.ipv6_ready
     }
 
+    /// Refresh the reported IPv6 guard state without touching the lifecycle
+    /// fields: the redirect helper writes/removes the scope marker outside of
+    /// the state machine, so status snapshots re-read it directly.
+    pub const fn with_ipv6_ready(mut self, ready: bool) -> Self {
+        self.ipv6_ready = ready;
+        self
+    }
+
     const fn redirect_prerequisites_met(self) -> bool {
         self.engine_ready && self.watchdog_armed && self.scope_valid
     }
@@ -55,6 +63,12 @@ pub struct ServiceState {
 }
 
 impl ServiceState {
+    /// See [`SafetyState::with_ipv6_ready`].
+    pub const fn with_ipv6_ready(mut self, ready: bool) -> Self {
+        self.safety.ipv6_ready = ready;
+        self
+    }
+
     pub const fn disabled() -> Self {
         Self {
             phase: ServicePhase::Disabled,

@@ -213,4 +213,13 @@ done
 for mac in $macs; do
     nft "add rule inet $TABLE $CHAIN ether saddr $mac tcp dport 443 ip6 daddr @apple_hosts6 reject with tcp reset"
 done
+# IPv6 scope marker: consumed by wloc-service for truthful ipv6_ready status.
+# Present only while the per-device IPv6 reject rules are actually installed;
+# the stop path removes it together with the rest of the owned state.
+mkdir -p /var/run/wloc-service
+if [ -n "$macs" ]; then
+    : > /var/run/wloc-service/ipv6-scope-ready
+else
+    rm -f /var/run/wloc-service/ipv6-scope-ready
+fi
 echo "wloc-redirect-sync: IPv4 tproxy $ips -> :$PROXY_PORT (mark $FWMARK, table $ROUTE_TABLE)"

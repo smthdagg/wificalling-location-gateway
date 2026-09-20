@@ -676,7 +676,10 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             generation: self.generation,
             observed_at_unix: now_unix,
             desired_state: self.desired_state,
-            service_state: self.state,
+            // IPv6 readiness is dynamic (the redirect helper owns the scope
+            // marker), so every snapshot re-reads it instead of trusting the
+            // value captured at enable time.
+            service_state: self.state.with_ipv6_ready(self.runtime.ipv6_scope_ready()),
             engine_health,
             engine_uptime_seconds: engine_uptime,
             assigned_device_configured: self.assigned_device_configured,
@@ -754,6 +757,9 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
         }
         control_enable(&mut self.runtime, self.scope_valid, self.ipv6_ready)
             .map_err(map_control_error)?;
+        // The redirect install above just (re)wrote the IPv6 scope marker:
+        // capture the real guard state for the enable transition events.
+        self.ipv6_ready = self.runtime.ipv6_scope_ready();
         self.apply_enable_events();
         Ok(())
     }

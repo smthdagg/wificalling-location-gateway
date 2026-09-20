@@ -614,6 +614,98 @@ fn fresh_geo(now_unix: u64) -> SequenceGeo {
     }
 }
 
+/// Runtime whose IPv6 scope marker is test-controlled: mirrors the OpenWrt
+/// adapter reading /var/run/wloc-service/ipv6-scope-ready.
+struct MarkerRuntime {
+    scope_marker: Arc<Mutex<bool>>,
+}
+
+impl RuntimeControl for MarkerRuntime {
+    fn start_engine_passthrough(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn engine_healthy(&mut self) -> Result<bool, RuntimeFailure> {
+        Ok(true)
+    }
+    fn arm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn install_exact_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn remove_redirect(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn redirect_present(&mut self) -> Result<bool, RuntimeFailure> {
+        Ok(false)
+    }
+    fn disarm_watchdog(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn drain_engine(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn stop_engine(&mut self) -> Result<(), RuntimeFailure> {
+        Ok(())
+    }
+    fn ipv6_scope_ready(&self) -> bool {
+        *self.scope_marker.lock().unwrap()
+    }
+}
+
+#[test]
+fn status_reports_ipv6_scope_marker_state() {
+    // The IPv6 guard is installed/withdrawn by the redirect helper outside
+    // the state machine; status must reflect the live marker instead of the
+    // constant captured at startup.
+    let now = 1_000_000;
+    let marker = Arc::new(Mutex::new(false));
+    let mut service = WlocService::new(
+        MarkerRuntime {
+            scope_marker: Arc::clone(&marker),
+        },
+        fresh_probe(),
+        fresh_geo(now),
+        WlocServiceConfig {
+            node_ref: NodeRef::new("node-1").unwrap(),
+            providers: vec![ProviderRef::new("geo-a").unwrap()],
+            probe_limits: limits(),
+            scope_valid: true,
+            ipv6_ready: false,
+            assigned_device_configured: true,
+            assigned_device: Some("192.168.31.176".to_owned()),
+            reverse_geo_lookup: None,
+        },
+    );
+
+    service
+        .set_manual_location(&RequestParams {
+            query: None,
+            latitude: Some(22.3193),
+            longitude: Some(114.1694),
+        })
+        .unwrap();
+    service.enable().unwrap();
+    assert_eq!(
+        service.status_at(now).unwrap()["safety"]["ipv6_ready"],
+        false
+    );
+
+    // Redirect helper writes the marker once the IPv6 reject rules land.
+    *marker.lock().unwrap() = true;
+    assert_eq!(
+        service.status_at(now).unwrap()["safety"]["ipv6_ready"],
+        true
+    );
+
+    // ...and withdraws it together with the redirect on teardown.
+    *marker.lock().unwrap() = false;
+    assert_eq!(
+        service.status_at(now).unwrap()["safety"]["ipv6_ready"],
+        false
+    );
+}
+
 #[test]
 fn status_reports_verified_exit_and_fresh_geo() {
     let now = current_unix();

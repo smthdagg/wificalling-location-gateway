@@ -41,6 +41,12 @@ pub trait RuntimeControl: Send {
     fn disarm_watchdog(&mut self) -> Result<(), RuntimeFailure>;
     fn drain_engine(&mut self) -> Result<(), RuntimeFailure>;
     fn stop_engine(&mut self) -> Result<(), RuntimeFailure>;
+    /// Whether the IPv6 scope guard is actually installed (the redirect
+    /// helper writes its scope marker once the per-device IPv6 reject rules
+    /// are live). Status-only: the enable path does not depend on it.
+    fn ipv6_scope_ready(&self) -> bool {
+        false
+    }
 }
 
 pub fn enable(
