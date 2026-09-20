@@ -68,11 +68,6 @@ return view.extend({
 		function channelsOf(d) {
 			return Array.isArray(d.channels) ? d.channels : [];
 		}
-		function channelLine(c) {
-			return '↳ ' + (c.epdg || '-') + ' — ' + wfcLabel(c.state) +
-				' — ' + (c.assured ? wlocI18n.t('Yes') : wlocI18n.t('No')) +
-				' — ' + (c.sent_packets || 0) + ' ↑ / ' + (c.reply_packets || 0) + ' ↓';
-		}
 		function lines(value) { return value.trim() ? value.trim().split('\n').reverse() : []; }
 
 		/* ---------- 设备隧道状态 ---------- */
@@ -85,13 +80,13 @@ return view.extend({
 					d.assured ? wlocI18n.t('Yes') : wlocI18n.t('No'), d.sent_packets + ' ↑ / ' + d.reply_packets + ' ↓', when(d.last_activity)];
 				rows.push(E('tr', { class: 'tr' }, values.map(function(x) { return E('td', { class: 'td' }, String(x)); })));
 				/* One phone (dual SIM, multi-ePDG) can hold several WFC tunnels:
-				   every channel gets its own line beneath the device row. */
-				var channels = channelsOf(d);
-				if (channels.length > 1) {
-					rows.push(E('tr', { class: 'tr' }, [E('td', { class: 'td', colspan: '9' },
-						channels.map(function(c) { return E('div', { class: 'channel-line' }, wlocI18n.t('Channel') + ': ' + channelLine(c)); })
-					)]));
-				}
+				   every channel renders as a regular aligned row. */
+				channelsOf(d).forEach(function(c) {
+					var channelValues = ['↳ ' + wlocI18n.t('Channel'), d.ip, wfcLabel(c.state), d.node || '-', c.epdg || '-',
+						(c.ike_seen ? '500' : '-') + ' / ' + (c.nat_t_seen ? '4500' : '-'),
+						c.assured ? wlocI18n.t('Yes') : wlocI18n.t('No'), (c.sent_packets || 0) + ' ↑ / ' + (c.reply_packets || 0) + ' ↓', when(d.last_activity)];
+					rows.push(E('tr', { class: 'tr' }, channelValues.map(function(x) { return E('td', { class: 'td' }, String(x)); })));
+				});
 			});
 			return rows;
 		}
