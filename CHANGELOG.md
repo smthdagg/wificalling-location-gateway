@@ -2,6 +2,37 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r40] - 2026-09-20
+
+AX6S live-testing follow-up to the WLOC/WFC decoupling: control-plane
+starvation fix under a dead proxy node.
+
+- The control worker now keeps at most one housekeeping job in the system
+  (queued or running): the ticker re-arms only after the previous refresh
+  finished. Previously a failing auto-mode exit probe (up to 15s per attempt)
+  fed by the 10s housekeeping cadence filled the job queue with refresh jobs
+  and starved `wloc-ctl` requests behind them for minutes (`daemon closed
+  connection without response`) until a daemon restart.
+- Automatic exit probes now back off for 60s after a failure instead of
+  re-probing on every tick; an explicit monitor refresh bypasses the backoff.
+- The sing-box exit-probe connect/read timeout is 8s (was 15s), bounded below
+  the housekeeping cadence so one job cannot outlive the tick that spawned it.
+- Regression tests: refresh coalescing under a slow housekeeping stub
+  (`slow_housekeeping_never_stacks_up_behind_control_requests`) and probe
+  failure backoff semantics in the `probe_needed` tests.
+
+### 中文说明
+
+AX6S 实机回归：修复自动定位在节点失效时饿死控制通道的问题。
+
+- 控制线程同一时刻只允许一个巡检任务（排队或执行中），上一轮巡检结束后
+  ticker 才会再次投递；此前自动模式出口探测失败（单次最长 15 秒）叠加 10 秒
+  巡检节奏会把任务队列填满，`wloc-ctl` 请求被饿死数分钟，只能重启守护进程。
+- 出口探测失败后自动退避 60 秒再试；监控页手动刷新不受退避限制。
+- sing-box 出口探测连接/读取超时从 15 秒降为 8 秒，保证单次巡检不会超过
+  触发它的 tick 周期。
+- 新增回归测试：慢巡检下的请求饥饿防护与探测失败退避语义。
+
 ## [1.3.0-r16] - 2026-09-14
 
 Static-route lifecycle hardening.

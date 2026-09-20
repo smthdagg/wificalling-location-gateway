@@ -15,6 +15,8 @@
 //! Socket creation, permissions, and process lifecycle belong to the OpenWrt
 //! procd adapter; this module only drives the accepted stream.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::net::UnixListener;
@@ -57,8 +59,17 @@ impl<S: ServiceDispatch + Send + 'static> ControlServer<S> {
     /// The handler moves to a worker thread; every job (request dispatch and
     /// housekeeping) is executed there, so bounded blocking probe/Geo I/O can
     /// no longer wedge the accept loop or a concurrent control call.
+    ///
+    /// At most one housekeeping job exists in the system (queued or running):
+    /// the ticker re-arms only after the worker finished the previous one.
+    /// A failing exit probe blocks the worker for its whole timeout, and a
+    /// 10s cadence feeding 15s+ jobs once starved control requests behind a
+    /// full refresh backlog.
     pub async fn serve(self, listener: UnixListener, refresh_interval: Duration) {
         let (job_tx, job_rx) = mpsc::channel::<Job>(JOB_QUEUE_CAPACITY);
+        let refresh_in_flight = Arc::new(AtomicBool::new(false));
+        let worker_gate = Arc::clone(&refresh_in_flight);
+        let ticker_gate = Arc::clone(&refresh_in_flight);
         std::thread::Builder::new()
             .name("wloc-control".to_string())
             .spawn(move || {
@@ -66,7 +77,10 @@ impl<S: ServiceDispatch + Send + 'static> ControlServer<S> {
                 let mut job_rx = job_rx;
                 while let Some(job) = job_rx.blocking_recv() {
                     match job {
-                        Job::Refresh => handler.refresh_periodic(),
+                        Job::Refresh => {
+                            handler.refresh_periodic();
+                            worker_gate.store(false, Ordering::Release);
+                        }
                         Job::Dispatch(request, reply) => {
                             let _ = reply.send(dispatch(&request, &mut handler));
                         }
@@ -81,9 +95,17 @@ impl<S: ServiceDispatch + Send + 'static> ControlServer<S> {
         loop {
             tokio::select! {
                 _ = ticker.tick() => {
-                    // Housekeeping is skippable: never queue behind a burst of
-                    // control requests, just wait for the next tick.
-                    let _ = job_tx.try_send(Job::Refresh);
+                    // Housekeeping is skippable and never overlaps itself: a
+                    // queued-or-running refresh makes this tick a no-op.
+                    if ticker_gate
+                        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                        .is_err()
+                    {
+                        continue;
+                    }
+                    if job_tx.try_send(Job::Refresh).is_err() {
+                        ticker_gate.store(false, Ordering::Release);
+                    }
                 }
                 accepted = listener.accept() => {
                     match accepted {

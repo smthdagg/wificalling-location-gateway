@@ -313,7 +313,10 @@ impl SingBoxProbe {
         Self {
             config_path,
             device_ip,
-            timeout: Duration::from_secs(15),
+            // Bounded below the 10s housekeeping cadence: a probe that runs
+            // its whole timeout must not outlast the tick that spawned it,
+            // or the single control worker falls permanently behind.
+            timeout: Duration::from_secs(8),
             uci_config_path: PathBuf::from("/etc/config/wificalling-gateway"),
         }
     }

@@ -118,6 +118,11 @@ pub struct WlocService<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRun
     /// Last probe failure reason (shown in the monitor when the exit IP is
     /// unknown); cleared on a successful probe.
     last_probe_error: Option<String>,
+    /// Unix timestamp of the last failed exit probe. A dead node makes every
+    /// probe run its full timeout; the backoff keeps the periodic tick from
+    /// re-probing (and re-blocking the control worker) on every 10s housekeeping
+    /// pass while the node stays down.
+    last_probe_failure_unix: Option<u64>,
     /// Reverse-geocode endpoint for manual place-info lookups (production:
     /// Nominatim TLS; tests: mock port or `None` to disable).
     reverse_geo_lookup: Option<(String, u16)>,
@@ -165,6 +170,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
             reverse_geo_lookup: config.reverse_geo_lookup,
             last_probe_fingerprint: None,
             last_probe_error: None,
+            last_probe_failure_unix: None,
             status_file: None,
             events_file: None,
         };
@@ -209,7 +215,13 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                 if now_unix.saturating_sub(observation.checked_at_unix())
                     <= self.probe_limits.max_observation_age.as_secs()
         );
-        if !probe_needed(fresh, fingerprint, self.last_probe_fingerprint) {
+        if !probe_needed(
+            fresh,
+            fingerprint,
+            self.last_probe_fingerprint,
+            self.last_probe_failure_unix,
+            now_unix,
+        ) {
             return matches!(self.geo_resolution, GeoResolution::Fresh(_));
         }
 
@@ -224,6 +236,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                 self.exit_evidence = ExitEvidence::Verified(observation);
                 self.last_probe_fingerprint = fingerprint;
                 self.last_probe_error = None;
+                self.last_probe_failure_unix = None;
                 let exit_ip = self
                     .last_exit_ip()
                     .expect("fresh observation always carries an exit IP");
@@ -260,6 +273,7 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
                 self.exit_evidence = ExitEvidence::Unavailable;
                 self.geo_resolution = GeoResolution::Unavailable;
                 self.last_probe_error = Some(error.to_string());
+                self.last_probe_failure_unix = Some(now_unix);
                 self.publish_patch_target();
                 false
             }
@@ -532,6 +546,8 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> WlocService<
     pub fn force_evidence_refresh(&mut self) {
         self.exit_evidence = ExitEvidence::None;
         self.last_probe_fingerprint = None;
+        // An explicit refresh is the operator overriding the failure backoff.
+        self.last_probe_failure_unix = None;
         let _ = self.refresh_evidence_at(current_unix());
         self.refresh_state_file();
     }
@@ -788,14 +804,31 @@ impl<R: RuntimeControl, P: ExitProbeRuntime, G: GeoProviderRuntime> ServiceDispa
     }
 }
 
+/// Minimum delay between an exit-probe failure and the next automatic probe.
+/// A dead node keeps every probe alive until its full timeout; without the
+/// backoff the 10s housekeeping tick turns each failure into another 15s
+/// worker stall, starving control requests behind the refresh backlog.
+const PROBE_FAILURE_BACKOFF_SECS: u64 = 60;
+
 /// Whether a fresh probe is required: missing/stale evidence, a previous
 /// failure, or a changed probe configuration (the followed device's node
-/// was switched in the Gateway settings).
+/// was switched in the Gateway settings). A recent failure suppresses the
+/// automatic re-probe until the backoff expires; an explicit refresh always
+/// bypasses it.
 fn probe_needed(
     fresh: bool,
     current_fingerprint: Option<u64>,
     last_fingerprint: Option<u64>,
+    last_failure_unix: Option<u64>,
+    now_unix: u64,
 ) -> bool {
+    if let Some(failed_at) = last_failure_unix {
+        if now_unix.saturating_sub(failed_at) < PROBE_FAILURE_BACKOFF_SECS
+            && current_fingerprint == last_fingerprint
+        {
+            return false;
+        }
+    }
     !fresh || current_fingerprint != last_fingerprint
 }
 
@@ -805,25 +838,42 @@ mod probe_needed_tests {
 
     #[test]
     fn stale_or_missing_evidence_always_reprobes() {
-        assert!(probe_needed(false, Some(1), Some(1)));
-        assert!(probe_needed(false, None, None));
+        assert!(probe_needed(false, Some(1), Some(1), None, 1000));
+        assert!(probe_needed(false, None, None, None, 1000));
     }
 
     #[test]
     fn fresh_evidence_is_kept_when_config_is_unchanged() {
-        assert!(!probe_needed(true, Some(1), Some(1)));
+        assert!(!probe_needed(true, Some(1), Some(1), None, 1000));
         // Probes without fingerprint support (None == None) never force a
         // re-probe on their own.
-        assert!(!probe_needed(true, None, None));
+        assert!(!probe_needed(true, None, None, None, 1000));
     }
 
     #[test]
     fn node_switch_changes_the_fingerprint_and_forces_reprobe() {
         // The followed device's node changed in the Gateway settings:
-        // even fresh evidence must be re-probed immediately.
-        assert!(probe_needed(true, Some(2), Some(1)));
+        // even fresh evidence must be re-probed immediately, and the
+        // failure backoff must not mask a node switch.
+        assert!(probe_needed(true, Some(2), Some(1), None, 1000));
+        assert!(probe_needed(true, Some(2), Some(1), Some(1000), 1010));
         // A probe that gained fingerprint support after startup also
         // re-probes once.
-        assert!(probe_needed(true, Some(1), None));
+        assert!(probe_needed(true, Some(1), None, None, 1000));
+    }
+
+    #[test]
+    fn recent_failure_defers_the_automatic_reprobe() {
+        // A probe failed 10s ago: the backoff suppresses the automatic
+        // re-probe even though the evidence is stale/unavailable.
+        assert!(!probe_needed(false, Some(1), Some(1), Some(1000), 1010));
+        assert!(!probe_needed(false, None, None, Some(1000), 1059));
+    }
+
+    #[test]
+    fn failure_backoff_expires_into_a_normal_reprobe() {
+        // After 60s the failing node is retried automatically.
+        assert!(probe_needed(false, Some(1), Some(1), Some(1000), 1060));
+        assert!(probe_needed(false, None, None, Some(1000), 2000));
     }
 }

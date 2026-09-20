@@ -257,3 +257,84 @@ async fn multiple_requests_on_one_connection_succeed() {
     task.abort();
     let _ = std::fs::remove_file(&path);
 }
+
+/// Housekeeping stub whose `refresh_periodic` blocks long enough to fall
+/// behind a 20ms ticker, reproducing the AX6S starvation pattern (a failing
+/// exit probe keeps every refresh alive for its whole timeout).
+struct SlowRefreshStub {
+    refresh_delay_ms: u64,
+    refreshes: std::sync::Arc<AtomicU64>,
+}
+
+impl ServiceDispatch for SlowRefreshStub {
+    fn status(&mut self) -> Result<Value, DispatchError> {
+        Ok(json!({"service_phase": "intercepting"}))
+    }
+    fn enable(&mut self) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn disable(&mut self) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn reload(&mut self) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn set_manual_location(&mut self, _params: &RequestParams) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn clear_manual_location(&mut self) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn search_location(&mut self, _query: &str) -> Result<Value, DispatchError> {
+        Ok(json!({ "city": "stub", "latitude": 1.0, "longitude": 2.0 }))
+    }
+    fn refresh_periodic(&mut self) {
+        self.refreshes.fetch_add(1, Ordering::SeqCst);
+        std::thread::sleep(std::time::Duration::from_millis(self.refresh_delay_ms));
+    }
+}
+
+#[tokio::test]
+async fn slow_housekeeping_never_stacks_up_behind_control_requests() {
+    let path = temp_socket_path();
+    let refreshes = std::sync::Arc::new(AtomicU64::new(0));
+    let listener = tokio::net::UnixListener::bind(&path).unwrap();
+    let server = ControlServer::new(SlowRefreshStub {
+        refresh_delay_ms: 300,
+        refreshes: std::sync::Arc::clone(&refreshes),
+    });
+    let task = tokio::spawn(async move {
+        server
+            .serve(listener, std::time::Duration::from_millis(20))
+            .await;
+    });
+
+    // Let several 300ms refresh jobs run against the 20ms ticker. Without the
+    // single-in-flight gate the queue fills with refresh jobs and a control
+    // request waits behind up to JOB_QUEUE_CAPACITY of them.
+    tokio::time::sleep(std::time::Duration::from_millis(900)).await;
+
+    let start = std::time::Instant::now();
+    let mut client = UnixStream::connect(&path).await.unwrap();
+    client
+        .write_all(&request_frame("status.get", "starvation-1"))
+        .await
+        .unwrap();
+    let body = read_response(&mut client).await;
+    let latency = start.elapsed();
+    assert_eq!(
+        serde_json::from_slice::<Value>(&body).unwrap()["request_id"],
+        "starvation-1"
+    );
+    assert!(
+        latency < std::time::Duration::from_millis(2000),
+        "status latency {latency:?} indicates a housekeeping backlog"
+    );
+    assert!(
+        refreshes.load(Ordering::SeqCst) >= 1,
+        "housekeeping must still run behind the control traffic"
+    );
+
+    task.abort();
+    let _ = std::fs::remove_file(&path);
+}
