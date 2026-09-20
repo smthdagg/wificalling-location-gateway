@@ -295,7 +295,7 @@ for required in /usr/bin/sing-box /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd; 
 done
 /etc/init.d/wificalling-gateway enable >/dev/null 2>&1 || true
 /etc/init.d/wloc-service enable >/dev/null 2>&1 || true
-mkdir -p /var/run/wificalling-gateway
+mkdir -p /var/lock /var/run/wificalling-gateway
 chmod 0700 /var/run/wificalling-gateway
 recover_shared_lite_runtime() {
   [ -e /tmp/sing-box-lite ] && return 0
@@ -447,7 +447,7 @@ for required in /usr/bin/sing-box /usr/sbin/nft /usr/sbin/ip /usr/libexec/rpcd; 
 done
 /etc/init.d/wificalling-gateway enable >/dev/null 2>&1 || true
 /etc/init.d/wloc-service enable >/dev/null 2>&1 || true
-mkdir -p /var/run/wificalling-gateway
+mkdir -p /var/lock /var/run/wificalling-gateway
 chmod 0700 /var/run/wificalling-gateway
 recover_shared_lite_runtime() {
   [ -e /tmp/sing-box-lite ] && return 0
