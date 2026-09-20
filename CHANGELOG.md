@@ -2,6 +2,39 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r43] - 2026-09-20
+
+Per-channel tunnel status for multi-tunnel devices (AX6S live-testing
+follow-up).
+
+- Live testing showed one phone holding several concurrent WFC tunnels at
+  once (dual SIM, iOS multi-ePDG selection: three IKE sessions observed on
+  one device). The monitor now emits a `channels` array with per-ePDG state
+  (registered/connecting/negotiating), ASSURED flag and packet counters;
+  the device row keeps the aggregated totals.
+- The Wi-Fi Calling monitor renders each channel on its own line beneath the
+  device row, so a flapping second-SIM ePDG is visible instead of being
+  hidden behind one aggregated status.
+- Packaging consistency fix: the packaged `wfc-monitor.js` was silently
+  overwritten by a stale copy under `openwrt/luci-app-*` that predated the
+  multi-ePDG display, so routers kept rendering a single `epdg_ip`. Both
+  LuCI copies are now byte-identical and a regression test enforces it for
+  the monitor view and the shared i18n.
+
+### 中文说明
+
+多隧道设备按通道显示状态（AX6S 实机回归跟进）。
+
+- 实测发现一部手机会同时保持多条 WFC 隧道（双卡 + iOS 多 ePDG 选择，单设备
+  最多观察到 3 条 IKE）。监控器现在输出 `channels` 数组，包含每个 ePDG 的
+  独立状态（已注册/连接中/协商中）、ASSURED 标志和收发包计数；设备行仍保留
+  汇总数据。
+- "Wi-Fi Calling 监控"页面在设备行下方逐通道渲染，第二条卡反复握手的 ePDG
+  不再被单一汇总状态掩盖。
+- 打包一致性修复：打包时 `openwrt/luci-app-*` 里的旧版 `wfc-monitor.js` 会
+  覆盖新版本，导致路由器上始终只显示单个 `epdg_ip`。现两份 LuCI 副本已
+  完全一致，并新增回归测试强制监控页与共享 i18n 的副本一致。
+
 ## [1.3.0-r42] - 2026-09-20
 
 WLOC IPv6 audit follow-up: make the IPv6 fallback guard real and the

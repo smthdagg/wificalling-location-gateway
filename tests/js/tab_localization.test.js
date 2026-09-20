@@ -51,6 +51,14 @@ function verifyFaqCopiesMatch(faqSources, root) {
 	});
 }
 
+function verifyViewCopiesMatch(viewSources, root) {
+	const canonical = fs.readFileSync(path.join(root, viewSources[0]), 'utf8');
+	viewSources.slice(1).forEach(function(relative) {
+		assert.strictEqual(fs.readFileSync(path.join(root, relative), 'utf8'), canonical,
+			`${relative}: packaged view must match the source view exactly`);
+	});
+}
+
 function main() {
 	const root = path.resolve(__dirname, '..', '..');
 	const i18nSources = [
@@ -61,6 +69,10 @@ function main() {
 		'openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/faq.js',
 		'openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/faq.js'
 	];
+	const monitorSources = [
+		'openwrt/files/www/luci-static/resources/view/wificalling-location-gateway/wfc-monitor.js',
+		'openwrt/luci-app-wificalling-location-gateway/files/www/luci-static/resources/view/wificalling-location-gateway/wfc-monitor.js'
+	];
 	i18nSources.forEach(function(relative) {
 		verifyDeferredTabLocalization(path.join(root, relative));
 	});
@@ -68,6 +80,10 @@ function main() {
 		verifyFaqUsesLocalization(path.join(root, relative));
 	});
 	verifyFaqCopiesMatch(faqSources, root);
+	// The packaged monitor view is the luci-app overlay; a diverging copy in
+	// openwrt/files once silently shipped an older single-ePDG renderer.
+	verifyViewCopiesMatch(monitorSources, root);
+	verifyViewCopiesMatch(i18nSources, root);
 	console.log('tab localization tests passed');
 }
 

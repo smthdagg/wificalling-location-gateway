@@ -56,6 +56,7 @@ FILENAME==conntrack_file {
     # conntrack has no SIM/SA identifier; distinct ePDG IPs are the safe
     # observable channel count (two SAs sharing one ePDG remain inseparable).
     channel_key=i SUBSEP dst
+    if (is4500 && line ~ /\[ASSURED\]/) assured_ch[channel_key]=1
     if (is4500) nat_seen[channel_key]=1
     if (is500) ike_seen[channel_key]=1
     if (!channel_seen[channel_key]++) {
@@ -81,6 +82,7 @@ END {
   print "{\"generated_at\":" now ",\"disclaimer\":\"Encrypted IPsec evidence only; calls and SMS cannot be distinguished.\",\"devices\":["
   for(i=1;i<=n;i++) {
     sent_total=0; reply_total=0
+    channels_json=""
     for (c=1;c<=channel_count[i];c++) {
       channel_key=i SUBSEP channel_dst[i,c]
       if (nat_seen[channel_key]) {
@@ -88,6 +90,10 @@ END {
       } else {
         sent_total+=ike_sent[channel_key]; reply_total+=ike_reply[channel_key]
       }
+      # Per-channel detail: one phone (dual SIM, multi-ePDG selection) can
+      # hold several WFC tunnels at once; the UI renders each of them.
+      cstate=(assured_ch[channel_key]?"registered":nat_seen[channel_key]?"connecting":ike_seen[channel_key]?"negotiating":"no_session")
+      channels_json=channels_json (channels_json!=""?",":"") "{" q("epdg") ":" q(channel_dst[i,c]) ",\"state\":" q(cstate) ",\"ike_seen\":" (ike_seen[channel_key]?"true":"false") ",\"nat_t_seen\":" (nat_seen[channel_key]?"true":"false") ",\"assured\":" (assured_ch[channel_key]?"true":"false") ",\"sent_packets\":" (nat_seen[channel_key]?nat_sent[channel_key]:ike_sent[channel_key])+0 ",\"reply_packets\":" (nat_seen[channel_key]?nat_reply[channel_key]:ike_reply[channel_key])+0 "}"
     }
     sent[i]=sent_total; reply[i]=reply_total
     wfc=(assured[i]?"registered":natt[i]||ike[i]?"connecting":"not_detected")
@@ -108,7 +114,7 @@ END {
     sustained=(!handshake_success && wfc=="registered" && streak>=1 && traffic_since>0 && now-traffic_since>=3 && now-old_event[i]>=event_interval)
     printf "%s{", (i>1?",":"")
     printf "\"label\":%s,\"ip\":%s,\"node\":%s,\"state\":%s,\"wificalling\":%s,", q(label[i]),q(ip[i]),q(node[i]),q(legacy),q(wfc)
-    printf "\"epdg_ip\":%s,\"epdg_ips\":[%s],\"channel_count\":%d,\"ike_seen\":%s,\"nat_t_seen\":%s,\"assured\":%s,", q(epdg[i]),epdg_json[i],channel_count[i]+0,(ike[i]?"true":"false"),(natt[i]?"true":"false"),(assured[i]?"true":"false")
+    printf "\"epdg_ip\":%s,\"epdg_ips\":[%s],\"channel_count\":%d,\"channels\":[%s],\"ike_seen\":%s,\"nat_t_seen\":%s,\"assured\":%s,", q(epdg[i]),epdg_json[i],channel_count[i]+0,channels_json,(ike[i]?"true":"false"),(natt[i]?"true":"false"),(assured[i]?"true":"false")
     printf "\"sent_packets\":%d,\"reply_packets\":%d,\"delta_sent\":%d,\"delta_reply\":%d,\"last_activity\":%d,\"activity_evidence\":%s}", sent[i]+0,reply[i]+0,ds,dr,last,q(activity)
     if (log_enabled) {
       if (handshake_success && now-old_event[i]>=15) {

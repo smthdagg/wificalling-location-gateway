@@ -214,6 +214,13 @@ grep -F 'ipv6-scope-ready' "$redirect" >/dev/null ||
 	{ echo 'redirect sync must publish the IPv6 scope marker for truthful status' >&2; exit 1; }
 grep -F 'ipv6_scope_ready' "$daemon" >/dev/null ||
 	{ echo 'daemon must report ipv6_ready from the runtime scope marker' >&2; exit 1; }
+# One phone (dual SIM, multi-ePDG) can hold several WFC tunnels at once: the
+# monitor must emit per-channel detail, not a single aggregated row.
+gateway_monitor="$repo_root/openwrt/files/usr/libexec/wificalling-gateway/monitor.sh"
+grep -F '\"channels\":[%s]' "$gateway_monitor" >/dev/null ||
+	{ echo 'monitor status must include a per-channel detail array' >&2; exit 1; }
+grep -F 'channels_json=' "$gateway_monitor" >/dev/null ||
+	{ echo 'monitor must build per-channel state/packet detail' >&2; exit 1; }
 if grep -F 'bind_tproxy_listener_v6' "$daemon" >/dev/null ||
 	grep -F 'proxy_listener_v6' "$daemon" >/dev/null; then
 	{ echo 'daemon must bind only the IPv4 TPROXY listener' >&2; exit 1; }

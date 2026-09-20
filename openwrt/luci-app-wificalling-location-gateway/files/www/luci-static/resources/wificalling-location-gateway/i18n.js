@@ -349,6 +349,7 @@ var ZH = {
 	'NAT-T seen': '已见 NAT-T',
 	'Negotiating': '协商中',
 	'No session': '无会话',
+	'Channel': '通道',
 	'Yes': '是',
 	'No': '否',
 	'Device': '设备',
