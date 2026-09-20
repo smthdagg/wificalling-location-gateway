@@ -2,141 +2,129 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
-## [1.3.0-r43] - 2026-09-20
+## [1.4.0] - 2026-09-20
 
-Per-channel tunnel status for multi-tunnel devices (AX6S live-testing
-follow-up).
+AX6S live-testing release: WLOC/WFC decoupling, IPv6 hardening for both
+modules, per-channel tunnel visibility, and a control-plane starvation fix.
+Every package was re-validated through the Docker install matrix and a live
+Redmi AX6S upgrade.
 
-- Live testing showed one phone holding several concurrent WFC tunnels at
-  once (dual SIM, iOS multi-ePDG selection: three IKE sessions observed on
-  one device). The monitor now emits a `channels` array with per-ePDG state
-  (registered/connecting/negotiating), ASSURED flag and packet counters;
-  the device row keeps the aggregated totals.
-- The Wi-Fi Calling monitor renders each channel on its own line beneath the
-  device row, so a flapping second-SIM ePDG is visible instead of being
-  hidden behind one aggregated status.
-- Packaging consistency fix: the packaged `wfc-monitor.js` was silently
-  overwritten by a stale copy under `openwrt/luci-app-*` that predated the
-  multi-ePDG display, so routers kept rendering a single `epdg_ip`. Both
-  LuCI copies are now byte-identical and a regression test enforces it for
-  the monitor view and the shared i18n.
+### Changed
 
-### 中文说明
+- **WLOC/WFC decoupling.** Manual WLOC no longer depends on the Wi-Fi Calling
+  gateway: it keeps its own target-device list, starts without any WFC
+  process or node, and passes through when no device is bound. Auto mode
+  only reads the WFC node's exit IP (read-only) while WLOC's own traffic
+  stays on the normal WAN. The removed `follow_gateway` mode is rejected
+  with a clear error instead of silently dropping devices, and auto/manual
+  switches take effect live without a daemon restart.
+- **Control-plane starvation fix.** A failing exit probe used to block the
+  single control worker for its whole timeout while the 10s housekeeping
+  tick kept queueing work, starving `wloc-ctl` requests for minutes. At
+  most one housekeeping job exists at a time now, failed probes back off
+  for 60s, and the probe timeout is bounded below the tick cadence.
+- **IPv6 carried safely end to end.**
+  - WFC: policy devices' IPv6 enters the tunnel through new IPv6 tproxy
+    inbounds (ports 11443/11444) routed to the shared node, matched by MAC
+    with NDP/link-local/ULA/multicast and the LAN prefix kept local. A node
+    without IPv6 egress discards the traffic inside the tunnel - it never
+    leaks onto the WAN. When device policies bind different nodes, IPv6 is
+    dropped (per-device v6 routing on a shared LAN prefix is impossible).
+  - WLOC: the `apple_hosts6` reject set is finally populated (AAAA answers
+    were never resolved before, leaving the IPv6 fallback guard empty), and
+    `ipv6_ready` now reports the real guard state instead of a constant.
+- **Per-channel tunnel status.** One phone (dual SIM, multi-ePDG selection)
+  can hold several WFC tunnels at once; the monitor emits a `channels`
+  array and the LuCI monitor renders each ePDG channel as its own aligned
+  row with state, ASSURED flag and packet counters.
 
-多隧道设备按通道显示状态（AX6S 实机回归跟进）。
+### Fixed
 
-- 实测发现一部手机会同时保持多条 WFC 隧道（双卡 + iOS 多 ePDG 选择，单设备
-  最多观察到 3 条 IKE）。监控器现在输出 `channels` 数组，包含每个 ePDG 的
-  独立状态（已注册/连接中/协商中）、ASSURED 标志和收发包计数；设备行仍保留
-  汇总数据。
-- "Wi-Fi Calling 监控"页面在设备行下方逐通道渲染，第二条卡反复握手的 ePDG
-  不再被单一汇总状态掩盖。
-- 打包一致性修复：打包时 `openwrt/luci-app-*` 里的旧版 `wfc-monitor.js` 会
-  覆盖新版本，导致路由器上始终只显示单个 `epdg_ip`。现两份 LuCI 副本已
-  完全一致，并新增回归测试强制监控页与共享 i18n 的副本一致。
+- Starved `wloc-ctl` requests after enabling auto mode with a dead node
+  (daemon restart was the only recovery).
+- The packaged `wfc-monitor.js` was silently overwritten by a stale copy
+  that predated the multi-ePDG display; both LuCI copies are now
+  byte-identical and a regression test enforces it.
+- The IPv6 guard set stayed empty forever and `ipv6_ready` lied about it.
+- Live auto/manual mode switching left the engine health stale.
 
-## [1.3.0-r42] - 2026-09-20
+### Line compatibility notes (from live AX6S testing / 线路兼容性提醒)
 
-WLOC IPv6 audit follow-up: make the IPv6 fallback guard real and the
-reported state truthful.
-
-- `wloc-refresh-set.sh` now also resolves AAAA records for every approved
-  WLOC host and populates the `apple_hosts6` nft set. Previously the set was
-  flushed but never filled (only A records were resolved), so the per-device
-  `ip6 daddr @apple_hosts6 reject` guard never matched anything and a client
-  bypassing the local DNS hijack (DoH, Private Relay) could reach the real
-  Apple WLOC endpoints over native IPv6 unpatched.
-- `wloc-redirect-sync.sh` writes `/var/run/wloc-service/ipv6-scope-ready`
-  when the per-device IPv6 reject rules are installed (device MAC resolved)
-  and removes it otherwise; the stop path already cleaned it.
-- The daemon reports `safety.ipv6_ready` from that runtime marker instead of
-  a hardcoded `false`, so the status/monitor finally reflects whether the
-  IPv6 guard is live. The enable path itself remains IPv6-independent.
-- Regression coverage: runtime contract checks for AAAA resolution, set
-  population, the scope marker, and the runtime hook; a state-marker test
-  asserts status tracks install/withdraw.
-
-### 中文说明
-
-WLOC IPv6 审核跟进：让 IPv6 兜底防护真正生效、状态如实上报。
-
-- `wloc-refresh-set.sh` 现在同时解析所有 WLOC 域名的 AAAA 记录并填充
-  `apple_hosts6` nft 集合。此前该集合每次只被清空、从不填充（仅解析 A
-  记录），导致按设备下发的 `ip6 daddr @apple_hosts6 reject` 防护从未匹配
-  过任何流量——绕过本地 DNS 劫持的客户端（DoH、私有中继等）可以经原生
-  IPv6 直连真实 Apple WLOC 端点而不被处理。
-- `wloc-redirect-sync.sh` 在按设备安装 IPv6 拒绝规则后写入
-  `/var/run/wloc-service/ipv6-scope-ready` 标记（设备 MAC 解析失败时不
-  写），停止路径沿用既有清理。
-- 守护进程的 `safety.ipv6_ready` 改为读取该运行时标记，替代写死的
-  `false`，状态页如实反映 IPv6 防护是否在位；启用路径本身仍不依赖 IPv6。
-- 回归覆盖：AAAA 解析、集合填充、范围标记与运行时钩子的契约检查，以及
-  状态随标记安装/撤销变化的测试。
-
-## [1.3.0-r41] - 2026-09-20
-
-Device-level IPv6 for the Wi-Fi Calling tunnel (AX6S live-testing follow-up).
-
-- A policy device's IPv6 no longer bypasses the tunnel: when every device
-  policy binds the same node, the compiler emits IPv6 tproxy inbounds
-  (`wfc-tcp6`/`wfc-udp6`, ports 11443/11444) and routes them to that node;
-  the Gateway firewall matches policy devices by MAC (IPv6 addresses are
-  dynamic), keeps NDP/link-local/ULA/multicast and the LAN prefix local, and
-  pushes all remaining IPv6 into the tunnel. If the node has no IPv6 egress
-  the traffic is discarded inside the tunnel - it is never leaked onto the
-  WAN. When device policies bind different nodes, IPv6 is dropped instead
-  (per-device v6 routing on a shared LAN prefix is impossible).
-- The IPv6 static route (`ip -6 rule`/`local ::/0` table 166) is installed
-  with the tunnel and withdrawn on stop/empty-scope, mirroring the IPv4
-  lifecycle. IPv4 tproxy rules are now explicitly family-scoped.
-- Regression coverage: runtime contract checks for the compiler and firewall
-  IPv6 behavior; the shadowsocks compiler fixture test covers the generated
-  JSON.
+- **Carrier anti-proxy policies.** Some carriers reject VoWiFi from
+  datacenter exit IPs. Live testing across three different datacenter exits
+  showed one carrier dropping IKE INITs outright and another aborting EAP
+  right after the identity phase, while Vodafone and Lebara registered
+  normally on the same exits. If a SIM refuses to register on every node,
+  the line needs a residential broadband exit - a self-hosted WireGuard
+  node on a home connection works (the product ships WireGuard support).
+- **Node quality is the #1 field failure.** ICMP reachability does not mean
+  a node passes traffic: one tested node answered pings but forwarded
+  nothing, so VoWiFi never registered. Probe the node path (the monitor's
+  per-channel rows help) before blaming the product.
+- **DNS pollution.** Some resolvers return poisoned answers (127.0.0.1/::1)
+  for parts of `3gppnetwork.org`. Vodafone/Lebara ePDG names resolved fine
+  in testing, but if a phone never even attempts registration, check the
+  ePDG lookup first.
+- **"Registered" is network-layer evidence.** The monitor's registered
+  state means an ASSURED bidirectional UDP 4500 flow was observed; the
+  authoritative indicator is the Wi-Fi Calling icon on the phone.
+- **Multi-SIM verified.** One phone can run several VoWiFi tunnels at once
+  (Lebara + Vodafone verified simultaneously); each device still needs its
+  own device policy.
 
 ### 中文说明
 
-为 WiFi Calling 隧道补上设备级 IPv6（AX6S 实机回归跟进）。
+AX6S 实机测试版本：WLOC/WFC 解耦、双模块 IPv6 加固、按通道显示隧道状态，
+以及控制面饥饿修复。全部安装包重新通过 Docker 安装矩阵与 Redmi AX6S 实机
+升级验证。
 
-- 设备策略设备的 IPv6 不再绕过隧道：当所有设备策略绑定同一节点时，编译器
-  会生成 IPv6 tproxy 入站（`wfc-tcp6`/`wfc-udp6`，端口 11443/11444）并将
-  其路由到该节点；防火墙按 MAC 匹配策略设备（IPv6 地址是动态的），放行
-  NDP/链路本地/ULA/组播及当前 LAN 前缀，其余 IPv6 全部送入隧道。节点无
-  IPv6 出口时流量在隧道内被丢弃，绝不泄漏到公网。设备策略绑定不同节点时
-  改为直接丢弃 IPv6（同一 LAN 前缀下无法按设备分流 v6）。
-- IPv6 静态路由（`ip -6 rule`/`local ::/0` 表 166）随隧道一起安装，停止或
-  清空设备时同步撤销，与 IPv4 生命周期一致。IPv4 tproxy 规则显式限定协议族。
-- 新增回归覆盖：compiler 与防火墙 IPv6 行为的运行时契约检查。
+#### 变更
 
-## [1.3.0-r40] - 2026-09-20
+- **WLOC/WFC 解耦。** 手动 WLOC 不再依赖 Wi-Fi Calling 网关：独立维护目标
+  设备列表，无 WFC 进程/节点也可启动，未绑定设备时保持直通。自动模式只读
+  WFC 节点出口 IP（只读），WLOC 自身流量仍走普通 WAN。已移除的
+  `follow_gateway` 模式会明确报错而非静默丢设备；自动/手动切换实时生效，
+  无需重启守护进程。
+- **控制面饥饿修复。** 出口探测失败曾以整个超时时长阻塞唯一的控制线程，
+  叠加 10 秒巡检节奏导致 `wloc-ctl` 请求被饿死数分钟。现在同一时刻最多
+  一个巡检任务，探测失败退避 60 秒，探测超时被限制在 tick 周期以内。
+- **IPv6 全链路安全承载。**
+  - WFC：策略设备的 IPv6 经新增 IPv6 tproxy 入站（端口 11443/11444）进入
+    隧道并路由到共享节点，按 MAC 匹配设备，放行 NDP/链路本地/ULA/组播及
+    LAN 前缀。节点无 IPv6 出口时流量在隧道内丢弃——绝不泄漏到公网。设备
+    策略绑定不同节点时改为丢弃 IPv6（同一 LAN 前缀下无法按设备分流）。
+  - WLOC：`apple_hosts6` 拒绝集合真正填充（此前从不解析 AAAA，兜底防护
+    形同虚设），`ipv6_ready` 如实上报真实防护状态。
+- **按通道显示隧道状态。** 一部手机（双卡、多 ePDG 选择）可同时保持多条
+  WFC 隧道；监控器输出 `channels` 数组，LuCI 监控页为每个 ePDG 通道渲染
+  独立对齐行，含状态、ASSURED 标志与收发包计数。
 
-AX6S live-testing follow-up to the WLOC/WFC decoupling: control-plane
-starvation fix under a dead proxy node.
+#### 修复
 
-- The control worker now keeps at most one housekeeping job in the system
-  (queued or running): the ticker re-arms only after the previous refresh
-  finished. Previously a failing auto-mode exit probe (up to 15s per attempt)
-  fed by the 10s housekeeping cadence filled the job queue with refresh jobs
-  and starved `wloc-ctl` requests behind them for minutes (`daemon closed
-  connection without response`) until a daemon restart.
-- Automatic exit probes now back off for 60s after a failure instead of
-  re-probing on every tick; an explicit monitor refresh bypasses the backoff.
-- The sing-box exit-probe connect/read timeout is 8s (was 15s), bounded below
-  the housekeeping cadence so one job cannot outlive the tick that spawned it.
-- Regression tests: refresh coalescing under a slow housekeeping stub
-  (`slow_housekeeping_never_stacks_up_behind_control_requests`) and probe
-  failure backoff semantics in the `probe_needed` tests.
+- 死节点 + 自动模式下 `wloc-ctl` 请求被饿死（此前只能重启守护进程）。
+- 打包时 `wfc-monitor.js` 被旧副本静默覆盖，路由器始终只显示单个 ePDG；
+  两份 LuCI 副本已字节一致并有回归测试强制。
+- IPv6 防护集合永远为空、`ipv6_ready` 状态造假的问题。
+- 在线切换自动/手动后引擎健康状态不同步的问题。
 
-### 中文说明
+#### 线路兼容性提醒（来自 AX6S 实机测试）
 
-AX6S 实机回归：修复自动定位在节点失效时饿死控制通道的问题。
+- **运营商反代理策略。** 部分运营商拒绝来自数据中心出口 IP 的 VoWiFi。
+  实测三个不同机房出口：一个直接丢弃 IKE INIT，另一个在 EAP 身份阶段后
+  立即拒绝，而 Vodafone 与 Lebara 在相同出口上正常注册。若某张卡在任何
+  节点上都无法注册，需要住宅宽带出口——在家庭宽带上自建 WireGuard 节点
+  即可（产品原生支持 WireGuard）。
+- **节点质量是现场第一故障源。** ICMP 可达不等于可转发流量：实测有一个
+  节点 ping 通但隧道不通，导致 VoWiFi 始终无法注册。先通过监控页的通道
+  行探测节点路径，再怀疑产品本身。
+- **DNS 污染。** 部分解析器对 `3gppnetwork.org` 的部分域名返回投毒应答
+  （127.0.0.1/::1）。测试中 Vodafone/Lebara 的 ePDG 域名解析正常，但若
+  手机完全无注册尝试，请先检查 ePDG 域名解析。
+- **"已注册"是网络层证据。** 监控页的 registered 表示观察到 ASSURED 的
+  双向 UDP 4500 流；最终以手机上的 Wi-Fi Calling 图标为准。
+- **多卡实测通过。** 一部手机可同时保持多条 VoWiFi 隧道（Lebara +
+  Vodafone 同时注册验证）；每台设备仍需各自一条设备策略。
 
-- 控制线程同一时刻只允许一个巡检任务（排队或执行中），上一轮巡检结束后
-  ticker 才会再次投递；此前自动模式出口探测失败（单次最长 15 秒）叠加 10 秒
-  巡检节奏会把任务队列填满，`wloc-ctl` 请求被饿死数分钟，只能重启守护进程。
-- 出口探测失败后自动退避 60 秒再试；监控页手动刷新不受退避限制。
-- sing-box 出口探测连接/读取超时从 15 秒降为 8 秒，保证单次巡检不会超过
-  触发它的 tick 周期。
-- 新增回归测试：慢巡检下的请求饥饿防护与探测失败退避语义。
 
 ## [1.3.0-r16] - 2026-09-14
 
