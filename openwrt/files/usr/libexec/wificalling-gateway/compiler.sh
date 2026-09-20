@@ -70,6 +70,16 @@ END {
   if (nn<1) fail("at least one enabled node is required")
   if (level=="") level="warn"
   if (wg_style=="") wg_style="legacy"
+  # IPv6 tunnel mode: policy device IPv6 may follow the tunnel only when
+  # every device policy binds the same node (v6 tproxy cannot tell devices
+  # apart on a shared LAN prefix, so per-device v6 routing is impossible).
+  # Otherwise no v6 inbounds are emitted and firewall.sh drops policy IPv6.
+  v6_node=""
+  if (nd>=1) {
+    v6_same=1
+    for(k2=2;k2<=nd;k2++) if (devnode[k2]!=devnode[1]) v6_same=0
+    if (v6_same) v6_node=devnode[1]
+  }
   n_wg_used=0
   for(k1=1;k1<=nw;k1++) { split(node[wg_nodes[k1]],f1,"|"); if (used[f1[2]]) n_wg_used++ }
   print "{"
@@ -97,6 +107,10 @@ END {
   }
   print "  \"log\":{\"level\":" q(level) ",\"timestamp\":true},"
   inbounds="  \"inbounds\":[{\"type\":\"tproxy\",\"tag\":\"wfc-tcp\",\"listen\":\"0.0.0.0\",\"listen_port\":11441,\"network\":\"tcp\"},{\"type\":\"tproxy\",\"tag\":\"wfc-udp\",\"listen\":\"0.0.0.0\",\"listen_port\":11442,\"network\":\"udp\"}"
+  # Separate ports for IPv6: a [::] listener on the same port could collide
+  # with the 0.0.0.0 listener depending on sing-box socket options; distinct
+  # ports keep the two address families unambiguous.
+  if (v6_node!="") inbounds=inbounds ",{\"type\":\"tproxy\",\"tag\":\"wfc-tcp6\",\"listen\":\"::\",\"listen_port\":11443,\"network\":\"tcp\"},{\"type\":\"tproxy\",\"tag\":\"wfc-udp6\",\"listen\":\"::\",\"listen_port\":11444,\"network\":\"udp\"}"
   for(k=1;k<=nn;k++) {
     split(node[k],f,"|"); id=f[2]
     if (!used[id]) continue
@@ -161,6 +175,14 @@ END {
     if (!used[id]) continue
     out=(node_proto[id]=="wireguard" && wg_style=="endpoint") ? "wg-" id : "node-" id
     print "    {\"inbound\":[" q("probe-" id) "],\"action\":\"route\",\"outbound\":" q(out) "},"
+  }
+  # Policy device IPv6 arrives only through the v6 tproxy inbounds (the
+  # firewall matches devices by MAC), so routing the whole inbound to the
+  # shared node is safe. If the node has no IPv6 egress the upstream connect
+  # fails and the packet is discarded inside the tunnel - never leaked.
+  if (v6_node!="") {
+    out=(node_proto[v6_node]=="wireguard" && wg_style=="endpoint") ? "wg-" v6_node : "node-" v6_node
+    print "    {\"inbound\":[\"wfc-tcp6\",\"wfc-udp6\"],\"action\":\"route\",\"outbound\":" q(out) "},"
   }
   print "    {\"ip_is_private\":true,\"action\":\"route\",\"outbound\":\"direct\"}" (nd?",":"")
   for(k=1;k<=nd;k++) {

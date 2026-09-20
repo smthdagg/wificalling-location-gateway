@@ -2,6 +2,40 @@
 
 All notable changes are documented here. Versions follow Semantic Versioning.
 
+## [1.3.0-r41] - 2026-09-20
+
+Device-level IPv6 for the Wi-Fi Calling tunnel (AX6S live-testing follow-up).
+
+- A policy device's IPv6 no longer bypasses the tunnel: when every device
+  policy binds the same node, the compiler emits IPv6 tproxy inbounds
+  (`wfc-tcp6`/`wfc-udp6`, ports 11443/11444) and routes them to that node;
+  the Gateway firewall matches policy devices by MAC (IPv6 addresses are
+  dynamic), keeps NDP/link-local/ULA/multicast and the LAN prefix local, and
+  pushes all remaining IPv6 into the tunnel. If the node has no IPv6 egress
+  the traffic is discarded inside the tunnel - it is never leaked onto the
+  WAN. When device policies bind different nodes, IPv6 is dropped instead
+  (per-device v6 routing on a shared LAN prefix is impossible).
+- The IPv6 static route (`ip -6 rule`/`local ::/0` table 166) is installed
+  with the tunnel and withdrawn on stop/empty-scope, mirroring the IPv4
+  lifecycle. IPv4 tproxy rules are now explicitly family-scoped.
+- Regression coverage: runtime contract checks for the compiler and firewall
+  IPv6 behavior; the shadowsocks compiler fixture test covers the generated
+  JSON.
+
+### 中文说明
+
+为 WiFi Calling 隧道补上设备级 IPv6（AX6S 实机回归跟进）。
+
+- 设备策略设备的 IPv6 不再绕过隧道：当所有设备策略绑定同一节点时，编译器
+  会生成 IPv6 tproxy 入站（`wfc-tcp6`/`wfc-udp6`，端口 11443/11444）并将
+  其路由到该节点；防火墙按 MAC 匹配策略设备（IPv6 地址是动态的），放行
+  NDP/链路本地/ULA/组播及当前 LAN 前缀，其余 IPv6 全部送入隧道。节点无
+  IPv6 出口时流量在隧道内被丢弃，绝不泄漏到公网。设备策略绑定不同节点时
+  改为直接丢弃 IPv6（同一 LAN 前缀下无法按设备分流 v6）。
+- IPv6 静态路由（`ip -6 rule`/`local ::/0` 表 166）随隧道一起安装，停止或
+  清空设备时同步撤销，与 IPv4 生命周期一致。IPv4 tproxy 规则显式限定协议族。
+- 新增回归覆盖：compiler 与防火墙 IPv6 行为的运行时契约检查。
+
 ## [1.3.0-r40] - 2026-09-20
 
 AX6S live-testing follow-up to the WLOC/WFC decoupling: control-plane

@@ -179,6 +179,30 @@ grep -F 'valid_ipv4 "$ROUTER_IP"' "$redirect" >/dev/null ||
 	{ echo 'redirect sync must validate the router IPv4 before nft writes' >&2; exit 1; }
 grep -F '[ "$PROXY_PORT" -gt 65535 ]' "$redirect" >/dev/null ||
 	{ echo 'TPROXY port must be range-validated' >&2; exit 1; }
+# Device-level IPv6: a policy device must never bypass the IPv4-first tunnel
+# via native IPv6. Its IPv6 either enters the tunnel (same-node policies, v6
+# tproxy inbounds present) or is dropped - never left on the WAN.
+gateway_compiler="$repo_root/openwrt/files/usr/libexec/wificalling-gateway/compiler.sh"
+grep -F 'v6_node=""' "$gateway_compiler" >/dev/null ||
+	{ echo 'compiler must default to no IPv6 tunnel when device policies differ' >&2; exit 1; }
+grep -F '\"tag\":\"wfc-tcp6\"' "$gateway_compiler" >/dev/null ||
+	{ echo 'compiler must emit IPv6 tproxy inbounds for same-node device policies' >&2; exit 1; }
+grep -F '\"inbound\":[\"wfc-tcp6\",\"wfc-udp6\"]' "$gateway_compiler" >/dev/null ||
+	{ echo 'IPv6 tproxy traffic must route to the shared policy node' >&2; exit 1; }
+grep -F 'mac_for_ip' "$gateway_firewall" >/dev/null ||
+	{ echo 'IPv6 rules must match policy devices by MAC (v6 addresses are dynamic)' >&2; exit 1; }
+grep -F 'fe80::/10' "$gateway_firewall" >/dev/null ||
+	{ echo 'IPv6 NDP/link-local traffic must stay local, never enter the tunnel' >&2; exit 1; }
+grep -F 'ip -6 rule add fwmark 0x66 table 166' "$gateway_firewall" >/dev/null ||
+	{ echo 'Gateway firewall must add the IPv6 fwmark rule for the tunnel route table' >&2; exit 1; }
+grep -F 'ip -6 route replace local ::/0 dev lo table 166' "$gateway_firewall" >/dev/null ||
+	{ echo 'Gateway firewall must add the IPv6 local return route for tproxy' >&2; exit 1; }
+grep -F 'ip -6 rule del fwmark 0x66 table 166' "$gateway_firewall" >/dev/null ||
+	{ echo 'Gateway firewall stop must withdraw the IPv6 fwmark rule' >&2; exit 1; }
+grep -F 'meta nfproto ipv6 counter drop' "$gateway_firewall" >/dev/null ||
+	{ echo 'Policy device IPv6 must drop when the tunnel cannot carry it' >&2; exit 1; }
+grep -F 'meta nfproto ipv4 meta l4proto tcp' "$gateway_firewall" >/dev/null ||
+	{ echo 'IPv4 tproxy rules must be family-scoped so IPv6 falls through to the v6 rules' >&2; exit 1; }
 if grep -F 'bind_tproxy_listener_v6' "$daemon" >/dev/null ||
 	grep -F 'proxy_listener_v6' "$daemon" >/dev/null; then
 	{ echo 'daemon must bind only the IPv4 TPROXY listener' >&2; exit 1; }
